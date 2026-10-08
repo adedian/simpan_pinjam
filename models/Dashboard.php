@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Core\Config;
 use App\Core\Database;
+use App\Services\LiveFeed;
 use App\Services\Scope;
 
 /**
@@ -23,8 +25,37 @@ final class Dashboard
         return array_map('intval', $r);
     }
 
-    /** Jumlah masalah integritas yang terdeteksi (harus 0). */
+    /**
+     * Jumlah masalah integritas yang terdeteksi (harus 0). Pemeriksaannya memindai seluruh transaksi (±1 detik pada
+     * 34.000 transaksi), jadi hasilnya disimpan sebentar: dipakai ulang selama penanda perubahan data (LiveFeed::version,
+     * naik pada setiap perubahan sah) tidak berubah DAN umurnya di bawah INTEGRITY_CACHE_TTL detik (bawaan 60).
+     * Batas umur itu penting: perubahan di luar aplikasi (mis. langsung lewat phpMyAdmin) tidak menaikkan penanda,
+     * dan justru itulah yang harus terdeteksi; paling lambat satu menit kemudian. TTL 0 = selalu hitung ulang.
+     */
     public static function integrityIssues(): int
+    {
+        $ttl = (int) Config::get('app.integrity_cache_ttl', 60);
+        if ($ttl <= 0) {
+            return self::countIntegrity();
+        }
+        $db      = (string) Database::select('SELECT DATABASE() AS d')[0]['d'];
+        $file    = BASE_PATH . '/storage/cache/integrity-' . md5($db) . '.json';
+        $version = LiveFeed::version();
+        $cached  = is_file($file) ? json_decode((string) @file_get_contents($file), true) : null;
+        if (is_array($cached) && ($cached['v'] ?? null) === $version && isset($cached['t'], $cached['n']) && time() - (int) $cached['t'] < $ttl) {
+            return (int) $cached['n'];
+        }
+        $n = self::countIntegrity();
+        if (is_dir(dirname($file)) && is_writable(dirname($file))) {
+            $tmp = $file . '.' . bin2hex(random_bytes(4)) . '.tmp';
+            if (@file_put_contents($tmp, json_encode(['v' => $version, 't' => time(), 'n' => $n])) !== false) {
+                @rename($tmp, $file);   // tulis atomik: pembaca tidak pernah melihat berkas setengah jadi
+            }
+        }
+        return $n;
+    }
+
+    private static function countIntegrity(): int
     {
         return (int) Database::select('SELECT COUNT(*) AS n FROM v_integrity_issues')[0]['n'];
     }

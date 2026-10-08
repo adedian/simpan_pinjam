@@ -17,6 +17,8 @@ return [
     // Daftar IP proxy/penyeimbang beban tepercaya (dipisah koma). Hanya dari alamat ini header
     // X-Forwarded-For / X-Forwarded-Proto dipercaya. Kosong = langsung ke Apache (bawaan).
     'trusted_proxies' => array_values(array_filter(array_map('trim', explode(',', (string) Env::get('TRUSTED_PROXIES', ''))))),
+    // Lama (detik) hasil pemeriksaan integritas di dashboard dipakai ulang; 0 = selalu hitung. Lihat Dashboard::integrityIssues.
+    'integrity_cache_ttl' => (int) Env::get('INTEGRITY_CACHE_TTL', 60),
     'session'   => [
         'name'         => 'adem_ayem_sid',
         'idle_timeout' => (int) Env::get('SESSION_IDLE_TIMEOUT', 1800),

@@ -21,6 +21,9 @@ use App\Services\UserService;
 
 const PORT = 8099;
 const BASE = 'http://127.0.0.1:8099';
+// Server kedua khusus uji batas idle (4 detik). Server utama memakai idle panjang agar mesin yang sedang lambat tidak membuat sesi uji lain kedaluwarsa (kegagalan acak).
+const PORT_IDLE = 8089;
+const BASE_IDLE = 'http://127.0.0.1:8089';
 const PASS = 'Contoh-Uji-2026';
 
 $testDb = (string) App\Core\Env::get('DB_TEST_NAME', 'simpan_pinjam_adem_ayem_test');
@@ -28,6 +31,10 @@ $admin  = [(string) Config::get('database.admin_user'), (string) Config::get('da
 
 // ---------- berkas env uji (tanpa rahasia: akun admin lokal ke DB uji) ----------
 file_put_contents(BASE_PATH . '/.env.testing', implode("\n", [
+    'APP_ENV=local', 'APP_DEBUG=false', 'APP_BASE_PATH=/', 'SESSION_IDLE_TIMEOUT=300',
+    'DB_HOST=127.0.0.1', 'DB_PORT=3306', "DB_NAME={$testDb}", "DB_USER={$admin[0]}", "DB_PASS={$admin[1]}",
+]) . "\n");
+file_put_contents(BASE_PATH . '/.env.testingi', implode("\n", [
     'APP_ENV=local', 'APP_DEBUG=false', 'APP_BASE_PATH=/', 'SESSION_IDLE_TIMEOUT=4',
     'DB_HOST=127.0.0.1', 'DB_PORT=3306', "DB_NAME={$testDb}", "DB_USER={$admin[0]}", "DB_PASS={$admin[1]}",
 ]) . "\n");
@@ -61,18 +68,29 @@ $proc = proc_open(
     [0 => ['pipe', 'r'], 1 => ['file', sys_get_temp_dir() . '/adem-http.log', 'w'], 2 => ['file', sys_get_temp_dir() . '/adem-http.log', 'a']],
     $pipes, BASE_PATH, array_merge(getenv(), ['APP_ENV_FILE' => '.env.testing'])
 );
-register_shutdown_function(static function () use ($proc): void {
-    if (is_resource($proc)) {
-        $status = proc_get_status($proc);
-        @exec('taskkill /F /T /PID ' . (int) $status['pid'] . ' 2>NUL');
-        proc_terminate($proc);
+$procIdle = proc_open(
+    [PHP_BINARY, '-S', '127.0.0.1:' . PORT_IDLE, '-t', BASE_PATH . '/public', BASE_PATH . '/tests/router.php'],
+    [0 => ['pipe', 'r'], 1 => ['file', sys_get_temp_dir() . '/adem-http-idle.log', 'w'], 2 => ['file', sys_get_temp_dir() . '/adem-http-idle.log', 'a']],
+    $pipesIdle, BASE_PATH, array_merge(getenv(), ['APP_ENV_FILE' => '.env.testingi'])
+);
+register_shutdown_function(static function () use ($proc, $procIdle): void {
+    foreach ([$proc, $procIdle] as $p) {
+        if (is_resource($p)) {
+            $status = proc_get_status($p);
+            @exec('taskkill /F /T /PID ' . (int) $status['pid'] . ' 2>NUL');
+            proc_terminate($p);
+        }
     }
+    @unlink(BASE_PATH . '/.env.testingi');
+    @unlink(sys_get_temp_dir() . '/adem-http-idle.log');
 });
-for ($i = 0; $i < 50; $i++) {
-    if (@fsockopen('127.0.0.1', PORT, $en, $es, 0.2)) {
-        break;
+foreach ([PORT, PORT_IDLE] as $waitPort) {
+    for ($i = 0; $i < 50; $i++) {
+        if (@fsockopen('127.0.0.1', $waitPort, $en, $es, 0.2)) {
+            break;
+        }
+        usleep(100000);
     }
-    usleep(100000);
 }
 
 // ---------- klien "browser" ----------
@@ -81,12 +99,18 @@ final class Browser
     public string $jar;
     /** Bila diisi (lewat keepAlive()), GET yang dialihkan ke /login karena sesi kedaluwarsa (idle uji hanya 4 detik) otomatis masuk lagi. */
     public ?string $autoLogin = null;
+    /** Semua permintaan yang pernah dikirim [metode, jalur]: dipakai menghitung cakupan route di akhir. */
+    public static array $seen = [];
     /** @var array{status:int,headers:array<string,string>,body:string,location:?string} */
     public array $last = ['status' => 0, 'headers' => [], 'body' => '', 'location' => null];
 
-    public function __construct()
+    /** Alamat dasar server; bawaan server utama. */
+    public ?string $base = null;
+
+    public function __construct(?string $base = null)
     {
         $this->jar = tempnam(sys_get_temp_dir(), 'jar');
+        $this->base = $base;
     }
 
     public function keepAlive(string $user): self
@@ -111,7 +135,8 @@ final class Browser
 
     private function send(string $method, string $path, array $form = [], array $headers = []): array
     {
-        $ch = curl_init(BASE . $path);
+        self::$seen[] = [$method, (string) parse_url($path, PHP_URL_PATH)];
+        $ch = curl_init(($this->base ?? BASE) . $path);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => true, CURLOPT_FOLLOWLOCATION => false,
             CURLOPT_COOKIEJAR => $this->jar, CURLOPT_COOKIEFILE => $this->jar, CURLOPT_TIMEOUT => 20,
@@ -344,8 +369,8 @@ file_put_contents($thief->jar, "# Netscape HTTP Cookie File\n#HttpOnly_127.0.0.1
 check('logout: cookie sesi lama yang dicuri TIDAK bisa dipakai lagi', $thief->get('/anggota/' . $mid(2))['status'] === 302);
 check('audit: login, logout, dan kegagalan tercatat', $count("SELECT COUNT(*) FROM audit_logs WHERE action = 'LOGOUT'") >= 1 && $count("SELECT COUNT(*) FROM audit_logs WHERE action = 'LOGIN_FAILED'") >= 3);
 
-// ---------- 10. timeout idle (SESSION_IDLE_TIMEOUT=4 detik di .env.testing) ----------
-$t = new Browser();
+// ---------- 10. timeout idle (SESSION_IDLE_TIMEOUT=4 detik di server kedua, .env.testingi) ----------
+$t = new Browser(BASE_IDLE);
 $t->login('alfa');
 check('idle: sebelum habis waktu, sesi aktif', $t->get('/')['status'] === 200);
 sleep(5);
@@ -1414,7 +1439,7 @@ $secondNormal = $sa->get('/transaksi/simpanan');
 check('live/pesan: pesan sukses tetap tampil setelah permintaan latar belakang, lalu hilang sesudah dilihat', $has($firstNormal, 'alert--success') && !$has($secondNormal, 'alert--success'));
 
 // sesi: permintaan latar belakang tidak memperpanjang sesi (idle uji 4 detik)
-$idle = new Browser();
+$idle = new Browser(BASE_IDLE);
 $idle->login('alfa');
 $idle->get('/');
 sleep(3);
@@ -1422,7 +1447,7 @@ $mid1 = $tick($idle);
 sleep(2);
 $mid2 = $tick($idle);
 check('live/sesi: denyut tidak memperpanjang sesi idle (sesi tetap berakhir 4 detik setelah aktivitas terakhir)', $mid1['status'] === 200 && $mid2['status'] === 401);
-$idle2 = new Browser();
+$idle2 = new Browser(BASE_IDLE);
 $idle2->login('alfa');
 $idle2->get('/');
 sleep(3);
@@ -1881,6 +1906,97 @@ foreach (['/', '/profil', '/master/pengguna', '/sistem/audit', '/anggota/' . $mi
     $authBody .= $sh->get($p)['body'];
 }
 check('keamanan/bocor: tak ada hash kata sandi, token CSRF di URL, atau kredensial di halaman yang tampil', !str_contains($authBody, '$2y$') && !preg_match('/href="[^"]*_token=/', $authBody) && !preg_match('/(DB_PASS|DB_ADMIN_PASS|password_hash)/i', $authBody));
+
+// ---- 14. Matriks peran dan cakupan route (Phase 17) ----
+// Matriks ditulis dari ATURAN di prompt master §5 (bukan disalin dari config/permissions.php), jadi bila izin berubah tanpa
+// sengaja, tes ini gagal. Kode: ok = 200, x = ditolak (403/404), r = dialihkan ke /login. Kolom: HEAD, PEMERIKSA, KETUA REGU, ANGGOTA, TAMU.
+$roleBrowsers = ['HEAD' => $sh, 'PEMERIKSA' => $sp, 'KETUA_REGU' => $sa, 'ANGGOTA' => $sm, 'TAMU' => new Browser()];
+$ketuaPeriksa = $mid(2);   // anggota regu Alfa (Ketua Alfa = pengguna alfa)
+$anggotaBeta = $mid(4);    // anggota regu Beta = pengguna anggota4
+$matrix = [
+    //  jalur                                   HEAD  PEM   KR    ANG   TAMU
+    ['/',                                       'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/profil',                                 'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/profil/password',                        'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/master/ketua-regu',                      'ok', 'x',  'x',  'x',  'r'],
+    ['/master/ketua-regu/baru',                 'ok', 'x',  'x',  'x',  'r'],
+    ['/master/anggota',                         'ok', 'ok', 'ok', 'x',  'r'],
+    ['/master/anggota/baru',                    'ok', 'x',  'x',  'x',  'r'],
+    ['/master/pengguna',                        'ok', 'x',  'x',  'x',  'r'],
+    ['/master/pengguna/baru',                   'ok', 'x',  'x',  'x',  'r'],
+    ['/sistem/pengaturan',                      'ok', 'x',  'x',  'x',  'r'],
+    ['/sistem/audit',                           'ok', 'ok', 'x',  'x',  'r'],
+    ['/sistem/audit/unduh',                     'ok', 'ok', 'x',  'x',  'r'],
+    ['/validasi',                               'ok', 'ok', 'x',  'x',  'r'],
+    ['/validasi/riwayat',                       'ok', 'ok', 'x',  'x',  'r'],
+    ['/transaksi/simpanan',                     'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/pinjaman',                     'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/pinjaman/simulasi',            'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/angsuran',                     'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/angsuran/tagihan',             'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/riwayat',                      'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/simpanan/baru',                'x',  'x',  'ok', 'x',  'r'],
+    ['/transaksi/pinjaman/baru',                'x',  'x',  'ok', 'x',  'r'],
+    ['/transaksi/angsuran/baru',                'x',  'x',  'ok', 'x',  'r'],
+    ['/laporan/simpanan',                       'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/laporan/pinjaman',                       'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/laporan/angsuran',                       'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/laporan/saldo',                          'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/laporan/transaksi',                      'ok', 'ok', 'ok', 'ok', 'r'],
+    ['/laporan/regu',                           'ok', 'ok', 'x',  'x',  'r'],
+    ['/laporan/anggota',                        'ok', 'ok', 'ok', 'x',  'r'],
+    ['/laporan/simpanan/unduh',                 'ok', 'ok', 'x',  'x',  'r'],
+    ['/laporan/transaksi/unduh',                'ok', 'ok', 'x',  'x',  'r'],
+    ['/anggota/' . $ketuaPeriksa,               'ok', 'ok', 'ok', 'x',  'r'],   // anggota regu Alfa
+    ['/anggota/' . $anggotaBeta,                'ok', 'ok', 'x',  'ok', 'r'],   // anggota regu Beta (= pengguna anggota4)
+    ['/laporan/anggota/' . $ketuaPeriksa,       'ok', 'ok', 'ok', 'x',  'r'],
+    ['/laporan/anggota/' . $anggotaBeta,        'ok', 'ok', 'x',  'x',  'r'],
+    ['/transaksi/' . $newId,                    'ok', 'ok', 'ok', 'x',  'r'],   // transaksi anggota regu Alfa
+    ['/master/anggota/' . $ketuaPeriksa . '/ubah', 'ok', 'x', 'x',  'x',  'r'],
+    ['/master/ketua-regu/1/ubah',               'ok', 'x',  'x',  'x',  'r'],
+    ['/master/pengguna/1/ubah',                 'ok', 'x',  'x',  'x',  'r'],
+    ['/live/tick',                              'ok', 'ok', 'ok', 'ok', 'r'],
+];
+$roleNames = ['HEAD', 'PEMERIKSA', 'KETUA_REGU', 'ANGGOTA', 'TAMU'];
+$matrixBad = [];
+$cells = 0;
+foreach ($matrix as $row) {
+    $path = $row[0];
+    foreach ($roleNames as $i => $role) {
+        $br = $roleBrowsers[$role];
+        if ($role !== 'TAMU') {
+            $br->get('/profil');   // sesi uji hanya 4 detik; segarkan agar yang diuji hak akses, bukan kedaluwarsa
+        }
+        $r = $br->request('GET', $path);
+        $want = $row[$i + 1];
+        $got = $r['status'] === 200 ? 'ok' : ($r['status'] === 302 && str_ends_with((string) $r['location'], '/login') ? 'r' : (in_array($r['status'], [403, 404], true) ? 'x' : 'status ' . $r['status']));
+        $cells++;
+        if ($got !== $want) {
+            $matrixBad[] = "{$role} {$path}: harap {$want}, dapat {$got}";
+        }
+    }
+}
+check("matriks peran: {$cells} sel (" . count($matrix) . ' halaman x 5 peran) sesuai aturan prompt master §5' . ($matrixBad ? ' [' . implode('; ', array_slice($matrixBad, 0, 6)) . ']' : ''), $matrixBad === []);
+
+check('styleguide: hanya hidup di lingkungan lokal (200 di APP_ENV=local uji ini; produksi dijaga controller dan preflight)', $sh->get('/styleguide')['status'] === 200 && $sh->get('/styleguide?peran=KETUA_REGU')['status'] === 200 && $sh->get('/styleguide?peran=<script>')['status'] === 200);
+
+// -- cakupan route: setiap route yang terdaftar harus pernah diminta oleh suite ini
+$routerAll = new App\Core\Router();
+(require BASE_PATH . '/config/routes.php')($routerAll);
+$uncovered = [];
+foreach ($routerAll->all() as $route) {
+    $hit = false;
+    foreach (Browser::$seen as [$m, $p]) {
+        if ($m === $route['method'] && preg_match($route['regex'], $p) === 1) {
+            $hit = true;
+            break;
+        }
+    }
+    if (!$hit) {
+        $uncovered[] = $route['method'] . ' ' . $route['regex'];
+    }
+}
+check('cakupan route: SEMUA ' . count($routerAll->all()) . ' route terdaftar pernah diminta oleh suite HTTP (tak ada route tanpa uji)' . ($uncovered ? ' [' . implode('; ', array_slice($uncovered, 0, 5)) . ']' : ''), $uncovered === []);
 
 echo "\n{$passed} lulus, " . count($failed) . " gagal\n";
 @unlink(BASE_PATH . '/.env.testing');

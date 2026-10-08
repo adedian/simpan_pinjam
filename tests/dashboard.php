@@ -128,6 +128,26 @@ $view = Database::select('SELECT * FROM v_global_summary')[0];
 check('ringkasan: sama dengan v_global_summary (tanpa angka tersimpan); simpanan yang menunggu tidak terhitung', $sum['kas_tersedia'] === (int) $view['kas_tersedia'] && $sum['saldo_tabungan'] === 1100000 && $sum['selisih'] === 0);
 check('ringkasan: piutang dan bunga dari pinjaman yang berlaku (1.040.000 - 520.000 dibayar = 520.000; bunga 40.000)', $sum['piutang_beredar'] === 520000 && $sum['bunga_dibukukan'] === 40000);
 check('ringkasan: integritas bersih (0 temuan)', Dashboard::integrityIssues() === 0);
+
+// ---- cache pemeriksaan integritas (Phase 17: pemeriksaan penuh ±1 detik pada 34.000 transaksi)
+$dbName = (string) Database::pdo()->query('SELECT DATABASE()')->fetchColumn();
+$cacheFile = BASE_PATH . '/storage/cache/integrity-' . md5($dbName) . '.json';
+@unlink($cacheFile);
+Config::set('app.integrity_cache_ttl', 60);
+$cv = \App\Services\LiveFeed::version();
+check('cache integritas: hitungan pertama menulis berkas cache (0 temuan)', Dashboard::integrityIssues() === 0 && is_file($cacheFile) && (json_decode((string) file_get_contents($cacheFile), true)['n'] ?? -1) === 0);
+file_put_contents($cacheFile, json_encode(['v' => $cv, 't' => time(), 'n' => 7]));
+check('cache integritas: dipakai ulang bila penanda perubahan sama dan umur < TTL (terbukti: nilai palsu 7 dikembalikan)', Dashboard::integrityIssues() === 7);
+file_put_contents($cacheFile, json_encode(['v' => $cv, 't' => time() - 120, 'n' => 7]));
+check('cache integritas: lewat TTL dihitung ulang (perubahan di luar aplikasi tetap terdeteksi paling lambat dalam TTL) dan cache diperbarui', Dashboard::integrityIssues() === 0 && (json_decode((string) file_get_contents($cacheFile), true)['n'] ?? -1) === 0);
+file_put_contents($cacheFile, json_encode(['v' => $cv - 1, 't' => time(), 'n' => 7]));
+check('cache integritas: penanda perubahan data berbeda = dihitung ulang walau masih segar', Dashboard::integrityIssues() === 0);
+file_put_contents($cacheFile, 'bukan json {{{');
+check('cache integritas: berkas rusak tidak menjatuhkan halaman; dihitung ulang', Dashboard::integrityIssues() === 0);
+file_put_contents($cacheFile, json_encode(['v' => $cv, 't' => time(), 'n' => 7]));
+Config::set('app.integrity_cache_ttl', 0);
+check('cache integritas: TTL 0 mematikan cache (selalu hitung ulang)', Dashboard::integrityIssues() === 0);
+@unlink($cacheFile);
 check('ringkasan: periode aktif terbaca', Dashboard::activePeriod() === 'Uji');
 
 // ======================= arus bulanan =======================
