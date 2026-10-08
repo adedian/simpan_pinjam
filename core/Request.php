@@ -60,16 +60,58 @@ final class Request
         return isset($this->server[$key]) ? (string) $this->server[$key] : null;
     }
 
-    /** IP klien. Sengaja hanya REMOTE_ADDR: header X-Forwarded-For bisa dipalsukan. */
-    public function ip(): string
+    /** @var array<int,string>|null Untuk tes: menggantikan daftar proxy tepercaya dari konfigurasi. */
+    private static ?array $trustedOverride = null;
+
+    /** @param array<int,string>|null $proxies null = kembali memakai konfigurasi */
+    public static function useTrustedProxies(?array $proxies): void
     {
-        return (string) ($this->server['REMOTE_ADDR'] ?? '0.0.0.0');
+        self::$trustedOverride = $proxies;
     }
 
+    /** @return array<int,string> */
+    private static function trustedProxies(): array
+    {
+        return self::$trustedOverride ?? (array) Config::get('app.trusted_proxies', []);
+    }
+
+    /** Apakah sambungan langsung ke server ini berasal dari proxy tepercaya? */
+    private function viaTrustedProxy(): bool
+    {
+        return in_array((string) ($this->server['REMOTE_ADDR'] ?? ''), self::trustedProxies(), true);
+    }
+
+    /**
+     * IP klien. Tanpa proxy tepercaya: hanya REMOTE_ADDR (X-Forwarded-For bisa dipalsukan siapa saja).
+     * Bila sambungan datang dari proxy tepercaya: telusuri X-Forwarded-For dari KANAN dan ambil alamat
+     * pertama yang bukan proxy tepercaya. Bagian kiri daftar bisa dipalsukan klien dan tidak dipakai.
+     */
+    public function ip(): string
+    {
+        $remote = (string) ($this->server['REMOTE_ADDR'] ?? '0.0.0.0');
+        if (!$this->viaTrustedProxy()) {
+            return $remote;
+        }
+        $chain = array_reverse(array_map('trim', explode(',', (string) $this->header('X-Forwarded-For'))));
+        foreach ($chain as $candidate) {
+            if (filter_var($candidate, FILTER_VALIDATE_IP) === false) {
+                return $remote;   // rantai rusak: jangan menebak
+            }
+            if (!in_array($candidate, self::trustedProxies(), true)) {
+                return $candidate;
+            }
+        }
+        return $remote;
+    }
+
+    /** HTTPS langsung, atau lewat proxy tepercaya yang melapor X-Forwarded-Proto: https. */
     public function isSecure(): bool
     {
         $https = $this->server['HTTPS'] ?? '';
-        return $https !== '' && strtolower((string) $https) !== 'off';
+        if ($https !== '' && strtolower((string) $https) !== 'off') {
+            return true;
+        }
+        return $this->viaTrustedProxy() && strtolower((string) $this->header('X-Forwarded-Proto')) === 'https';
     }
 
     public function expectsJson(): bool

@@ -30,6 +30,13 @@ final class App
     {
         $request = Request::capture();
 
+        $insecure = Https::enforce($request);
+        if ($insecure !== null) {
+            SecurityHeaders::apply($insecure, $request);
+            $insecure->send();
+            return;
+        }
+
         try {
             Session::start($request);
             $response = $this->handle($request);

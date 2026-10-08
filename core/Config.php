@@ -28,4 +28,20 @@ final class Config
         }
         return $value;
     }
+
+    /** Hanya untuk tes: ubah satu nilai konfigurasi di memori ("file.kunci.bersarang"). Tidak menulis ke berkas. */
+    public static function set(string $key, mixed $value): void
+    {
+        self::get($key);   // pastikan berkasnya termuat
+        $parts = explode('.', $key);
+        $file  = array_shift($parts);
+        $ref   = &self::$files[$file];
+        foreach ($parts as $part) {
+            if (!is_array($ref)) {
+                $ref = [];
+            }
+            $ref = &$ref[$part];
+        }
+        $ref = $value;
+    }
 }

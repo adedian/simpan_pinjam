@@ -19,6 +19,13 @@ final class HealthController extends BaseController
             'ext_mbstring' => extension_loaded('mbstring'),
             'storage_writable' => is_writable(BASE_PATH . '/storage/logs') && is_writable(BASE_PATH . '/storage/sessions'),
         ];
+        // Database ikut diperiksa di SEMUA lingkungan: pemantau (uptime monitor) harus tahu bila aplikasi hidup tetapi database mati.
+        try {
+            Database::pdo()->query('SELECT 1');
+            $checks['database'] = true;
+        } catch (\Throwable $e) {
+            $checks['database'] = false;
+        }
         $ok = !in_array(false, $checks, true);
 
         // Rincian hanya untuk lingkungan lokal; produksi cukup status ringkas.
@@ -27,11 +34,14 @@ final class HealthController extends BaseController
         }
 
         $migrations = null;
-        try {
-            $migrations = (int) Database::pdo()->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn();
-            $database   = 'ok';
-        } catch (\Throwable $e) {
-            $database = 'tidak_terhubung';
+        $database   = 'tidak_terhubung';
+        if ($checks['database']) {
+            try {
+                $migrations = (int) Database::pdo()->query('SELECT COUNT(*) FROM schema_migrations')->fetchColumn();
+                $database   = 'ok';
+            } catch (\Throwable $e) {
+                $database = 'tidak_terhubung';
+            }
         }
 
         return Response::json([
