@@ -35,7 +35,7 @@
                     <td data-label="Nama"><?= e($r['name']) ?></td>
                     <td data-label="Regu"><?= e($r['team_name']) ?></td>
                     <td data-label="Status"><?= $r['status'] === 'AKTIF' ? '<span class="badge badge--disetujui">Aktif</span>' : '<span class="badge badge--draft">Nonaktif</span>' ?></td>
-                    <td class="num"><a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/' . (int) $r['id'])) ?>">Buka kartu</a></td>
+                    <td class="cell-actions"><a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/' . (int) $r['id'])) ?>">Buka kartu</a></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

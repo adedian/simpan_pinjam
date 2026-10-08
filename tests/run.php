@@ -429,6 +429,22 @@ check('view: tolak path traversal', (function (): bool {
     return false;
 })());
 
+$activeOf = static function (array $user, string $path): array {
+    $on = [];
+    foreach (Navigation::forUser($user, $path) as $g) {
+        foreach ($g['items'] as $i) {
+            if ($i['active']) {
+                $on[] = $i['path'];
+            }
+        }
+    }
+    return $on;
+};
+$headUser = $mkUser(['HEAD']);
+check('menu aktif: /validasi hanya menyalakan "Menunggu Validasi"', $activeOf($headUser, '/validasi') === ['/validasi']);
+check('menu aktif: /validasi/riwayat hanya menyalakan "Riwayat Validasi" (bukan keduanya: jalur awalan tidak ikut aktif)', $activeOf($headUser, '/validasi/riwayat') === ['/validasi/riwayat']);
+check('menu aktif: halaman turunan (/transaksi/angsuran/tagihan) menyalakan induknya saja; Dashboard hanya di "/"', $activeOf($headUser, '/transaksi/angsuran/tagihan') === ['/transaksi/angsuran'] && $activeOf($headUser, '/') === ['/'] && $activeOf($headUser, '/laporan/anggota/5') === ['/laporan/anggota']);
+check('menu aktif: halaman di luar menu tidak menyalakan apa pun', $activeOf($headUser, '/tidak-ada') === [] && $activeOf($headUser, '/transaksi/12') === []);
 use App\Controllers\ErrorController;
 Auth::actingAs($mkUser(['KETUA_REGU']));
 check('galat: pengguna login mendapat kerangka aplikasi untuk 403, 404, 405, 419', array_reduce([403, 404, 405, 419], static fn (bool $c, int $s): bool => $c && ErrorController::framedUser($s) !== null, true));

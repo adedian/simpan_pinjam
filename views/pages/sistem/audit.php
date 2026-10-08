@@ -76,7 +76,7 @@ $qs = static fn (array $over): string => http_build_query(array_filter($over, st
                     <td data-label="Objek"><?= e(Audit::ENTITIES[$r['entity_type']] ?? $r['entity_type']) ?><?= $r['entity_id'] !== null ? ' #' . (int) $r['entity_id'] : '' ?></td>
                     <td data-label="Referensi"><?= $r['reference_no'] === null ? '<span class="muted">-</span>' : ($link !== null ? '<a href="' . e(url($link)) . '">' . e($r['reference_no']) . '</a>' : e($r['reference_no'])) ?></td>
                     <td data-label="IP"><?= e((string) ($r['ip_address'] ?? '-')) ?></td>
-                    <td class="num"><a class="btn btn--secondary btn--sm" href="<?= e(url('/sistem/audit/' . (int) $r['id'])) ?>">Rincian</a></td>
+                    <td class="cell-actions"><a class="btn btn--secondary btn--sm" href="<?= e(url('/sistem/audit/' . (int) $r['id'])) ?>">Rincian</a></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>

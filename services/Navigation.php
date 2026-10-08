@@ -15,6 +15,17 @@ final class Navigation
      */
     public static function forUser(?array $user, string $currentPath): array
     {
+        // Satu item aktif saja: yang jalurnya PALING SPESIFIK cocok dengan halaman ini. Tanpa ini /validasi ikut
+        // menyala saat membuka /validasi/riwayat karena jalurnya awalan dari jalur itu.
+        $activePath = '';
+        foreach ((array) Config::get('menu', []) as $group) {
+            foreach ($group['items'] as $item) {
+                if (self::anyAllowed($user, $item['can']) && self::isActive($item['path'], $currentPath) && strlen($item['path']) > strlen($activePath)) {
+                    $activePath = $item['path'];
+                }
+            }
+        }
+
         $groups = [];
         foreach ((array) Config::get('menu', []) as $group) {
             $items = [];
@@ -28,7 +39,7 @@ final class Navigation
                     'icon'      => $item['icon'],
                     'phase'     => $item['phase'],
                     'available' => (bool) $item['available'],
-                    'active'    => self::isActive($item['path'], $currentPath),
+                    'active'    => $item['path'] === $activePath,
                     'badge'     => $item['badge'] ?? null,
                 ];
             }

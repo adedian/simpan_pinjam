@@ -1506,6 +1506,72 @@ check('galat/404: membuka halaman 404 tidak menulis audit (hanya penolakan izin 
 $aset = $sa->get('/assets/js/app.js');
 check('galat/aset: skrip mengenal tombol Kembali; CSS memuat .error-card', $has($aset, 'data-back') && $has($sa->get('/assets/css/app.css'), '.error-card'));
 
+// ---- 12n. responsif (Phase 15) ----
+$domOf = static function (string $html): DOMXPath {
+    $d = new DOMDocument();
+    @$d->loadHTML('<?xml encoding="utf-8"?>' . $html);
+    return new DOMXPath($d);
+};
+$respPages = ['/', '/master/ketua-regu', '/master/anggota', '/master/pengguna', '/transaksi/simpanan', '/transaksi/pinjaman', '/transaksi/angsuran', '/transaksi/angsuran/tagihan', '/transaksi/riwayat', '/transaksi/' . $newId, '/validasi', '/validasi/riwayat', '/laporan/simpanan', '/laporan/pinjaman', '/laporan/angsuran', '/laporan/saldo', '/laporan/transaksi', '/laporan/regu', '/laporan/anggota', '/anggota/2', '/sistem/audit'];
+$noWrap = [];
+$noLabel = [];
+$noViewport = [];
+foreach ($respPages as $p) {
+    $r = $sh->get($p);
+    if ($r['status'] !== 200) {
+        $noViewport[] = $p . ' (status ' . $r['status'] . ')';
+        continue;
+    }
+    $x = $domOf($r['body']);
+    if (!preg_match('/<meta name="viewport" content="width=device-width, initial-scale=1">/', $r['body'])) {
+        $noViewport[] = $p;
+    }
+    if ($x->query("//table[not(ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' table-wrap ')])]")->length > 0) {
+        $noWrap[] = $p;
+    }
+    if ($x->query("//table[contains(@class,'table--stack')]/tbody/tr/td[not(@data-label) and not(contains(@class,'cell-actions'))]")->length > 0) {
+        $noLabel[] = $p;
+    }
+}
+$activeCount = static fn (array $r): int => substr_count($r['body'], 'nav__item is-active');
+check('responsif/menu: tepat SATU item menu aktif di tiap halaman (riwayat validasi tidak ikut menyalakan menunggu validasi)', $activeCount($sh->get('/validasi/riwayat')) === 1 && $activeCount($sh->get('/validasi')) === 1 && $activeCount($sh->get('/laporan/anggota')) === 1 && $activeCount($sh->get('/')) === 1 && $has($sh->get('/validasi/riwayat'), 'is-active" href="/validasi/riwayat"'));
+check('responsif/viewport: semua halaman aplikasi memuat meta viewport tanpa user-scalable=no atau maximum-scale (zoom pengguna tidak diblokir)' . ($noViewport ? ' [' . implode(', ', $noViewport) . ']' : ''), $noViewport === []);
+$layoutsOk = true;
+foreach (['app', 'auth', 'guest'] as $layout) {
+    $src = (string) file_get_contents(BASE_PATH . '/views/layouts/' . $layout . '.php');
+    $layoutsOk = $layoutsOk && str_contains($src, 'name="viewport" content="width=device-width, initial-scale=1"') && !preg_match('/user-scalable|maximum-scale/i', $src);
+}
+check('responsif/viewport: ketiga layout (aplikasi, masuk, tamu) memuat viewport yang benar', $layoutsOk);
+check('responsif/tabel: setiap <table> berada di dalam .table-wrap (menggulir ke samping, tak melebarkan halaman)' . ($noWrap ? ' [' . implode(', ', $noWrap) . ']' : ''), $noWrap === []);
+check('responsif/tabel: setiap sel tabel bertumpuk punya data-label (label tetap tampil di ponsel)' . ($noLabel ? ' [' . implode(', ', $noLabel) . ']' : ''), $noLabel === []);
+
+$cssSrc = str_replace("\r\n", "\n", (string) $css['body']);
+$mq = static function (string $src, string $query): string {
+    $p = strpos($src, '@media ' . $query . ' {');
+    if ($p === false) {
+        return '';
+    }
+    $depth = 0;
+    for ($i = strpos($src, '{', $p); $i < strlen($src); $i++) {
+        $depth += $src[$i] === '{' ? 1 : ($src[$i] === '}' ? -1 : 0);
+        if ($depth === 0) {
+            return substr($src, $p, $i - $p + 1);
+        }
+    }
+    return '';
+};
+$m960 = $mq($cssSrc, '(max-width: 960px)');
+$m860 = $mq($cssSrc, '(max-width: 860px)');
+check('responsif/css: kolom isi memakai minmax(0,1fr) (anak lebar tidak melebarkan halaman) dan grafik tidak menahan lebar', (bool) preg_match('/\.content \{[^}]*grid-template-columns: minmax\(0, 1fr\)/', $cssSrc) && (bool) preg_match('/\.chart \{[^}]*grid-template-columns: minmax\(0, 1fr\); min-width: 0/s', $cssSrc) && (bool) preg_match('/\.chart__plot \{[^}]*min-width: 0/', $cssSrc));
+check('responsif/css: sidebar menjadi drawer di <=960px dengan scrim', str_contains($m960, '.sidebar') && str_contains($m960, 'translateX(-100%)') && str_contains($m960, 'drawer-open'));
+check('responsif/css: kolom isian 16px di layar sentuh (mencegah zoom otomatis iOS) dan tombol >=44px/40px', (bool) preg_match('/\.input[^{]*\{ font-size: 16px; \}/', $m960) && str_contains($m960, '.btn { min-height: 44px; }') && str_contains($m960, '.btn--sm { min-height: 40px; }'));
+check('responsif/css: tabel bertumpuk sampai 860px (tablet potret), ringkasan pembaca layar tetap', str_contains($m860, '.table--stack td::before { content: attr(data-label)') && str_contains($m860, '.table--stack thead { position: absolute; left: -9999px; }'));
+check('responsif/css: .table-wrap menggulir ke samping; tombol ikon 44x44; label menu >=12px', (bool) preg_match('/\.table-wrap \{ overflow-x: auto/', $cssSrc) && (bool) preg_match('/\.icon-btn \{[^}]*width: 44px; height: 44px/s', $cssSrc) && (bool) preg_match('/\.nav__label \{[^}]*font-size: 12px/s', $cssSrc));
+$screenCss = (string) preg_replace('#/\*.*?\*/#s', '', $cssSrc);
+while (($printBlock = $mq($screenCss, 'print')) !== '') {
+    $screenCss = str_replace($printBlock, '', $screenCss);
+}   // cetak laporan sengaja 10,5px agar muat A4 landscape
+check('responsif/css: tidak ada ukuran huruf di bawah 12px untuk tampilan layar', !preg_match('/font-size: (?:[0-9]|1[01](?:\.\d+)?)px/', $screenCss));
 // ---- 12f. kebersihan umum ----
 $all = '';
 foreach (['/master/anggota', '/master/ketua-regu', '/master/pengguna', '/master/pengguna/baru', '/master/anggota/baru', '/sistem/pengaturan', '/anggota/2'] as $p) {

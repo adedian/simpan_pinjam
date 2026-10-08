@@ -78,7 +78,7 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 
 .nav__group + .nav__group { margin-top: 20px; }
 .nav__label {
-    padding: 0 12px 6px; font-size: 11px; font-weight: 700;
+    padding: 0 12px 6px; font-size: 12px; font-weight: 700;
     letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .62);
 }
 .nav__item {
@@ -96,7 +96,7 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 .nav__item.is-disabled { color: rgba(255, 255, 255, .5); cursor: default; }
 .nav__item.is-disabled:hover { background: none; color: rgba(255, 255, 255, .5); }
 .nav__item em {
-    font-style: normal; font-size: 11px; color: rgba(255, 255, 255, .6);
+    font-style: normal; font-size: 12px; color: rgba(255, 255, 255, .6);
     border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px; padding: 0 7px;
 }
 .nav__item:focus-visible, .sidebar .icon-btn:focus-visible { outline-color: #fff; }
@@ -132,7 +132,7 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 .userchip__text strong { font-size: 14px; }
 .userchip__text small { font-size: 12px; color: var(--ink-3); }
 
-.content { width: 100%; max-width: 1180px; padding: 8px 28px 32px; margin: 0 auto; display: grid; gap: 22px; align-content: start; }
+.content { width: 100%; max-width: 1180px; padding: 8px 28px 32px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-content: start; }   /* minmax(0,1fr): anak lebar tidak boleh melebarkan kolom melewati layar */
 
 .icon-btn {
     display: inline-grid; place-items: center; width: 44px; height: 44px;
@@ -275,7 +275,7 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 .btn--sm { min-height: 34px; padding: 0 12px; font-size: 13.5px; }
 .btn--link { background: none; color: var(--brand-700); text-decoration: underline; padding: 0 8px; }
 .empty { padding: 28px 8px; text-align: center; color: var(--ink-3); }
-.tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--brand-100); color: var(--brand-700); vertical-align: middle; }
+.tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--brand-100); color: var(--brand-700); vertical-align: middle; }
 .cell-actions { white-space: nowrap; text-align: right; }
 .cell-actions > * { margin-left: 6px; }
 form.inline { display: inline; margin: 0; }
@@ -406,6 +406,11 @@ textarea.input { resize: vertical; min-height: 84px; }
     .content { padding: 6px 14px 28px; }
     .hero { padding: 24px 22px; }
     .hero__title { font-size: 22px; }
+    /* Layar sentuh: 16px mencegah iOS memperbesar halaman saat kolom isian difokus; ketuk cukup besar */
+    .input, select.input, textarea.input, .ss__btn, .ss__search { font-size: 16px; }
+    .btn { min-height: 44px; }
+    .btn--sm { min-height: 40px; }   /* tablet juga layar sentuh: tombol di tabel tidak boleh 34px */
+    .chart__table summary, .disclosure > summary { display: flex; align-items: center; min-height: 44px; }
 }
 
 @media (max-width: 640px) {
@@ -421,6 +426,10 @@ textarea.input { resize: vertical; min-height: 84px; }
     .btn { min-height: 46px; }
     .actions .btn { flex: 1 1 140px; }
 
+}
+
+/* Tabel bertumpuk (label: nilai) sampai tablet potret: di 641-860px kolom-kolomnya terlalu sempit dan teks terpotong-potong */
+@media (max-width: 860px) {
     .table--stack thead { position: absolute; left: -9999px; }
     .table--stack, .table--stack tbody, .table--stack tr, .table--stack td { display: block; width: 100%; }
     .table--stack tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
@@ -428,6 +437,11 @@ textarea.input { resize: vertical; min-height: 84px; }
     .table--stack td { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; border: 0; text-align: right; }
     .table--stack td::before { content: attr(data-label); color: var(--ink-3); font-size: 13px; text-align: left; }
     .table--stack tbody tr:hover td { background: none; }
+}
+/* Tablet potret: kartu baris dua kolom agar label dan nilainya tidak terpisah jauh */
+@media (min-width: 641px) and (max-width: 860px) {
+    .table--stack tr { display: grid; grid-template-columns: 1fr 1fr; column-gap: 32px; }
+    .table--stack td { min-width: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -514,13 +528,13 @@ textarea.input { resize: vertical; min-height: 84px; }
 .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 16px; }
 .charts:empty { display: none; }
 .chart {
-    margin: 0; padding: 20px 22px; display: grid; gap: 12px; align-content: start;
+    margin: 0; padding: 20px 22px; display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 12px; align-content: start;
     background: var(--surface); border: 1px solid #f0edfa; border-radius: var(--radius); box-shadow: var(--shadow);
 }
 .chart__head { display: grid; gap: 2px; }
 .chart__title { font-size: 15.5px; font-weight: 700; }
 .chart__note { font-size: 12.5px; color: var(--ink-3); }
-.chart__plot { position: relative; width: 100%; }
+.chart__plot { position: relative; width: 100%; min-width: 0; }   /* kanvas grafik tidak boleh menahan lebar kolom (Chart.js: wadah wajib min-width 0 di grid) */
 .chart__plot--s { height: 240px; }
 .chart__plot--m { height: 300px; }
 .chart__plot--l { height: 380px; }
