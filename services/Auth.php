@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Core\Config;
 use App\Core\Csrf;
 use App\Core\Database;
 use App\Core\Request;
@@ -56,6 +57,12 @@ final class Auth
         $user = User::findActive($id);
         if ($user === null) {
             self::forget();
+            return self::$cache = null;
+        }
+        $absolute = (int) Config::get('app.session.absolute_timeout', 43200);
+        if ($absolute > 0 && time() - (int) Session::get('auth_issued', 0) > $absolute) {
+            self::forget();
+            Session::flash('warning', 'Sesi berakhir karena sudah terlalu lama. Silakan masuk kembali.');
             return self::$cache = null;
         }
         if ($user['credentials_ts'] > (int) Session::get('auth_issued', 0)) {
@@ -145,10 +152,23 @@ final class Auth
     private static function fail(Request $request, string $username, string $ip, ?int $userId): array
     {
         self::logAttempt($username, $ip, false);
-        $locked = $userId !== null && User::recordFailure($userId, self::MAX_FAILURES, self::LOCK_MINUTES);
+        // Nama yang tak ada diperlakukan sama: setelah MAX_FAILURES gagal, jawabannya juga "terlalu banyak percobaan".
+        // Tanpa ini penyerang bisa membedakan akun yang ada (pesannya berubah saat terkunci) dari yang tidak ada.
+        $locked = $userId !== null
+            ? User::recordFailure($userId, self::MAX_FAILURES, self::LOCK_MINUTES)
+            : self::unknownNameLocked($username);
         AuditLog::record($request, $userId === null ? null : ['id' => $userId, 'username' => $username],
-            $locked ? 'LOGIN_LOCKED' : 'LOGIN_FAILED', 'user', $userId, null, null, ['username' => $username]);
+            $userId !== null && $locked ? 'LOGIN_LOCKED' : 'LOGIN_FAILED', 'user', $userId, null, null, ['username' => $username]);
         return ['ok' => false, 'error' => $locked ? self::THROTTLED_ERROR : self::GENERIC_ERROR];
+    }
+
+    private static function unknownNameLocked(string $username): bool
+    {
+        $rows = Database::select(
+            'SELECT COUNT(*) AS n FROM login_attempts WHERE LOWER(username) = LOWER(?) AND succeeded = 0 AND created_at > NOW() - INTERVAL ? MINUTE',
+            [$username, self::LOCK_MINUTES]
+        );
+        return (int) $rows[0]['n'] >= self::MAX_FAILURES;
     }
 
     private static function logAttempt(string $username, string $ip, bool $ok): void
@@ -173,6 +193,13 @@ final class Auth
      */
     public static function changePassword(Request $request, array $user, string $current, string $new): array
     {
+        $recent = Database::select(
+            "SELECT COUNT(*) AS n FROM audit_logs WHERE user_id = ? AND action = 'PASSWORD_CHANGE_FAILED' AND created_at > NOW() - INTERVAL ? MINUTE",
+            [$user['id'], self::LOCK_MINUTES]
+        );
+        if ((int) $recent[0]['n'] >= self::MAX_FAILURES) {
+            return ['current_password' => 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.'];   // tebakan kata sandi lama dibatasi, walau sesi sudah masuk
+        }
         $hash = User::passwordHashOf($user['id']) ?? self::DUMMY_HASH;
         if (!password_verify($current, $hash)) {
             AuditLog::record($request, $user, 'PASSWORD_CHANGE_FAILED', 'user', $user['id']);

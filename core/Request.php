@@ -36,7 +36,10 @@ final class Request
         }
 
         $uriPath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH);
-        return new self($method, self::normalizePath($uriPath, Url::basePath()), $_GET, $post, $_SERVER);
+        // Parameter query tidak pernah berupa larik di aplikasi ini; ?q[]=x adalah masukan cacat (atau serangan) dan dibuang
+        // di pintu masuk, supaya tidak ada kode hilir yang menerima larik saat mengharapkan teks.
+        $query = array_filter($_GET, 'is_scalar');
+        return new self($method, self::normalizePath($uriPath, Url::basePath()), $query, $post, $_SERVER);
     }
 
     public static function normalizePath(string $uriPath, string $base): string
@@ -54,6 +57,19 @@ final class Request
         return $this->post[$key] ?? $this->query[$key] ?? $default;
     }
 
+    /** Isian (POST lalu query) sebagai teks. Larik/nilai bukan skalar (q[]=x) menjadi $default, tanpa peringatan PHP. */
+    public function str(string $key, string $default = ''): string
+    {
+        $v = $this->post[$key] ?? $this->query[$key] ?? $default;
+        return is_scalar($v) ? (string) $v : $default;
+    }
+
+    /** Parameter query sebagai teks; larik atau bukan skalar menjadi $default. */
+    public function queryStr(string $key, string $default = ''): string
+    {
+        $v = $this->query[$key] ?? $default;
+        return is_scalar($v) ? (string) $v : $default;
+    }
     public function header(string $name): ?string
     {
         $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));

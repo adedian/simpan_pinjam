@@ -181,7 +181,7 @@ final class TransactionController extends BaseController
         $user = Auth::user();
         $this->requireRecorder($user);
 
-        if (!FormToken::consume((string) $request->input('_form_id', ''))) {
+        if (!FormToken::consume($request->str('_form_id'))) {
             Session::flash('warning', 'Formulir ini sudah pernah dikirim, jadi tidak diproses lagi. Periksa daftar angsuran sebelum mencatat ulang.');
             return $this->redirect('/transaksi/angsuran');
         }
@@ -189,7 +189,7 @@ final class TransactionController extends BaseController
         [$errors, $data] = InstallmentService::parse($request->post);
         if ($errors === []) {
             try {
-                $submit = (string) $request->input('action', 'draft') === 'submit';
+                $submit = $request->str('action', 'draft') === 'submit';
                 $id = InstallmentService::create($request, $user, $data, $submit);
                 Session::flash('success', $submit ? 'Pembayaran dicatat dan diajukan ke validasi.' : 'Pembayaran disimpan sebagai draft. Periksa pembagiannya ke cicilan, lalu ajukan bila sudah benar.');
                 return $this->redirect('/transaksi/' . $id);
@@ -228,8 +228,8 @@ final class TransactionController extends BaseController
         [$errors, $data] = InstallmentService::parse($request->post);
         if ($errors === []) {
             try {
-                $submit = (string) $request->input('action', 'draft') === 'submit';
-                InstallmentService::update($request, $user, $id, $data, (string) $request->input('_version', ''), $submit);
+                $submit = $request->str('action', 'draft') === 'submit';
+                InstallmentService::update($request, $user, $id, $data, $request->str('_version'), $submit);
                 Session::flash('success', $submit ? 'Perubahan disimpan dan pembayaran diajukan ke validasi.' : 'Draft pembayaran disimpan dan pembagiannya dihitung ulang.');
                 return $this->redirect('/transaksi/' . $id);
             } catch (RuleViolation $e) {
@@ -266,8 +266,8 @@ final class TransactionController extends BaseController
      */
     public function loanSimulation(Request $request, array $params = []): Response
     {
-        $principalRaw = trim((string) ($request->query['pokok'] ?? ''));
-        $tenorRaw     = trim((string) ($request->query['tenor'] ?? ''));
+        $principalRaw = trim($request->queryStr('pokok'));
+        $tenorRaw     = trim($request->queryStr('tenor'));
         $principal    = Money::parse($principalRaw);
         $tenor        = preg_match('/^\d{1,2}$/', $tenorRaw) === 1 ? (int) $tenorRaw : 0;
         $min     = (int) SettingsService::get('loan_tenor_min');
@@ -321,7 +321,7 @@ final class TransactionController extends BaseController
         $user = Auth::user();
         $this->requireRecorder($user);
 
-        if (!FormToken::consume((string) $request->input('_form_id', ''))) {
+        if (!FormToken::consume($request->str('_form_id'))) {
             Session::flash('warning', 'Formulir ini sudah pernah dikirim, jadi tidak diproses lagi. Periksa daftar pinjaman sebelum mencatat ulang.');
             return $this->redirect('/transaksi/pinjaman');
         }
@@ -329,7 +329,7 @@ final class TransactionController extends BaseController
         [$errors, $data] = LoanService::parse($request->post);
         if ($errors === []) {
             try {
-                $submit = (string) $request->input('action', 'draft') === 'submit';
+                $submit = $request->str('action', 'draft') === 'submit';
                 $id = LoanService::create($request, $user, $data, $submit);
                 Session::flash('success', $submit ? 'Pinjaman dicatat dan diajukan ke validasi.' : 'Pinjaman disimpan sebagai draft. Periksa jadwal cicilannya, lalu ajukan bila sudah benar.');
                 return $this->redirect('/transaksi/' . $id);
@@ -370,8 +370,8 @@ final class TransactionController extends BaseController
         [$errors, $data] = LoanService::parse($request->post);
         if ($errors === []) {
             try {
-                $submit = (string) $request->input('action', 'draft') === 'submit';
-                LoanService::update($request, $user, $id, $data, (string) $request->input('_version', ''), $submit);
+                $submit = $request->str('action', 'draft') === 'submit';
+                LoanService::update($request, $user, $id, $data, $request->str('_version'), $submit);
                 Session::flash('success', $submit ? 'Perubahan disimpan dan pinjaman diajukan ke validasi.' : 'Draft pinjaman disimpan dan jadwal dihitung ulang.');
                 return $this->redirect('/transaksi/' . $id);
             } catch (RuleViolation $e) {
@@ -403,7 +403,7 @@ final class TransactionController extends BaseController
         $this->requireRecorder($user);
 
         // Token formulir sekali pakai: kiriman ganda (klik dua kali, kirim ulang) tidak membuat transaksi kedua.
-        if (!FormToken::consume((string) $request->input('_form_id', ''))) {
+        if (!FormToken::consume($request->str('_form_id'))) {
             Session::flash('warning', 'Formulir ini sudah pernah dikirim, jadi tidak diproses lagi. Periksa daftar simpanan sebelum mencatat ulang.');
             return $this->redirect('/transaksi/simpanan');
         }
@@ -411,7 +411,7 @@ final class TransactionController extends BaseController
         [$errors, $data] = SavingService::parse($request->post);
         if ($errors === []) {
             try {
-                $submit = (string) $request->input('action', 'draft') === 'submit';
+                $submit = $request->str('action', 'draft') === 'submit';
                 $id = SavingService::create($request, $user, $data, $submit);
                 Session::flash('success', $submit ? 'Simpanan dicatat dan diajukan ke validasi.' : 'Simpanan disimpan sebagai draft. Ajukan ke validasi bila sudah benar.');
                 return $this->redirect('/transaksi/' . $id);
@@ -450,8 +450,8 @@ final class TransactionController extends BaseController
         [$errors, $data] = SavingService::parse($request->post);
         if ($errors === []) {
             try {
-                $submit = (string) $request->input('action', 'draft') === 'submit';
-                SavingService::update($request, $user, $id, $data, (string) $request->input('_version', ''), $submit);
+                $submit = $request->str('action', 'draft') === 'submit';
+                SavingService::update($request, $user, $id, $data, $request->str('_version'), $submit);
                 Session::flash('success', $submit ? 'Perubahan disimpan dan simpanan diajukan ke validasi.' : 'Draft simpanan disimpan.');
                 return $this->redirect('/transaksi/' . $id);
             } catch (RuleViolation $e) {
@@ -473,7 +473,7 @@ final class TransactionController extends BaseController
 
         try {
             $service = self::SERVICE[$trx['type']];
-            $service::submit($request, $user, $id, (string) $request->input('_version', ''));
+            $service::submit($request, $user, $id, $request->str('_version'));
             Session::flash('success', self::NOUN[$trx['type']] . ' diajukan ke validasi.');
         } catch (RuleViolation $e) {
             Session::flash('danger', implode(' ', $e->errors));
@@ -491,7 +491,7 @@ final class TransactionController extends BaseController
 
         try {
             $service = self::SERVICE[$trx['type']];
-            $service::cancel($request, $user, $id, (string) $request->input('note', ''), (string) $request->input('_version', ''));
+            $service::cancel($request, $user, $id, $request->str('note'), $request->str('_version'));
             Session::flash('success', 'Transaksi dibatalkan. Riwayat dan nomor dokumennya tetap tersimpan.');
         } catch (RuleViolation $e) {
             Session::flash('danger', implode(' ', $e->errors));
@@ -512,7 +512,7 @@ final class TransactionController extends BaseController
         $this->requireRecorder($user);
 
         try {
-            $newId = ReversalService::request($request, $user, $id, (string) $request->input('note', ''));
+            $newId = ReversalService::request($request, $user, $id, $request->str('note'));
             Session::flash('success', 'Koreksi diajukan ke validasi. Transaksi asal tetap berlaku sampai pembalik ini disetujui.');
             return $this->redirect('/transaksi/' . $newId);
         } catch (RuleViolation $e) {
@@ -530,7 +530,7 @@ final class TransactionController extends BaseController
     private function form(Request $request, ?array $trx, array $defaults): Response
     {
         $user   = Auth::user();
-        $old    = $_SESSION['_old'] ?? [];   // dibaca tanpa dihapus: view() menariknya untuk galat
+        $old    = Session::get('_old', []);   // dibaca tanpa dihapus: view() menariknya untuk galat
         $values = $old !== [] ? $old : $defaults;
 
         $memberOptions = ['' => 'Pilih anggota'];
@@ -563,7 +563,7 @@ final class TransactionController extends BaseController
     private function loanForm(Request $request, ?array $trx, array $defaults): Response
     {
         $user   = Auth::user();
-        $old    = $_SESSION['_old'] ?? [];
+        $old    = Session::get('_old', []);
         $values = $old !== [] ? $old : $defaults;
 
         $memberOptions = ['' => 'Pilih anggota'];
@@ -599,7 +599,7 @@ final class TransactionController extends BaseController
     private function paymentForm(Request $request, ?array $trx, array $defaults): Response
     {
         $user   = Auth::user();
-        $old    = $_SESSION['_old'] ?? [];
+        $old    = Session::get('_old', []);
         $values = $old !== [] ? $old : $defaults;
 
         $memberOptions = ['' => 'Pilih anggota'];
@@ -632,11 +632,11 @@ final class TransactionController extends BaseController
     {
         return [
             'type'   => (string) ($fixed['type'] ?? $request->query['type'] ?? ''),
-            'status' => (string) ($request->query['status'] ?? ''),
+            'status' => $request->queryStr('status'),
             'month'  => (int) ($request->query['bulan'] ?? 0),
             'member' => (int) ($request->query['anggota'] ?? 0),
             'q'      => clean_text($request->query['q'] ?? ''),
-            'kind'   => (string) ($request->query['jenis'] ?? ''),
+            'kind'   => $request->queryStr('jenis'),
         ];
     }
 

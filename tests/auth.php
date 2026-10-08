@@ -161,6 +161,41 @@ $afterLock = Auth::attempt(req('10.0.2.3'), 'ketua.b', $ketuaB['password']);
 check('kunci: setelah kunci habis, login benar berhasil', $afterLock['ok'] === true);
 check('kunci: penghitung & kunci direset setelah sukses', (int) one("SELECT failed_logins FROM users WHERE username='ketua.b'") === 0 && one("SELECT locked_until FROM users WHERE username='ketua.b'") === null);
 
+// nama yang TIDAK ADA tidak bisa dibedakan dari akun nyata: urutan jawaban 6 percobaan sama persis
+$seqReal = [];
+$seqGhost = [];
+for ($i = 1; $i <= 6; $i++) {
+    $seqReal[]  = Auth::attempt(req('10.0.6.' . $i), 'ketua.a', 'salah-salah-9')['error'];
+    $seqGhost[] = Auth::attempt(req('10.0.7.' . $i), 'hantu.tak.ada', 'salah-salah-9')['error'];
+}
+check('enumerasi: urutan pesan untuk nama tak ada = urutan untuk akun nyata (pesan "terlalu banyak percobaan" muncul di gagal ke-5 untuk keduanya)', $seqReal === $seqGhost && $seqGhost[3] === Auth::GENERIC_ERROR && $seqGhost[4] === Auth::THROTTLED_ERROR && $seqGhost[5] === Auth::THROTTLED_ERROR);
+check('enumerasi: audit nama tak ada tetap jujur (LOGIN_FAILED, bukan LOGIN_LOCKED) dan tanpa pengguna', (int) one("SELECT COUNT(*) FROM audit_logs WHERE action = 'LOGIN_LOCKED' AND user_id IS NULL") === 0 && (int) one("SELECT COUNT(*) FROM audit_logs WHERE action = 'LOGIN_FAILED' AND user_id IS NULL AND after_data LIKE '%hantu%'") === 6);
+check('enumerasi: nama tak ada dengan huruf besar/kecil berbeda dihitung sebagai nama yang sama', Auth::attempt(req('10.0.7.9'), 'HANTU.Tak.Ada', 'salah-salah-9')['error'] === Auth::THROTTLED_ERROR);
+$pdo->exec("UPDATE users SET failed_logins = 0, locked_until = NULL WHERE username = 'ketua.a'");
+
+// batas sesi mutlak: sesi yang terus dipakai pun berakhir
+freshSession();
+$okLogin = Auth::attempt(req('10.0.5.1'), 'ketua.b', $ketuaB['password']);
+$_SESSION['auth_issued'] = time() - (int) Config::get('app.session.absolute_timeout') + 60;
+Auth::reset();
+check('sesi mutlak: sesi yang masih di dalam batas tetap sah', $okLogin['ok'] === true && Auth::user() !== null);
+$_SESSION['auth_issued'] = time() - (int) Config::get('app.session.absolute_timeout') - 5;
+Auth::reset();
+check('sesi mutlak: sesi yang melewati batas maksimum dipaksa keluar walau aktif, dengan pesan', Auth::user() === null && !isset($_SESSION['auth_id']) && str_contains(json_encode($_SESSION['_flash'] ?? []), 'terlalu lama'));
+check('sesi mutlak: batas bawaan 12 jam', (int) Config::get('app.session.absolute_timeout') === 43200);
+
+// ganti kata sandi: tebakan kata sandi lama dibatasi walau sesi sudah masuk
+freshSession();
+Auth::attempt(req('10.0.5.2'), 'periksa', $periksa['password']);
+$pu = Auth::user();
+$results = [];
+for ($i = 0; $i < 6; $i++) {
+    $results[] = Auth::changePassword(req('10.0.5.2'), $pu, 'tebakan-salah-' . $i, 'KataSandiBaru-2026x');
+}
+check('ganti sandi: 5 tebakan salah pertama dijawab "salah", yang ke-6 dibatasi', ($results[4]['current_password'] ?? '') === 'Kata sandi saat ini salah.' && str_contains($results[5]['current_password'] ?? '', 'Terlalu banyak percobaan'));
+check('ganti sandi: setelah dibatasi, kata sandi lama yang BENAR pun ditolak sementara (penebak tak bisa memastikan tebakannya)', str_contains(Auth::changePassword(req('10.0.5.2'), $pu, $periksa['password'], 'KataSandiBaru-2026x')['current_password'] ?? '', 'Terlalu banyak percobaan') && password_verify($periksa['password'], (string) one("SELECT password_hash FROM users WHERE username = 'periksa'")));
+$throttleFails = audits('PASSWORD_CHANGE_FAILED');   // jejak audit tidak bisa dihapus; tes lain menghitung relatif terhadap ini
+
 // akun nonaktif / terhapus
 freshSession();
 $pdo->exec("UPDATE users SET is_active = 0 WHERE username='anggota5'");
@@ -211,7 +246,7 @@ check('sandi: sama dengan yang lama ditolak', isset(Auth::changePassword(req(), 
 check('sandi: lemah ditolak', isset(Auth::changePassword(req(), $user, $head['password'], '12345678')['password']));
 check('sandi: mengandung username ditolak', isset(Auth::changePassword(req(), $user, $head['password'], 'purwati-2026')['password']));
 check('sandi: belum ada yang berubah setelah penolakan', (int) one("SELECT must_change_password FROM users WHERE username='purwati'") === 1);
-check('sandi: kegagalan tercatat di audit', audits('PASSWORD_CHANGE_FAILED') === 1);
+check('sandi: kegagalan tercatat di audit (1 baru + yang dibuat tes pembatasan di atas)', audits('PASSWORD_CHANGE_FAILED') === 1 + $throttleFails);
 
 $otherSession = ['auth_id' => $user['id'], 'auth_issued' => time() - 30]; // sesi lain, diterbitkan lebih awal
 $errors = Auth::changePassword(req(), $user, $head['password'], 'Kopi-Susu-2026');

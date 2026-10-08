@@ -200,12 +200,12 @@ final class ReportController extends BaseController
     {
         $out = [];
         foreach (['periode', 'regu', 'q', 'dari', 'sampai', 'jenis', 'anggota'] as $k) {
-            if (isset($request->query[$k]) && (string) $request->query[$k] !== '') {
-                $out[$k] = (string) $request->query[$k];
+            if ($request->queryStr($k) !== '') {
+                $out[$k] = $request->queryStr($k);
             }
         }
         if (array_key_exists('status', $request->query)) {
-            $out['status'] = (string) $request->query['status'];
+            $out['status'] = $request->queryStr('status');
         }
         return $out;
     }

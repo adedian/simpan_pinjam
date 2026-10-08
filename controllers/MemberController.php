@@ -27,7 +27,7 @@ final class MemberController extends BaseController
         $filters = [
             'q'      => clean_text($request->query['q'] ?? ''),
             'team'   => (int) ($request->query['team'] ?? 0),
-            'status' => (string) ($request->query['status'] ?? ''),
+            'status' => $request->queryStr('status'),
         ];
         $result = Member::search($user, $filters, (int) ($request->query['page'] ?? 1));
 
@@ -124,7 +124,7 @@ final class MemberController extends BaseController
         [$errors, $data] = MemberService::parse($request->post);
         if ($errors === []) {
             try {
-                MemberService::update($request, Auth::user(), $id, $data, (string) $request->input('_version', ''));
+                MemberService::update($request, Auth::user(), $id, $data, $request->str('_version'));
                 Session::flash('success', 'Data anggota disimpan.');
                 return $this->redirect('/anggota/' . $id);
             } catch (RuleViolation $e) {
@@ -140,7 +140,7 @@ final class MemberController extends BaseController
      */
     private function form(Request $request, ?array $member, array $defaults): Response
     {
-        $old = $_SESSION['_old'] ?? [];   // dibaca (tanpa dihapus) agar view() masih bisa menariknya untuk galat
+        $old = Session::get('_old', []);   // dibaca (tanpa dihapus) agar view() masih bisa menariknya untuk galat
         $values = $old !== [] ? $old : $defaults;
 
         return $this->view($request, 'master/member-form', [

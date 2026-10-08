@@ -69,7 +69,7 @@ final class UserController extends BaseController
         $errors = $this->validateBasics($input, false);
         if ($errors === []) {
             try {
-                UserService::update($request, Auth::user(), $id, $input['name'], $input['roles'], $input['member_no'] ?: null, (string) $request->input('_version', ''));
+                UserService::update($request, Auth::user(), $id, $input['name'], $input['roles'], $input['member_no'] ?: null, $request->str('_version'));
                 Session::flash('success', 'Data pengguna disimpan.');
                 return $this->redirect('/master/pengguna');
             } catch (\InvalidArgumentException $e) {
@@ -82,7 +82,7 @@ final class UserController extends BaseController
     /** @param array<string,string> $params */
     public function setStatus(Request $request, array $params = []): Response
     {
-        return $this->act(fn () => UserService::setActive($request, Auth::user(), (int) $params['id'], (string) $request->input('active') === '1', (string) $request->input('_version', '')),
+        return $this->act(fn () => UserService::setActive($request, Auth::user(), (int) $params['id'], $request->str('active') === '1', $request->str('_version')),
             'Status akun diperbarui.');
     }
 
@@ -95,7 +95,7 @@ final class UserController extends BaseController
             $this->abort(404);
         }
         try {
-            $password = UserService::resetPassword($request, Auth::user(), $id, (string) $request->input('_version', ''));
+            $password = UserService::resetPassword($request, Auth::user(), $id, $request->str('_version'));
         } catch (\InvalidArgumentException $e) {
             Session::flash('danger', $e->getMessage());
             return $this->redirect('/master/pengguna');
@@ -127,10 +127,10 @@ final class UserController extends BaseController
     {
         $roles = $request->post['roles'] ?? [];
         return [
-            'username'  => strtolower(trim((string) $request->input('username', ''))),
+            'username'  => strtolower(trim($request->str('username'))),
             'name'      => clean_text($request->input('name', '')),
             'roles'     => is_array($roles) ? array_values(array_filter(array_map('strval', $roles))) : [],
-            'member_no' => trim((string) $request->input('member_no', '')),
+            'member_no' => trim($request->str('member_no')),
         ];
     }
 
@@ -159,7 +159,7 @@ final class UserController extends BaseController
      */
     private function form(Request $request, ?array $user, array $defaults): Response
     {
-        $old = $_SESSION['_old'] ?? [];
+        $old = Session::get('_old', []);
         return $this->view($request, 'master/user-form', [
             'title'   => $user === null ? 'Tambah Pengguna' : 'Ubah Pengguna',
             'account' => $user,

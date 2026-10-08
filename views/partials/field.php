@@ -16,7 +16,7 @@ $attrs = ''
     . (!empty($f['placeholder']) ? ' placeholder="' . e($f['placeholder']) . '"' : '')
     . (!empty($f['autocomplete']) ? ' autocomplete="' . e($f['autocomplete']) . '"' : ' autocomplete="off"')
     . (!empty($f['inputmode']) ? ' inputmode="' . e($f['inputmode']) . '"' : '')
-    . ($error ? ' aria-invalid="true" aria-describedby="' . $id . '_err"' : '');
+    . ($error ? ' aria-invalid="true" aria-describedby="' . e($id) . '_err"' : '');
 ?>
 <?php if ($type === 'checkbox'): ?>
     <div class="field field--check<?= $error ? ' field--error' : '' ?>">

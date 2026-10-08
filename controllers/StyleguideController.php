@@ -21,7 +21,7 @@ final class StyleguideController extends BaseController
         }
 
         $roles = array_keys((array) Config::get('permissions.labels', []));
-        $role  = (string) $request->input('peran', 'HEAD');
+        $role  = $request->str('peran', 'HEAD');
         if (!in_array($role, $roles, true)) {
             $role = 'HEAD';
         }

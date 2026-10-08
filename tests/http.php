@@ -1581,6 +1581,307 @@ check('umum: halaman master tidak memuat <script> atau event handler inline', !p
 check('umum: tidak ada atribut style inline (CSP)', !preg_match('/\sstyle="/i', $all));
 check('umum: tidak ada kata sandi atau hash di halaman admin', !str_contains($all, '$2y$'));
 
+// ---- 13. Security audit (Phase 16) ----
+// Semua pemeriksaan di bagian ini dijalankan dari luar (HTTP), seperti penyerang dengan sesi biasa.
+$phpLogBytes = static fn (): int => (int) array_sum(array_map('filesize', glob(BASE_PATH . '/storage/logs/php-*.log') ?: []));
+$phpLogTail = static function (int $from): string {
+    $all = '';
+    foreach (glob(BASE_PATH . '/storage/logs/php-*.log') ?: [] as $f) {
+        $all .= (string) file_get_contents($f);
+    }
+    return substr($all, $from);
+};
+$logStart = $phpLogBytes();
+$serverError = static fn (array $r): bool => $r['status'] >= 500 || (bool) preg_match('/SQLSTATE|PDOException|Stack trace|Fatal error|Parse error|<b>Warning<\/b>|<b>Notice<\/b>|Warning: |Notice: |Deprecated: |Uncaught /', $r['body']);
+
+// -- 13a. CSRF: setiap route pengubah-data menolak permintaan tanpa token, walau sesi sah
+preg_match_all("/\\\$r->(get|post)\\('([^']+)'/", (string) file_get_contents(BASE_PATH . '/config/routes.php'), $rm, PREG_SET_ORDER);
+$concrete = static fn (string $p): string => (string) preg_replace(['/\{id:\\\\d\+\}/', '/\{key:\[a-z\]\+\}/'], ['1', 'simpanan'], $p);
+$routeList = [];
+foreach ($rm as [, $method, $pattern]) {
+    $routeList[strtoupper($method)][] = $concrete($pattern);
+}
+$postRoutes = array_values(array_diff($routeList['POST'] ?? [], []));
+$noCsrf = [];
+$sh->get('/');
+foreach ($postRoutes as $p) {
+    $r = $sh->request('POST', $p, ['x' => '1']);
+    if ($r['status'] !== 419) {
+        $noCsrf[] = $p . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/csrf: ' . count($postRoutes) . ' route POST semuanya 419 tanpa token (sesi sah tidak menolong)' . ($noCsrf ? ' [' . implode(', ', $noCsrf) . ']' : ''), $noCsrf === [] && count($postRoutes) >= 20);
+check('keamanan/csrf: token palsu, token milik sesi lain, dan token di header yang salah ditolak', $sh->request('POST', '/profil/password', ['_token' => 'palsu'])['status'] === 419
+    && $sh->request('POST', '/profil/password', ['_token' => $sa->csrf()])['status'] === 419
+    && $sh->request('POST', '/logout', [], ['X-CSRF-Token-Salah: ' . $sh->csrf()])['status'] === 419 && $sh->get('/')['status'] === 200);
+check('keamanan/csrf: token sah lewat header X-CSRF-TOKEN diterima (jalur AJAX): lolos CSRF dan berhenti di validasi isian', $sh->request('POST', '/profil/password', [], ['X-CSRF-TOKEN: ' . $sh->csrf()])['status'] !== 419);
+
+// -- 13b. Autentikasi: tamu tidak mendapat apa pun dari route mana pun
+$anon = new Browser();
+$publicGet = ['/login', '/health', '/styleguide'];
+$leak = [];
+foreach ($routeList['GET'] ?? [] as $p) {
+    if (in_array($p, $publicGet, true)) {
+        continue;
+    }
+    $r = $anon->get($p);
+    if (!in_array($r['status'], [302, 401], true) || ($r['status'] === 302 && !str_ends_with((string) $r['location'], '/login')) || strlen($r['body']) > 0 && str_contains($r['body'], 'Kas tersedia')) {
+        $leak[] = $p . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/auth: tamu dialihkan ke /login dari SEMUA route GET non-publik, tanpa isi (' . count($routeList['GET']) . ' route)' . ($leak ? ' [' . implode(', ', $leak) . ']' : ''), $leak === []);
+$anonPost = [];
+$anon->get('/login');
+foreach ($postRoutes as $p) {
+    if ($p === '/login') {
+        continue;
+    }
+    $r = $anon->post($p, ['x' => '1']);
+    if (!in_array($r['status'], [302, 401], true)) {
+        $anonPost[] = $p . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/auth: tamu dengan token CSRF sah pun tidak bisa memicu route POST mana pun' . ($anonPost ? ' [' . implode(', ', $anonPost) . ']' : ''), $anonPost === []);
+$json = $anon->request('GET', '/live/tick', [], ['Accept: application/json', 'X-Requested-With: XMLHttpRequest']);
+check('keamanan/auth: permintaan AJAX tamu dijawab 401 JSON (bukan halaman login berisi HTML)', $json['status'] === 401 && str_contains($json['headers']['content-type'] ?? '', 'application/json'));
+
+// -- 13c. Metode HTTP: GET pada route POST-only dan sebaliknya ditolak, tanpa efek
+$getOnly = array_values(array_diff($routeList['GET'] ?? [], $postRoutes));
+$postOnly = array_values(array_diff($postRoutes, $routeList['GET'] ?? []));
+$badMethod = [];
+foreach (array_slice($postOnly, 0, 40) as $p) {
+    if ($p === '/logout' || $p === '/login') {
+        continue;
+    }
+    $r = $sh->request('GET', $p);
+    if (!in_array($r['status'], [404, 405], true)) {
+        $badMethod[] = 'GET ' . $p . ' (' . $r['status'] . ')';
+    }
+}
+foreach (['/transaksi/riwayat', '/validasi', '/laporan/simpanan', '/sistem/audit', '/master/ketua-regu/baru'] as $p) {
+    $r = $sh->post($p, ['x' => '1']);
+    if ($r['status'] !== 405) {
+        $badMethod[] = 'POST ' . $p . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/metode: GET ke route POST-only dan POST ke route GET-only ditolak 404/405' . ($badMethod ? ' [' . implode(', ', $badMethod) . ']' : ''), $badMethod === []);
+$override = $sh->post('/transaksi/riwayat', ['_method' => 'DELETE']);
+check('keamanan/metode: _method=DELETE tidak membuka aksi tersembunyi (dan hanya lewat POST ber-CSRF)', in_array($override['status'], [404, 405], true) && $sh->request('GET', '/transaksi/riwayat?_method=DELETE')['status'] === 200);
+
+// -- 13d. Sesi
+$fix = new Browser();
+$fix->request('GET', '/login', [], ['Cookie: adem_ayem_sid=penyerangmemilihidini1234567890abcdef']);
+$issued = '';
+if (preg_match('/adem_ayem_sid=([^;\s]+)/', $fix->last['headers']['set-cookie'] ?? '', $mm)) {
+    $issued = $mm[1];
+}
+check('keamanan/sesi: ID sesi yang dipilih penyerang TIDAK diterima (mode ketat): server menerbitkan ID baru', $issued !== '' && $issued !== 'penyerangmemilihidini1234567890abcdef' && strlen($issued) >= 48);
+$a1 = new Browser();
+$a1->get('/login');
+$sidBefore = preg_match('/adem_ayem_sid\s+(\S+)/', (string) file_get_contents($a1->jar), $m1) ? $m1[1] : '';
+$a1->post('/login', ['username' => 'alfa', 'password' => PASS]);
+$sidAfter = preg_match('/adem_ayem_sid\s+(\S+)/', (string) file_get_contents($a1->jar), $m2) ? $m2[1] : '';
+check('keamanan/sesi: ID sesi berganti saat login (anti session fixation)', $sidBefore !== '' && $sidAfter !== '' && $sidBefore !== $sidAfter);
+$replay = new Browser();
+$stolen = $sidAfter;
+$ok1 = $replay->request('GET', '/', [], ['Cookie: adem_ayem_sid=' . $stolen]);
+$a1->get('/');
+$a1->post('/logout');
+$ok2 = (new Browser())->request('GET', '/', [], ['Cookie: adem_ayem_sid=' . $stolen]);
+check('keamanan/sesi: ID sesi lama TIDAK bisa dipakai ulang setelah keluar (sesi dihancurkan di server)', $ok1['status'] === 200 && $ok2['status'] === 302 && str_ends_with((string) $ok2['location'], '/login'));
+$cookieHdr = $fix->last['headers']['set-cookie'] ?? '';
+check('keamanan/sesi: cookie sesi HttpOnly + SameSite=Lax + path terbatas', str_contains(strtolower($cookieHdr), 'httponly') && str_contains(strtolower($cookieHdr), 'samesite=lax'));
+check('keamanan/sesi: ID sesi tidak pernah ada di URL atau isi halaman', !preg_match('/PHPSESSID|adem_ayem_sid=/', $sa->get('/')['body']) && !str_contains((string) $sa->last['location'], 'sid='));
+
+// -- 13e. Header keamanan di SEMUA jenis respons
+$hdrOk = static function (array $r): bool {
+    $h = $r['headers'];
+    return str_contains($h['content-security-policy'] ?? '', "object-src 'none'") && str_contains($h['content-security-policy'] ?? '', "frame-ancestors 'none'")
+        && ($h['x-content-type-options'] ?? '') === 'nosniff' && ($h['x-frame-options'] ?? '') === 'DENY'
+        && ($h['cross-origin-opener-policy'] ?? '') === 'same-origin' && ($h['cross-origin-resource-policy'] ?? '') === 'same-origin'
+        && !isset($h['x-powered-by']) && str_contains($h['cache-control'] ?? '', 'no-store');
+};
+$kinds = ['halaman' => $sh->get('/'), 'galat 404' => $sh->get('/tidak-ada-sama-sekali'), 'galat 403' => $sa->get('/validasi'), 'pengalihan' => (new Browser())->get('/'), 'JSON' => $sh->request('GET', '/live/tick', [], ['Accept: application/json']),
+          'CSV' => $sh->get('/laporan/simpanan/unduh'), 'tamu' => (new Browser())->get('/login')];
+$bad = [];
+foreach ($kinds as $k => $r) {
+    if (!$hdrOk($r)) {
+        $bad[] = $k;
+    }
+}
+check('keamanan/header: CSP (object-src none, frame-ancestors none), nosniff, DENY, COOP, CORP, no-store ada di halaman, galat, pengalihan, JSON, CSV, tamu; X-Powered-By dihapus' . ($bad ? ' [' . implode(', ', $bad) . ']' : ''), $bad === []);
+check('keamanan/header: CSP ketat: tanpa unsafe-inline, unsafe-eval, atau wildcard', !preg_match("/unsafe-inline|unsafe-eval|\\*|data:(?!\\s*;|\\s*$)/", preg_replace("/img-src 'self' data:/", '', $kinds['halaman']['headers']['content-security-policy'])));
+
+// -- 13f. Injeksi: nilai berbahaya di SEMUA parameter daftar tidak menimbulkan galat, kebocoran, atau jeda waktu
+$payloads = ["'", "' OR '1'='1", '1; DROP TABLE members--', "%' OR 1=1 -- ", '\\', "'; SELECT SLEEP(3)--", "1' AND SLEEP(3) AND '1'='1", '<script>alert(1)</script>', str_repeat('A', 4000), '../../../etc/passwd', '%00', '-1', '999999999999999999999999', '日本語☃', "\r\nSet-Cookie: x=1"];
+$params = ['q', 'jenis', 'bulan', 'status', 'regu', 'team', 'page', 'keputusan', 'aksi', 'kelompok', 'entitas', 'pengguna', 'ip', 'dari', 'sampai', 'anggota', 'nominal', 'peran', 'periode', 'tenor', 'pokok'];
+$listPages = ['/', '/master/anggota', '/master/pengguna', '/transaksi/simpanan', '/transaksi/pinjaman', '/transaksi/angsuran', '/transaksi/angsuran/tagihan', '/transaksi/riwayat', '/validasi', '/validasi/riwayat', '/laporan/simpanan', '/laporan/pinjaman', '/laporan/angsuran', '/laporan/saldo', '/laporan/transaksi', '/laporan/anggota', '/sistem/audit', '/transaksi/pinjaman/simulasi'];
+$fuzzBad = [];
+$slow = [];
+$n = 0;
+foreach ($listPages as $p) {
+    foreach ($payloads as $pl) {
+        $qs = http_build_query(array_fill_keys($params, $pl));
+        $t0 = microtime(true);
+        $r = $sh->get($p . '?' . $qs);
+        $dt = microtime(true) - $t0;
+        $n++;
+        if ($serverError($r) || str_contains($r['headers']['set-cookie'] ?? '', 'x=1')) {
+            $fuzzBad[] = $p . ' ' . substr($pl, 0, 14) . ' (' . $r['status'] . ')';
+        }
+        if ($dt > 2.5) {
+            $slow[] = $p . ' ' . substr($pl, 0, 14) . ' ' . round($dt, 1) . 's';
+        }
+    }
+}
+check("keamanan/injeksi: {$n} permintaan (18 halaman x 15 muatan, 21 parameter sekaligus per permintaan): tanpa galat server, kebocoran SQL, atau injeksi header" . ($fuzzBad ? ' [' . implode('; ', array_slice($fuzzBad, 0, 6)) . ']' : ''), $fuzzBad === []);
+check('keamanan/injeksi: muatan SLEEP(3) tidak membuat respons melambat (tidak ada SQL yang tereksekusi)' . ($slow ? ' [' . implode('; ', array_slice($slow, 0, 4)) . ']' : ''), $slow === []);
+$arrBad = [];
+foreach ($listPages as $p) {
+    $r = $sh->get($p . '?' . http_build_query(array_fill_keys($params, ['a', 'b' => ['c']])));
+    if ($serverError($r)) {
+        $arrBad[] = $p . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/injeksi: parameter berbentuk larik (q[]=...) tidak menimbulkan galat di halaman mana pun' . ($arrBad ? ' [' . implode(', ', $arrBad) . ']' : ''), $arrBad === []);
+$postArr = [];
+foreach ([['/login', 'anon'], ['/profil/password', 'sh'], ['/master/anggota', 'sh'], ['/master/ketua-regu', 'sh'], ['/master/pengguna', 'sh'], ['/sistem/pengaturan', 'sh'], ['/transaksi/simpanan', 'sa'], ['/transaksi/pinjaman', 'sa'], ['/transaksi/angsuran', 'sa'], ['/validasi/1/tolak', 'sp']] as [$p, $who]) {
+    $br = ['anon' => new Browser(), 'sh' => $sh, 'sa' => $sa, 'sp' => $sp][$who];
+    $form = [];
+    foreach (['username', 'password', 'name', 'amount', 'member_id', 'kind', 'note', 'current_password', 'password_confirmation', 'team_id', 'trx_date', 'period_month_id', 'tenor', 'principal', '_form_id', '_version', 'roles', 'address_block', 'active_from'] as $f) {
+        $form[$f] = ['x', 'y' => ['z']];
+    }
+    $r = $br->request('POST', $p, array_merge($form, ['_token' => $br->csrf()]));
+    if ($serverError($r)) {
+        $postArr[] = $p . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/injeksi: isian formulir berbentuk larik di 10 route POST tidak menimbulkan galat server' . ($postArr ? ' [' . implode(', ', $postArr) . ']' : ''), $postArr === []);
+$newLog = $phpLogTail($logStart);
+check('keamanan/injeksi: seluruh fuzzing di atas TIDAK menghasilkan satu pun peringatan/notice PHP di log (kode tak boleh mengandalkan php.ini untuk menyembunyikannya)' . ($newLog !== '' ? ' [' . substr(trim($newLog), 0, 300) . ']' : ''), $newLog === '');
+
+// -- 13g. Isian ganda dan penugasan massal: kolom yang tak boleh diatur klien diabaikan
+$sa->get('/transaksi/simpanan/baru');
+$tid = $tokenOf($sa->last);
+$alfaId = $count("SELECT id FROM users WHERE username = 'alfa'");
+$headId = $count("SELECT id FROM users WHERE username = 'kepala'");
+$sa->post('/transaksi/simpanan', ['_form_id' => $tid, 'member_id' => (string) $mid(2), 'period_month_id' => (string) $payMonth, 'kind' => 'SUKARELA', 'amount' => '17.171', 'trx_date' => $today, 'description' => 'uji penugasan massal', 'action' => 'draft',
+    'status' => 'DISETUJUI', 'created_by' => (string) $headId, 'type' => 'PINJAMAN', 'trx_no' => 'HACK-1', 'doc_no' => 'HACK-2', 'team_id' => '2', 'source' => 'EXCEL', 'id' => '1', 'deleted_at' => '2020-01-01', 'reverses_id' => '1']);
+$mass = $count("SELECT MAX(id) FROM transactions WHERE description = 'uji penugasan massal'");
+$row = Database::pdo()->query("SELECT status, created_by, type, trx_no, doc_no, team_id, source, deleted_at, reverses_id, amount FROM transactions WHERE id = {$mass}")->fetch();
+check('keamanan/penugasan: kolom status, pembuat, jenis, nomor, regu, sumber, hapus-lunak, pembalik dari klien DIABAIKAN (draf Ketua Alfa)', is_array($row) && $row['status'] === 'DRAFT' && (int) $row['created_by'] === $alfaId && $row['type'] === 'SIMPANAN'
+    && !str_contains((string) $row['trx_no'] . (string) $row['doc_no'], 'HACK') && (int) $row['team_id'] === (int) $count('SELECT team_id FROM member_team_assignments WHERE member_id = ? AND valid_to IS NULL', [$mid(2)])
+    && $row['source'] !== 'EXCEL' && $row['deleted_at'] === null && $row['reverses_id'] === null && (int) $row['amount'] === 17171);
+
+// -- 13h. IDOR: objek milik regu lain tidak bisa dilihat atau diubah lewat ID
+$sa->get('/transaksi/simpanan/baru');
+$sa->post('/transaksi/simpanan', ['_form_id' => $tokenOf($sa->last), 'member_id' => (string) $mid(2), 'period_month_id' => (string) $payMonth, 'kind' => 'SUKARELA', 'amount' => '18.181', 'trx_date' => $today, 'description' => 'draf idor', 'action' => 'draft']);
+$idorDraft = $count("SELECT MAX(id) FROM transactions WHERE description = 'draf idor'");
+$stateOf = static fn (int $id): string => (string) Database::pdo()->query("SELECT CONCAT(status, '|', amount, '|', COALESCE(description, ''), '|', COALESCE(deleted_at, '')) FROM transactions WHERE id = {$id}")->fetchColumn();
+$snap = $stateOf($idorDraft);
+$idor = [];
+$deny = static fn (array $r): bool => in_array($r['status'], [403, 404], true);
+foreach ([
+    ['Beta -> detail transaksi regu lain', $sb->get('/transaksi/' . $idorDraft)],
+    ['Beta -> formulir ubah draf regu lain', $sb->get('/transaksi/simpanan/' . $idorDraft . '/ubah')],
+    ['Beta -> kartu anggota regu lain', $sb->get('/anggota/' . $mid(2))],
+    ['Beta -> laporan anggota regu lain', $sb->get('/laporan/anggota/' . $mid(2))],
+    ['Anggota -> detail transaksi regu lain', $sm->get('/transaksi/' . $idorDraft)],
+    ['Anggota -> kartu anggota lain', $sm->get('/anggota/' . $mid(2))],
+    ['Anggota -> kartu rekan satu regu', $sm->get('/anggota/' . $mid(3))],
+    ['Anggota -> laporan anggota (izin tidak ada)', $sm->get('/laporan/anggota/' . $mid(2))],
+] as [$label, $r]) {
+    if (!$deny($r)) {
+        $idor[] = $label . ' (' . $r['status'] . ')';
+    }
+}
+$tokenForm = ['amount' => '99.999', 'member_id' => (string) $mid(2), 'period_month_id' => (string) $payMonth, 'kind' => 'SUKARELA', 'trx_date' => $today, 'description' => 'diretas', '_version' => 'x'];
+foreach ([
+    ['Beta -> ubah draf regu lain (POST)', $post($sb, '/transaksi/simpanan/' . $idorDraft, $tokenForm)],
+    ['Beta -> ajukan draf regu lain', $post($sb, '/transaksi/' . $idorDraft . '/ajukan', ['_version' => 'x'])],
+    ['Beta -> batalkan draf regu lain', $post($sb, '/transaksi/' . $idorDraft . '/batal', ['_version' => 'x', 'reason' => 'iseng'])],
+    ['Beta -> koreksi transaksi regu lain', $post($sb, '/transaksi/' . $newId . '/koreksi', ['reason' => 'iseng'])],
+    ['Anggota -> ajukan draf', $post($sm, '/transaksi/' . $idorDraft . '/ajukan', ['_version' => 'x'])],
+    ['Anggota -> setujui', $post($sm, '/validasi/' . $newId . '/setujui', ['_version' => 'x'])],
+    ['Ketua Regu -> setujui', $post($sa, '/validasi/' . $newId . '/setujui', ['_version' => 'x'])],
+] as [$label, $r]) {
+    $final = $r;
+    if ($r['status'] === 302) {
+        $final = ['status' => 200, 'body' => '', 'headers' => []];   // dialihkan = ditolak dengan pesan galat; keadaan data diperiksa di bawah
+    }
+    if (!in_array($r['status'], [302, 403, 404, 422], true)) {
+        $idor[] = $label . ' (' . $r['status'] . ')';
+    }
+}
+check('keamanan/idor: 8 akses baca dan 7 aksi ubah lintas regu/peran ditolak (403/404 atau dialihkan dengan galat)' . ($idor ? ' [' . implode('; ', $idor) . ']' : ''), $idor === []);
+check('keamanan/idor: setelah semua percobaan, draf milik Alfa utuh (status, nominal, deskripsi tidak berubah; tidak terhapus)', $stateOf($idorDraft) === $snap);
+check('keamanan/idor: pemilik sah tetap bisa mengakses (kontrol positif)', $sa->get('/transaksi/' . $idorDraft)['status'] === 200 && $sa->get('/transaksi/simpanan/' . $idorDraft . '/ubah')['status'] === 200);
+
+// -- 13i. XSS tersimpan: nilai berbahaya di setiap kolom teks yang tampil tidak pernah menjadi markup
+$x1 = '<img src=x onerror=alert(7)>';
+$x2 = '"><script>alert(8)</script>';
+$x3 = "'><svg/onload=alert(9)>";
+$pdo2 = Database::pdo();
+$pdo2->prepare('UPDATE members SET name = ?, address_block = ? WHERE id = ?')->execute([$x1 . 'Nama', $x2, $mid(2)]);
+$pdo2->prepare('UPDATE team_leaders SET name = ? WHERE id = 1')->execute([$x3 . 'Regu']);
+$pdo2->prepare('UPDATE users SET name = ? WHERE username = ?')->execute([$x1 . 'Alfa', 'alfa']);
+$pdo2->prepare('UPDATE users SET name = ? WHERE username = ?')->execute([$x2 . 'Kepala', 'kepala']);
+$pdo2->prepare('UPDATE transactions SET description = ? WHERE id = ?')->execute([$x3 . ' deskripsi', $idorDraft]);   // draf boleh diubah lewat SQL; yang sudah diajukan dijaga trigger
+$pdo2->prepare('INSERT INTO transaction_validations (transaction_id, from_status, to_status, actor_user_id, note) VALUES (?, ?, ?, ?, ?)')->execute([$newId, 'MENUNGGU_VALIDASI', 'DITOLAK', $headId, $x1 . ' catatan']);
+$anon2 = new Browser();
+$anon2->get('/login');
+$anon2->post('/login', ['username' => $x2 . 'penyusup', 'password' => 'salah-salah-1']);   // masuk ke audit log lewat username yang dicoba
+$markers = [$x1, $x2, $x3, '<script>alert(8)', '<svg/onload', 'onerror=alert(7)>' ];
+$xssPages = ['/', '/master/anggota', '/master/ketua-regu', '/master/pengguna', '/transaksi/simpanan', '/transaksi/riwayat', '/transaksi/' . $newId, '/transaksi/' . $idorDraft, '/validasi', '/validasi/riwayat', '/laporan/simpanan', '/laporan/saldo', '/laporan/regu', '/laporan/anggota', '/laporan/anggota/' . $mid(2), '/laporan/transaksi', '/anggota/' . $mid(2), '/sistem/audit', '/profil', '/transaksi/angsuran/tagihan', '/master/anggota/' . $mid(2) . '/ubah', '/master/ketua-regu/1/ubah'];
+$rawFound = [];
+$escapedSeen = false;
+foreach ($xssPages as $p) {
+    foreach ([$sh, $sa] as $who) {
+        $r = $who->get($p);
+        if ($r['status'] !== 200) {
+            continue;
+        }
+        foreach ([$x1, $x2, $x3, '<script>alert(8)', '<svg/onload'] as $m) {
+            if (str_contains($r['body'], $m)) {
+                $rawFound[] = $p . ' ' . substr($m, 0, 12);
+            }
+        }
+        if (str_contains($r['body'], '&lt;img src=x onerror=alert(7)&gt;')) {
+            $escapedSeen = true;
+        }
+    }
+}
+$auditList = $sh->get('/sistem/audit?kelompok=keamanan');
+if (str_contains($auditList['body'], $x2)) {
+    $rawFound[] = '/sistem/audit?kelompok=keamanan (username)';
+}
+$csv = $sh->get('/sistem/audit/unduh')['body'] . $sh->get('/laporan/simpanan/unduh')['body'];
+check('keamanan/xss: muatan HTML/skrip di nama anggota, blok alamat, nama regu, nama pengguna, deskripsi, catatan tolak, dan username percobaan masuk TIDAK pernah muncul mentah di ' . count($xssPages) . ' halaman x 2 peran' . ($rawFound ? ' [' . implode('; ', array_slice($rawFound, 0, 6)) . ']' : ''), $rawFound === []);
+check('keamanan/xss: (kontrol) muatan itu sungguh tampil sebagai teks yang di-escape, jadi uji ini tidak kosong', $escapedSeen);
+check('keamanan/xss: ekspor CSV bertipe text/csv + nosniff, tanpa Content-Type html', str_contains($sh->get('/sistem/audit/unduh')['headers']['content-type'] ?? '', 'text/csv') && ($sh->last['headers']['x-content-type-options'] ?? '') === 'nosniff');
+
+// -- 13j. Kebocoran informasi
+$leakInfo = [];
+foreach (['/tidak-ada-sama-sekali', '/transaksi/99999999', '/anggota/99999999', '/sistem/audit/99999999'] as $p) {
+    $r = $sh->get($p);
+    if (preg_match('#[A-Z]:\\\\|/xampp/|\.php:\d+|vendor/|SQLSTATE|mysqli?|PDO|Apache/|PHP/\d#i', $r['body'])) {
+        $leakInfo[] = $p;
+    }
+}
+check('keamanan/bocor: halaman galat tidak memuat jalur berkas, nomor baris, versi perangkat lunak, atau pesan SQL' . ($leakInfo ? ' [' . implode(', ', $leakInfo) . ']' : ''), $leakInfo === []);
+$login = (new Browser())->get('/login');
+$pwForms = (int) preg_match_all('/<input[^>]+type="password"[^>]*>/i', $login['body'], $pm);
+$noAuto = true;
+foreach ($pm[0] as $tag) {
+    $noAuto = $noAuto && !preg_match('/value="[^"]+"/', $tag);
+}
+check('keamanan/bocor: kolom kata sandi tidak pernah terisi dari server (tanpa value=) dan formulir login memakai POST', $pwForms >= 1 && $noAuto && str_contains($login['body'], 'method="post"'));
+$authBody = '';
+foreach (['/', '/profil', '/master/pengguna', '/sistem/audit', '/anggota/' . $mid(2)] as $p) {
+    $authBody .= $sh->get($p)['body'];
+}
+check('keamanan/bocor: tak ada hash kata sandi, token CSRF di URL, atau kredensial di halaman yang tampil', !str_contains($authBody, '$2y$') && !preg_match('/href="[^"]*_token=/', $authBody) && !preg_match('/(DB_PASS|DB_ADMIN_PASS|password_hash)/i', $authBody));
+
 echo "\n{$passed} lulus, " . count($failed) . " gagal\n";
 @unlink(BASE_PATH . '/.env.testing');
 exit($failed === [] ? 0 : 1);

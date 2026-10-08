@@ -20,5 +20,7 @@ return [
     'session'   => [
         'name'         => 'adem_ayem_sid',
         'idle_timeout' => (int) Env::get('SESSION_IDLE_TIMEOUT', 1800),
+        // Umur maksimum sebuah sesi sejak masuk, walau terus dipakai (12 jam): sesi yang dicuri tidak hidup selamanya.
+        'absolute_timeout' => (int) Env::get('SESSION_ABSOLUTE_TIMEOUT', 43200),
     ],
 ];

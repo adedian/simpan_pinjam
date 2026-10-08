@@ -82,6 +82,9 @@ function date_id(?string $date): string
 /** Bersihkan teks isian: buang karakter kontrol, pangkas, rapatkan spasi ganda. */
 function clean_text(mixed $value): string
 {
+    if (!is_scalar($value) && $value !== null) {
+        return '';   // larik (q[]=x) atau objek: bukan teks isian
+    }
     $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value) ?? '';
     return trim(preg_replace('/\s+/u', ' ', $text) ?? '');
 }

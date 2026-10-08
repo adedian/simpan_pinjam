@@ -61,7 +61,7 @@ final class TeamController extends BaseController
         [$errors, $data] = TeamService::parse($request->post);
         if ($errors === []) {
             try {
-                TeamService::update($request, Auth::user(), $id, $data, (string) $request->input('_version', ''));
+                TeamService::update($request, Auth::user(), $id, $data, $request->str('_version'));
                 Session::flash('success', 'Data regu disimpan.');
                 return $this->redirect('/master/ketua-regu');
             } catch (RuleViolation $e) {
@@ -77,7 +77,7 @@ final class TeamController extends BaseController
      */
     private function form(Request $request, ?array $team, array $defaults): Response
     {
-        $old = $_SESSION['_old'] ?? [];
+        $old = Session::get('_old', []);
         return $this->view($request, 'master/team-form', [
             'title'      => $team === null ? 'Tambah Regu' : 'Ubah Regu',
             'team'       => $team,

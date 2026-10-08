@@ -20,8 +20,8 @@ final class AuthController extends BaseController
     /** @param array<string,string> $params */
     public function login(Request $request, array $params = []): Response
     {
-        $username = (string) $request->input('username', '');
-        $password = (string) $request->input('password', '');
+        $username = $request->str('username');
+        $password = $request->str('password');
 
         $errors = Validator::validate(
             ['username' => $username, 'password' => $password],

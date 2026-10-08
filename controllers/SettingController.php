@@ -18,7 +18,7 @@ final class SettingController extends BaseController
         foreach (SettingsService::DEFINITIONS as $key => $def) {
             $groups[$def['group']][$key] = $def;
         }
-        $old = $_SESSION['_old'] ?? [];
+        $old = Session::get('_old', []);
         return $this->view($request, 'settings', [
             'title'  => 'Pengaturan',
             'groups' => $groups,

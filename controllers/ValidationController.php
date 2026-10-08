@@ -23,7 +23,7 @@ final class ValidationController extends BaseController
     public function queue(Request $request, array $params = []): Response
     {
         $user    = Auth::user();
-        $filters = ['type' => (string) ($request->query['jenis'] ?? ''), 'q' => clean_text($request->query['q'] ?? '')];
+        $filters = ['type' => $request->queryStr('jenis'), 'q' => clean_text($request->query['q'] ?? '')];
         $result  = Validation::queue($user, $filters, (int) ($request->query['page'] ?? 1));
 
         return $this->view($request, 'validasi/queue', [
@@ -42,8 +42,8 @@ final class ValidationController extends BaseController
     public function history(Request $request, array $params = []): Response
     {
         $filters = [
-            'decision' => (string) ($request->query['keputusan'] ?? ''),
-            'type'     => (string) ($request->query['jenis'] ?? ''),
+            'decision' => $request->queryStr('keputusan'),
+            'type'     => $request->queryStr('jenis'),
             'q'        => clean_text($request->query['q'] ?? ''),
         ];
         $result = Validation::decisions($filters, (int) ($request->query['page'] ?? 1));
@@ -81,8 +81,8 @@ final class ValidationController extends BaseController
         }
 
         try {
-            $version = (string) $request->input('_version', '');
-            $note    = (string) $request->input('note', '');
+            $version = $request->str('_version');
+            $note    = $request->str('note');
             if ($approve) {
                 ValidationService::approve($request, $user, $id, $version, $note);
                 Session::flash('success', 'Transaksi ' . $trx['doc_no'] . ' disetujui dan kini dihitung dalam saldo.');

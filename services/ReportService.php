@@ -100,6 +100,7 @@ final class ReportService
      */
     public static function filters(array $q, ?array $user): array
     {
+        $q       = array_map(static fn (mixed $v): mixed => is_scalar($v) ? $v : '', $q);   // q[]=x dst. bukan isian yang sah
         $periods = self::periods();
         $valid   = array_column($periods, 'id');
         $default = 0;

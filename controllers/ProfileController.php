@@ -34,11 +34,11 @@ final class ProfileController extends BaseController
     public function updatePassword(Request $request, array $params = []): Response
     {
         $user    = Auth::user();
-        $current = (string) $request->input('current_password', '');
-        $new     = (string) $request->input('password', '');
+        $current = $request->str('current_password');
+        $new     = $request->str('password');
 
         $errors = Validator::validate(
-            ['current_password' => $current, 'password' => $new, 'password_confirmation' => (string) $request->input('password_confirmation', '')],
+            ['current_password' => $current, 'password' => $new, 'password_confirmation' => $request->str('password_confirmation')],
             [
                 'current_password'      => 'required|maxbytes:200',
                 'password'              => 'required|min:' . PasswordPolicy::MIN_LENGTH . '|maxbytes:' . PasswordPolicy::MAX_BYTES,
