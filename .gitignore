@@ -1,0 +1,12 @@
+.env
+storage/logs/*
+storage/sessions/*
+storage/cache/*
+!storage/**/.gitkeep
+database/import/*.json
+.env.testing
+storage/credentials-*.txt
+
+# Berkas lokal / sensitif
+.claude/
+docs/01-analisis-phase1.md

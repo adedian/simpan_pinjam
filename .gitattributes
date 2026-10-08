@@ -1,0 +1,2 @@
+# Pustaka pihak ketiga dipatok hash-nya di tes: jangan ubah akhir baris
+public/assets/vendor/** -text
