@@ -1,6 +1,6 @@
 <?php
 /**
- * Tabel laporan dari struktur ReportService (sama persis dengan yang diunduh sebagai CSV).
+ * Tabel laporan dari struktur ReportService (sama persis dengan yang diunduh sebagai Excel).
  * Parameter: $report. Angka uang tanpa "Rp" per sel (judul menyebut rupiah); nol ditulis "-".
  */
 $cell = static function (array $col, mixed $v): string {

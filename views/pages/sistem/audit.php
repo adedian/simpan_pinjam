@@ -19,7 +19,7 @@ $qs = static fn (array $over): string => http_build_query(array_filter($over, st
             <p class="muted">Siapa melakukan apa, kapan, dari mana. Catatan ditulis dalam transaksi yang sama dengan perubahan datanya, dan tidak bisa diubah atau dihapus siapa pun (dijaga trigger database).</p>
         </div>
         <?php if ($canExport): ?>
-        <div class="actions"><a class="btn btn--primary" href="<?= e(url('/sistem/audit/unduh' . ($query !== [] ? '?' . $qs($query) : ''))) ?>">Unduh CSV</a></div>
+        <div class="actions"><a class="btn btn--primary" href="<?= e(url('/sistem/audit/unduh' . ($query !== [] ? '?' . $qs($query) : ''))) ?>">Unduh Excel</a></div>
         <?php endif; ?>
     </header>
 

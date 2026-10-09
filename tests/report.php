@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Tes laporan (Phase 12): angka tiap laporan, cakupan data per peran, saringan yang aman, pembalik, CSV, kartu anggota.
+ * Tes laporan (Phase 12): angka tiap laporan, cakupan data per peran, saringan yang aman, pembalik, Excel, kartu anggota.
  * MENGOSONGKAN database uji; tidak menyentuh data sungguhan.
  *   C:\xampp\php\php.exe tests\report.php
  */
@@ -21,6 +21,7 @@ use App\Services\InstallmentService;
 use App\Services\LoanService;
 use App\Services\Migrator;
 use App\Services\ReportService;
+use App\Services\ReportWorkbook;
 use App\Services\ReversalService;
 use App\Services\SavingService;
 use App\Services\UserService;
@@ -268,28 +269,87 @@ $p2 = ReportService::build('transaksi', $head, f(), 2);
 $full = ReportService::build('transaksi', $head, f(), 1, true);
 check('transaksi: halaman 50 baris, halaman 2 sisanya, ekspor memuat semua tanpa batas halaman', count($p1['rows']) === 50 && count($p2['rows']) === $p1['pager']['total'] - 50 && count($full['rows']) === $p1['pager']['total'] && $p1['pager']['total'] > 60);
 
-// ======================= CSV =======================
-$csv = ReportService::csv(ReportService::build('simpanan', $head, f()));
-$lines = explode("\n", rtrim($csv, "\n"));
-check('csv: UTF-8 dengan BOM, titik koma, judul kolom, satu baris per anggota + baris jumlah', str_starts_with($csv, "\xEF\xBB\xBF") && str_getcsv(substr($lines[0], 3), ';', '"', '\\')[0] === 'No. Anggota' && str_getcsv(substr($lines[0], 3), ';', '"', '\\')[1] === 'Nama' && count($lines) === 1 + 5 + 1);
-check('csv: angka polos tanpa pemisah ribuan agar bisa dijumlah (anggota 4 setelah koreksi: 300000;0;100000;400000;1400000)', str_contains($csv, 'AGT-004;"Anggota Beta";"Regu Beta";300000;0;100000;400000;1400000') && !str_contains($csv, '1.600.000') && !str_contains($csv, 'Rp'));
-check('csv: nama berawalan = diberi tanda kutip (anti rumus), tanda kutip dan titik koma di nama diloloskan', ReportService::safeText('=1+1') === "'=1+1" && ReportService::safeText('@SUM') === "'@SUM" && ReportService::safeText('-5') === "'-5" && ReportService::safeText('Budi') === 'Budi'
-    && str_contains($csv, "\"'=Anggota \"\"Rumus\"\"; Beta\""));
-$csvSal = ReportService::csv(ReportService::build('saldo', $head, f()));
-check('csv: persen berkoma dua desimal (mis. 0,00 / 75,86)', preg_match('/;\d+,\d\d\n/', $csvSal) === 1);
-check('csv: isi CSV = isi tabel layar (jumlah baris dan jumlah kolom sama untuk tiap laporan)', (function () use ($head): bool {
+// ======================= EXCEL =======================
+require_once __DIR__ . '/xlsx_reader.php';
+$xl = xlsx_read(ReportWorkbook::build(ReportService::build('simpanan', $head, f())));
+$sh = $xl['sheets']['Rekap Simpanan'] ?? ['cells' => [], 'freeze' => 0];
+$rowsX = xlsx_rows($sh);
+check('excel: berkas .xlsx sah (zip, XML well-formed), satu lembar bernama sesuai laporan, judul dan kepala tabel membeku', $xl['ok'] && count($xl['sheets']) === 1 && isset($xl['sheets']['Rekap Simpanan']) && $sh['freeze'] === 4 && str_contains((string) xlsx_v($sh, 'A1'), 'REKAP SIMPANAN'));
+check('excel: judul kolom, satu baris per anggota + baris jumlah', xlsx_v($sh, 'A4') === 'No. Anggota' && xlsx_v($sh, 'B4') === 'Nama' && count($rowsX) === 3 + 1 + 5 + 1 && xlsx_v($sh, 'A10') !== null);
+$r4 = null;
+foreach ($rowsX as $r) {
+    if (($r[1] ?? null) === 'AGT-004') {
+        $r4 = $r;
+    }
+}
+check('excel: angka tersimpan sebagai ANGKA (bisa dijumlah), bukan teks bergaya "Rp" (anggota 4 setelah koreksi: 300000, 0, 100000, 400000, 1400000)', $r4 !== null && array_slice($r4, 3, 5) === [300000.0, 0.0, 100000.0, 400000.0, 1400000.0] && count(array_filter($sh['cells'], static fn (array $c): bool => $c['type'] === 'num' && $c['formula'] === false)) > 20);
+$rumus = null;
+foreach ($sh['cells'] as $c) {
+    if ($c['type'] === 'str' && str_starts_with((string) $c['v'], '=Anggota')) {
+        $rumus = $c;
+    }
+}
+check('excel: nama berawalan "=" tersimpan sebagai TEKS apa adanya (bukan rumus, tanpa tanda kutip tambahan); tanda kutip dan titik koma utuh', $rumus !== null && $rumus['formula'] === false && $rumus['v'] === '=Anggota "Rumus"; Beta');
+$xlSal = xlsx_read(ReportWorkbook::build(ReportService::build('saldo', $head, f())));
+$salRows = xlsx_rows($xlSal['sheets']['Rekap Saldo']);
+$sal = ReportService::build('saldo', $head, f());
+$pctCol = null;
+foreach ($sal['columns'] as $i => $c) {
+    if ($c['type'] === 'pct') {
+        $pctCol = $i + 1;
+    }
+}
+check('excel: persen ditulis sebagai pecahan Excel (porsi 7586 = 0,7586) pada kolom persen', $pctCol !== null && abs(((float) ($salRows[5][$pctCol] ?? -1)) - ((int) $sal['rows'][0][$sal['columns'][$pctCol - 1]['key']]) / 10000) < 1e-9);
+check('excel: isi Excel = isi tabel layar (jumlah baris dan kolom, nilai tiap sel) untuk keenam laporan', (function () use ($head): bool {
     foreach (ReportService::KEYS as $k) {
         $rep = ReportService::build($k, $head, ReportService::filters([], $head), 1, true);
-        $parsed = array_map(static fn ($l) => str_getcsv($l, ';', '"', '\\'), explode("\n", rtrim(ReportService::csv($rep), "\n")));
-        $expectRows = 1 + count($rep['rows']) + (!empty($rep['totals']) ? 1 : 0);
-        if (count($parsed) !== $expectRows && $k !== 'transaksi') {
+        $x = xlsx_read(ReportWorkbook::build($rep));
+        if (!$x['ok'] || count($x['sheets']) !== 1) {
             return false;
         }
-        if (count($parsed[0]) !== count($rep['columns'])) {
+        $rows = xlsx_rows(reset($x['sheets']));
+        $first = null;
+        foreach ($rows as $n => $r) {
+            if (($r[1] ?? null) === $rep['columns'][0]['label']) {
+                $first = $n;
+                break;
+            }
+        }
+        if ($first === null) {
             return false;
+        }
+        $lines = array_values(array_filter($rep['rows'], static fn ($r) => true));
+        if (!empty($rep['totals'])) {
+            $lines[] = $rep['totals'];
+        }
+        foreach ($lines as $i => $line) {
+            $got = $rows[$first + 1 + $i] ?? [];
+            foreach ($rep['columns'] as $ci => $col) {
+                $v = $line[$col['key']] ?? null;
+                $g = $got[$ci + 1] ?? null;
+                if ($v === null || $v === '') {
+                    if ($g !== null && $g !== '') {
+                        return false;
+                    }
+                    continue;
+                }
+                $ok = match ($col['type']) {
+                    'money', 'int' => $g === (float) (int) $v,
+                    'pct'          => abs((float) $g - ((int) $v) / 10000) < 1e-9,
+                    default        => $g === (string) $v,
+                };
+                if (!$ok) {
+                    return false;
+                }
+            }
         }
     }
     return true;
+})());
+check('excel: audit log memakai penulis yang sama (kolom teks) dan isinya tidak menjadi rumus', (function (): bool {
+    $x = xlsx_read(ReportWorkbook::build(['title' => 'Audit Log', 'subtitle' => 'uji', 'columns' => [['key' => 'a', 'label' => 'Aksi', 'type' => 'text']], 'rows' => [['a' => '=HYPERLINK("x")'], ['a' => "baris\x01kontrol"]], 'totals' => null]));
+    $s = reset($x['sheets']);
+    return $x['ok'] && xlsx_v($s, 'A4') === 'Aksi' && xlsx_v($s, 'A5') === '=HYPERLINK("x")' && $s['cells']['A5']['formula'] === false && xlsx_v($s, 'A6') === 'bariskontrol';   // karakter kontrol dibuang
 })());
 
 // ======================= kartu anggota =======================

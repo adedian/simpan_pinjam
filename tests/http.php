@@ -1305,31 +1305,64 @@ check('laporan/formulir: Ketua Regu Alfa tidak bisa membuka formulir anggota Bet
 check('laporan/formulir: jenis formulir ngawur 404; tamu dialihkan ke login; Anggota biasa 403', $sh->get('/laporan/anggota/' . $mid(2) . '/lain')['status'] === 404 && $sh->get('/laporan/anggota/cetak/lain')['status'] === 404 && $guestRep->get('/laporan/anggota/' . $mid(2) . '/pinjaman')['status'] === 302 && $guestRep->get('/laporan/anggota/cetak/tabungan')['status'] === 302 && $sm->get('/laporan/anggota/' . $mid(2) . '/tabungan')['status'] === 403 && $sm->get('/laporan/anggota/cetak/pinjaman')['status'] === 403);
 check('laporan/formulir: cetak massal Head memuat semua regu, Ketua Regu Alfa hanya regunya, saringan nama berlaku', $has($sh->get('/laporan/anggota/cetak/tabungan'), 'Anggota Alfa Dua') && $has($sh->last, 'Anggota Beta Dua') && $has($sa->get('/laporan/anggota/cetak/pinjaman'), 'Anggota Alfa Dua') && !$has($sa->last, 'Anggota Beta Dua') && !$has($sh->get('/laporan/anggota/cetak/tabungan?q=Alfa'), 'Anggota Beta Dua') && $has($sh->get('/laporan/anggota/cetak/pinjaman?q=zzzz-tidak-ada'), 'Tidak ada anggota yang cocok'));
 check('laporan/formulir: kartu anggota dan daftar anggota menautkan ke formulir; menu "Laporan Per Anggota" tetap menyala', $has($kartuH, '/pinjaman"') && $has($kartuH, '/tabungan"') && $has($sh->get('/laporan/anggota'), '/laporan/anggota/cetak/pinjaman') && $has($sh->last, '/laporan/anggota/cetak/tabungan') && $has($sh->get('/laporan/anggota/cetak/pinjaman'), 'aria-current="page"'));
+check('laporan/formulir: tombol Unduh Excel hanya untuk pemilik report.export (Head ya, Ketua Regu tidak) di daftar, kartu, dan halaman cetak', $has($sh->get('/laporan/anggota'), 'Unduh Excel semua formulir') && $has($sh->get('/laporan/anggota/' . $mid(2)), 'Unduh Excel (formulir)') && $has($sh->get('/laporan/anggota/' . $mid(2) . '/tabungan'), '/laporan/anggota/unduh?anggota=' . $mid(2)) && !$has($sa->get('/laporan/anggota'), 'Unduh Excel') && !$has($sa->get('/laporan/anggota/' . $mid(2)), 'Unduh Excel') && !$has($sa->get('/laporan/anggota/cetak/tabungan'), 'Unduh Excel'));
 check('laporan/formulir: nama anggota dan isian pencarian diloloskan (XSS)', !$has($sh->get('/laporan/anggota/cetak/tabungan?q=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)') && $has($sh->last, '&lt;script&gt;alert(1)&lt;/script&gt;'));
 
-// unduhan CSV
+// unduhan Excel (.xlsx)
+require_once __DIR__ . '/xlsx_reader.php';
+$xlsxType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 $auditExport = $audits('REPORT_EXPORTED');
-$csvH = $sh->get('/laporan/simpanan/unduh');
-check('laporan/unduh: CSV UTF-8 ber-BOM, lampiran bernama laporan-simpanan-tanggal.csv, tidak di-cache, berisi anggota', $csvH['status'] === 200 && str_contains($csvH['headers']['content-type'] ?? '', 'text/csv') && str_contains($csvH['headers']['content-disposition'] ?? '', 'attachment; filename="laporan-simpanan-' . date('Y-m-d') . '.csv"')
-    && str_contains(strtolower($csvH['headers']['cache-control'] ?? ''), 'no-store') && str_starts_with($csvH['body'], "\xEF\xBB\xBF") && $has($csvH, 'AGT-002') && $has($csvH, ';'));
+$xlH = $sh->get('/laporan/simpanan/unduh');
+$xlHr = xlsx_read($xlH['body']);
+check('laporan/unduh: Excel .xlsx sah, lampiran laporan-simpanan-tanggal.xlsx, tidak di-cache, berisi anggota', $xlH['status'] === 200 && str_contains($xlH['headers']['content-type'] ?? '', $xlsxType) && str_contains($xlH['headers']['content-disposition'] ?? '', 'attachment; filename="laporan-simpanan-' . date('Y-m-d') . '.xlsx"')
+    && str_contains(strtolower($xlH['headers']['cache-control'] ?? ''), 'no-store') && str_starts_with($xlH['body'], 'PK') && $xlHr['ok'] && in_array('AGT-002', array_column(reset($xlHr['sheets'])['cells'], 'v'), true));
 check('laporan/unduh: tercatat di audit log (siapa, laporan apa, jumlah baris)', $audits('REPORT_EXPORTED') === $auditExport + 1 && $count("SELECT COUNT(*) FROM audit_logs WHERE action = 'REPORT_EXPORTED' AND username = 'kepala' AND reference_no = 'simpanan' AND after_data LIKE '%\"rows\":%'") === 1);
-$allCsv = true;
+$allXlsx = true;
 foreach ($repKeys as $k) {
     $r = $sp->get('/laporan/' . $k . '/unduh');
-    $allCsv = $allCsv && $r['status'] === 200 && str_starts_with($r['body'], "\xEF\xBB\xBF");
+    $allXlsx = $allXlsx && $r['status'] === 200 && str_starts_with($r['body'], 'PK') && xlsx_read($r['body'])['ok'];
 }
-check('laporan/unduh: Pemeriksa mengunduh keenam laporan; kunci laporan tidak dikenal 404; kartu anggota tanpa anggota 404', $allCsv && $sh->get('/laporan/rahasia/unduh')['status'] === 404 && $sh->get('/laporan/anggota/unduh')['status'] === 404 && $sh->get('/laporan/anggota/unduh?anggota=99999999')['status'] === 404);
-$csvK = $sh->get('/laporan/anggota/unduh?anggota=' . $mid(2));
-check('laporan/unduh: transaksi satu anggota; nama berkas memuat nomor anggota', $csvK['status'] === 200 && str_contains($csvK['headers']['content-disposition'] ?? '', 'laporan-anggota-AGT-002-') && $has($csvK, 'Dokumen'));
+check('laporan/unduh: Pemeriksa mengunduh keenam laporan sebagai Excel sah; kunci laporan tidak dikenal 404; anggota tidak ada / saringan kosong 404', $allXlsx && $sh->get('/laporan/rahasia/unduh')['status'] === 404 && $sh->get('/laporan/anggota/unduh?anggota=99999999')['status'] === 404 && $sh->get('/laporan/anggota/unduh?q=zzzz-tidak-ada')['status'] === 404);
+$xlK = $sh->get('/laporan/anggota/unduh?anggota=' . $mid(2));
+$xlKr = xlsx_read($xlK['body']);
+check('laporan/unduh: satu anggota = formulir template (lembar Rekap Pinjaman dan Tabungan Hari Raya); nama berkas memuat nomor anggota', $xlK['status'] === 200 && str_contains($xlK['headers']['content-disposition'] ?? '', 'formulir-AGT-002-') && $xlKr['ok'] && array_keys($xlKr['sheets']) === ['Rekap Pinjaman', 'Tabungan Hari Raya']
+    && xlsx_v($xlKr['sheets']['Rekap Pinjaman'], 'D3') === 'Anggota Alfa Dua' && xlsx_v($xlKr['sheets']['Tabungan Hari Raya'], 'C3') === 'Anggota Alfa Dua' && xlsx_v($xlKr['sheets']['Rekap Pinjaman'], 'A1') === 'REKAP PINJAMAN "ADEM AYEM"');
+$xlAll = $sh->get('/laporan/anggota/unduh');
+$xlAllr = xlsx_read($xlAll['body']);
+$titles = count(array_filter($xlAllr['sheets']['Rekap Pinjaman']['cells'] ?? [], static fn (array $c): bool => $c['v'] === 'REKAP PINJAMAN "ADEM AYEM"'));
+check('laporan/unduh: tanpa ?anggota= = formulir SEMUA anggota (satu formulir per anggota, nama berkas formulir-semua-anggota), tercatat anggota-semua', $xlAll['status'] === 200 && str_contains($xlAll['headers']['content-disposition'] ?? '', 'formulir-semua-anggota-') && $titles === $count('SELECT COUNT(*) FROM members WHERE deleted_at IS NULL')
+    && $count("SELECT COUNT(*) FROM audit_logs WHERE action = 'REPORT_EXPORTED' AND reference_no = 'anggota-semua'") === 1);
+$xlReg = $sh->get('/laporan/anggota/unduh?regu=' . $count("SELECT id FROM team_leaders WHERE name = 'Regu Beta'"));
+$xlRegCells = $xlReg['status'] === 200 ? (xlsx_read($xlReg['body'])['sheets']['Rekap Pinjaman']['cells'] ?? []) : [];
+check('laporan/unduh: formulir semua anggota ikut saringan regu (hanya regu Beta)', $xlRegCells !== [] && !in_array('Anggota Alfa Dua', array_column($xlRegCells, 'v'), true) && in_array('Anggota Beta Dua', array_column($xlRegCells, 'v'), true));
 check('laporan/unduh: saringan ikut terbawa (jenis=ANGSURAN hanya baris angsuran)', (function () use ($sh): bool {
     $r = $sh->get('/laporan/transaksi/unduh?jenis=ANGSURAN&status=');
-    $rows = array_slice(explode("\n", rtrim($r['body'], "\n")), 1);
-    foreach ($rows as $line) {
-        if ($line !== '' && !str_contains($line, 'Angsuran') && !str_contains($line, 'Jumlah')) {
+    $x = xlsx_read($r['body']);
+    if ($r['status'] !== 200 || !$x['ok']) {
+        return false;
+    }
+    $rows = xlsx_rows(reset($x['sheets']));
+    $header = null;
+    foreach ($rows as $n => $line) {
+        if (($line[1] ?? null) === 'Tanggal') {
+            $header = $n;
+            break;
+        }
+    }
+    if ($header === null) {
+        return false;
+    }
+    $data = 0;
+    foreach ($rows as $n => $line) {
+        if ($n <= $header || ($line[3] ?? null) === null) {
+            continue;
+        }
+        $data++;
+        if ($line[3] !== 'Angsuran') {
             return false;
         }
     }
-    return $r['status'] === 200;
+    return $data > 0;
 })());
 $repHtml = $simH['body'] . $simA['body'] . $kartuH['body'] . $sh->get('/laporan/transaksi')['body'] . $sh->get('/laporan/regu')['body'];
 check('laporan/umum: tanpa <script> inline, event handler, atau style inline (CSP)', !preg_match('/<script(?![^>]*\bsrc=)|\son(click|submit|change|load)=|\sstyle="/i', $repHtml));
@@ -1345,7 +1378,7 @@ check('audit/akses: layar hanya GET (POST tidak ada); rincian yang tidak ada 404
 check('audit/menu: Head dan Pemeriksa melihat Audit Log aktif (tanpa penanda belum dibangun); Ketua Regu dan Anggota tidak', $has($sh->get('/'), 'href="/sistem/audit"') && !$has($sh->last, 'P13') && $has($sp->get('/'), 'href="/sistem/audit"') && !$has($sa->get('/'), 'href="/sistem/audit"') && !$has($sm->get('/'), 'href="/sistem/audit"'));
 
 $aList = $sh->get('/sistem/audit');
-check('audit/daftar: judul, kartu ringkasan, label Indonesia, kode aksi, pengguna, tautan rincian, tombol unduh', $has($aList, 'Audit Log') && $has($aList, 'Seluruh catatan') && $has($aList, 'Gagal masuk (24 jam)') && $has($aList, 'Transaksi disetujui') && $has($aList, 'TRX_APPROVED') && $has($aList, 'kepala') && $has($aList, '/sistem/audit/' . $auditId) && $has($aList, 'Unduh CSV'));
+check('audit/daftar: judul, kartu ringkasan, label Indonesia, kode aksi, pengguna, tautan rincian, tombol unduh', $has($aList, 'Audit Log') && $has($aList, 'Seluruh catatan') && $has($aList, 'Gagal masuk (24 jam)') && $has($aList, 'Transaksi disetujui') && $has($aList, 'TRX_APPROVED') && $has($aList, 'kepala') && $has($aList, '/sistem/audit/' . $auditId) && $has($aList, 'Unduh Excel'));
 check('audit/daftar: akses ditolak tampil sebagai peristiwa keamanan (lencana)', $has($aList, 'Akses ditolak (tanpa izin)') && $has($aList, 'badge--ditolak'));
 check('audit/saringan: aksi, kelompok, pengguna, tanggal; nilai ngawur dan halaman di luar batas aman', $has($sh->get('/sistem/audit?aksi=LOGIN_SUCCESS'), 'Masuk berhasil') && !$has($sh->last, '<span class="muted">TRX_APPROVED</span>') && $has($sh->get('/sistem/audit?kelompok=keamanan'), 'Akses ditolak') && !$has($sh->last, '<span class="muted">LOGIN_SUCCESS</span>')
     && $sh->get('/sistem/audit?aksi=%27+OR+1%3D1&kelompok=x&entitas=y&dari=bukan&ip=!!&page=-9')['status'] === 200 && $sh->get('/sistem/audit?page=99999')['status'] === 200 && $has($sh->get('/sistem/audit?dari=2099-01-01'), 'Tidak ada catatan'));
@@ -1366,11 +1399,14 @@ check('audit/rincian: tidak ada satu pun halaman rincian yang memuat hash kata s
 })());
 
 $beforeExport = $audits('AUDIT_EXPORTED');
-$aCsv = $sh->get('/sistem/audit/unduh?kelompok=keamanan');
-check('audit/unduh: CSV ber-BOM bernama audit-log-tanggal.csv, tidak di-cache, memuat judul kolom dan saringan terbawa', $aCsv['status'] === 200 && str_contains($aCsv['headers']['content-type'] ?? '', 'text/csv') && str_contains($aCsv['headers']['content-disposition'] ?? '', 'attachment; filename="audit-log-' . date('Y-m-d') . '.csv"')
-    && str_contains(strtolower($aCsv['headers']['cache-control'] ?? ''), 'no-store') && str_starts_with($aCsv['body'], "\xEF\xBB\xBF") && $has($aCsv, 'Kode aksi') && $has($aCsv, 'ACCESS_DENIED') && !$has($aCsv, 'TRX_APPROVED'));
+$aX = $sh->get('/sistem/audit/unduh?kelompok=keamanan');
+$aXr = xlsx_read($aX['body']);
+$aVals = $aXr['ok'] ? array_column(reset($aXr['sheets'])['cells'], 'v') : [];
+check('audit/unduh: Excel sah bernama audit-log-tanggal.xlsx, tidak di-cache, memuat judul kolom dan saringan terbawa', $aX['status'] === 200 && str_contains($aX['headers']['content-type'] ?? '', $xlsxType) && str_contains($aX['headers']['content-disposition'] ?? '', 'attachment; filename="audit-log-' . date('Y-m-d') . '.xlsx"')
+    && str_contains(strtolower($aX['headers']['cache-control'] ?? ''), 'no-store') && str_starts_with($aX['body'], 'PK') && $aXr['ok'] && in_array('Kode aksi', $aVals, true) && in_array('ACCESS_DENIED', $aVals, true) && !in_array('TRX_APPROVED', $aVals, true));
 check('audit/unduh: unduhan itu sendiri tercatat (AUDIT_EXPORTED dengan jumlah baris dan saringan)', $audits('AUDIT_EXPORTED') === $beforeExport + 1 && $count("SELECT COUNT(*) FROM audit_logs WHERE action = 'AUDIT_EXPORTED' AND username = 'kepala' AND after_data LIKE '%keamanan%' AND after_data LIKE '%\"rows\":%'") === 1);
-check('audit/unduh: tanpa hash kata sandi', !$has($sh->get('/sistem/audit/unduh'), '$2y$'));
+$aAll = xlsx_read($sh->get('/sistem/audit/unduh')['body']);
+check('audit/unduh: tanpa hash kata sandi', $aAll['ok'] && count(array_filter(array_column(reset($aAll['sheets'])['cells'], 'v'), static fn ($v): bool => is_string($v) && str_contains($v, '$2y$'))) === 0);
 $auditPages = $aList['body'] . $aShow['body'] . $uShow['body'];
 check('audit/umum: tanpa <script> inline, event handler, atau style inline (CSP)', !preg_match('/<script(?![^>]*\bsrc=)|\son(click|submit|change|load)=|\sstyle="/i', $auditPages));
 check('audit/umum: catatan audit tidak bisa dihapus lewat SQL (trigger)', (function (): bool {
@@ -1738,14 +1774,14 @@ $hdrOk = static function (array $r): bool {
         && !isset($h['x-powered-by']) && str_contains($h['cache-control'] ?? '', 'no-store');
 };
 $kinds = ['halaman' => $sh->get('/'), 'galat 404' => $sh->get('/tidak-ada-sama-sekali'), 'galat 403' => $sa->get('/validasi'), 'pengalihan' => (new Browser())->get('/'), 'JSON' => $sh->request('GET', '/live/tick', [], ['Accept: application/json']),
-          'CSV' => $sh->get('/laporan/simpanan/unduh'), 'tamu' => (new Browser())->get('/login')];
+          'Excel' => $sh->get('/laporan/simpanan/unduh'), 'tamu' => (new Browser())->get('/login')];
 $bad = [];
 foreach ($kinds as $k => $r) {
     if (!$hdrOk($r)) {
         $bad[] = $k;
     }
 }
-check('keamanan/header: CSP (object-src none, frame-ancestors none), nosniff, DENY, COOP, CORP, no-store ada di halaman, galat, pengalihan, JSON, CSV, tamu; X-Powered-By dihapus' . ($bad ? ' [' . implode(', ', $bad) . ']' : ''), $bad === []);
+check('keamanan/header: CSP (object-src none, frame-ancestors none), nosniff, DENY, COOP, CORP, no-store ada di halaman, galat, pengalihan, JSON, Excel, tamu; X-Powered-By dihapus' . ($bad ? ' [' . implode(', ', $bad) . ']' : ''), $bad === []);
 check('keamanan/header: CSP ketat: tanpa unsafe-inline, unsafe-eval, atau wildcard', !preg_match("/unsafe-inline|unsafe-eval|\\*|data:(?!\\s*;|\\s*$)/", preg_replace("/img-src 'self' data:/", '', $kinds['halaman']['headers']['content-security-policy'])));
 
 // -- 13f. Injeksi: nilai berbahaya di SEMUA parameter daftar tidak menimbulkan galat, kebocoran, atau jeda waktu
@@ -1891,10 +1927,9 @@ $auditList = $sh->get('/sistem/audit?kelompok=keamanan');
 if (str_contains($auditList['body'], $x2)) {
     $rawFound[] = '/sistem/audit?kelompok=keamanan (username)';
 }
-$csv = $sh->get('/sistem/audit/unduh')['body'] . $sh->get('/laporan/simpanan/unduh')['body'];
 check('keamanan/xss: muatan HTML/skrip di nama anggota, blok alamat, nama regu, nama pengguna, deskripsi, catatan tolak, dan username percobaan masuk TIDAK pernah muncul mentah di ' . count($xssPages) . ' halaman x 2 peran' . ($rawFound ? ' [' . implode('; ', array_slice($rawFound, 0, 6)) . ']' : ''), $rawFound === []);
 check('keamanan/xss: (kontrol) muatan itu sungguh tampil sebagai teks yang di-escape, jadi uji ini tidak kosong', $escapedSeen);
-check('keamanan/xss: ekspor CSV bertipe text/csv + nosniff, tanpa Content-Type html', str_contains($sh->get('/sistem/audit/unduh')['headers']['content-type'] ?? '', 'text/csv') && ($sh->last['headers']['x-content-type-options'] ?? '') === 'nosniff');
+check('keamanan/xss: ekspor Excel bertipe spreadsheetml + nosniff + attachment, tanpa Content-Type html', str_contains($sh->get('/sistem/audit/unduh')['headers']['content-type'] ?? '', 'spreadsheetml.sheet') && ($sh->last['headers']['x-content-type-options'] ?? '') === 'nosniff' && str_contains($sh->last['headers']['content-disposition'] ?? '', 'attachment'));
 
 // -- 13j. Kebocoran informasi
 $leakInfo = [];
@@ -1957,6 +1992,7 @@ $matrix = [
     ['/laporan/regu',                           'ok', 'ok', 'x',  'x',  'r'],
     ['/laporan/anggota',                        'ok', 'ok', 'ok', 'x',  'r'],
     ['/laporan/simpanan/unduh',                 'ok', 'ok', 'x',  'x',  'r'],
+    ['/laporan/anggota/unduh',                  'ok', 'ok', 'x',  'x',  'r'],
     ['/laporan/transaksi/unduh',                'ok', 'ok', 'x',  'x',  'r'],
     ['/anggota/' . $ketuaPeriksa,               'ok', 'ok', 'ok', 'x',  'r'],   // anggota regu Alfa
     ['/anggota/' . $anggotaBeta,                'ok', 'ok', 'x',  'ok', 'r'],   // anggota regu Beta (= pengguna anggota4)

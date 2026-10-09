@@ -135,8 +135,8 @@ $pages = ['Dashboard' => '/', 'Riwayat transaksi (hal. 1)' => '/transaksi/riwaya
     'Simpanan' => '/transaksi/simpanan', 'Pinjaman' => '/transaksi/pinjaman', 'Angsuran' => '/transaksi/angsuran', 'Tagihan jatuh tempo' => '/transaksi/angsuran/tagihan', 'Data anggota' => '/master/anggota',
     'Laporan: rekap simpanan' => '/laporan/simpanan', 'Laporan: rekap pinjaman' => '/laporan/pinjaman', 'Laporan: rekap angsuran' => '/laporan/angsuran', 'Laporan: rekap saldo' => '/laporan/saldo',
     'Laporan: transaksi' => '/laporan/transaksi', 'Laporan: per regu' => '/laporan/regu', 'Laporan: per anggota' => '/laporan/anggota', 'Kartu anggota' => '/anggota/50', 'Laporan: kartu anggota' => '/laporan/anggota/50',
-    'Antrean validasi' => '/validasi', 'Audit log' => '/sistem/audit', 'Denyut /live/tick' => '/live/tick', 'Unduh CSV transaksi' => '/laporan/transaksi/unduh', 'Unduh CSV simpanan' => '/laporan/simpanan/unduh'];
-$limits = ['Dashboard' => 2000, 'Unduh CSV transaksi' => 6000, 'Unduh CSV simpanan' => 4000, 'Denyut /live/tick' => 150];
+    'Antrean validasi' => '/validasi', 'Audit log' => '/sistem/audit', 'Denyut /live/tick' => '/live/tick', 'Unduh Excel transaksi' => '/laporan/transaksi/unduh', 'Unduh Excel simpanan' => '/laporan/simpanan/unduh'];
+$limits = ['Dashboard' => 2000, 'Unduh Excel transaksi' => 20000, 'Unduh Excel simpanan' => 6000, 'Denyut /live/tick' => 150];
 $slow = [];
 $table = [];
 foreach ($pages as $label => $path) {

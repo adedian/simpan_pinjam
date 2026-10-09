@@ -14,7 +14,7 @@ use App\Models\Transaction;
  * Cakupan data ditegakkan di SQL, bukan di tampilan:
  *   global (report.view.global)  : seluruh koperasi        team (report.view.team) : regu yang dipimpin
  *   self   (report.view.self)    : diri sendiri            none                    : tidak ada data
- * HTML dan CSV dibangun dari SATU struktur tabel yang sama, jadi unduhan selalu persis sama dengan layar.
+ * HTML dan Excel (ReportWorkbook) dibangun dari SATU struktur tabel yang sama, jadi unduhan selalu persis sama dengan layar.
  *
  * Struktur tabel: ['key','title','subtitle','columns'=>[['key','label','type'=>text|money|int|pct]],
  *                  'rows'=>[[kolom=>nilai, '_links'=>[kolom=>path]]], 'totals'=>?baris, 'note'=>string]
@@ -600,46 +600,6 @@ final class ReportService
             }
         }
         return $t;
-    }
-
-    // ------------------------------------------------------------------ CSV
-
-    /**
-     * CSV dari struktur tabel: titik koma (Excel Indonesia), UTF-8 dengan BOM, angka polos tanpa pemisah ribuan
-     * (agar bisa dijumlah), persen berkoma. Teks yang diawali = + - @ diberi tanda kutip agar tidak dibaca sebagai rumus.
-     * @param array<string,mixed> $report
-     */
-    public static function csv(array $report): string
-    {
-        $h = fopen('php://temp', 'w+');
-        fwrite($h, "\xEF\xBB\xBF");
-        $cell = static function (array $col, mixed $v): string {
-            if ($v === null) {
-                return '';
-            }
-            return match ($col['type']) {
-                'money', 'int' => (string) (int) $v,
-                'pct'          => number_format(((int) $v) / 100, 2, ',', ''),
-                default        => self::safeText((string) $v),
-            };
-        };
-        fputcsv($h, array_map(static fn (array $c): string => $c['label'], $report['columns']), ';', '"', '\\');
-        foreach ($report['rows'] as $row) {
-            fputcsv($h, array_map(static fn (array $c): string => $cell($c, $row[$c['key']] ?? null), $report['columns']), ';', '"', '\\');
-        }
-        if (!empty($report['totals'])) {
-            fputcsv($h, array_map(static fn (array $c): string => $cell($c, $report['totals'][$c['key']] ?? null), $report['columns']), ';', '"', '\\');
-        }
-        rewind($h);
-        $out = (string) stream_get_contents($h);
-        fclose($h);
-        return $out;
-    }
-
-    /** Cegah injeksi rumus spreadsheet pada teks yang berasal dari pengguna. */
-    public static function safeText(string $text): string
-    {
-        return $text !== '' && strpbrk($text[0], "=+-@\t\r") !== false ? "'" . $text : $text;
     }
 
     // ------------------------------------------------------------------ kartu anggota

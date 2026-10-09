@@ -14,7 +14,7 @@ $exportQuery = http_build_query($query);
         <div class="actions no-print">
             <button type="button" class="btn btn--secondary" data-print>Cetak</button>
             <?php if ($canExport): ?>
-                <a class="btn btn--primary" href="<?= e(url('/laporan/' . $report['key'] . '/unduh' . ($exportQuery !== '' ? '?' . $exportQuery : ''))) ?>">Unduh CSV</a>
+                <a class="btn btn--primary" href="<?= e(url('/laporan/' . $report['key'] . '/unduh' . ($exportQuery !== '' ? '?' . $exportQuery : ''))) ?>">Unduh Excel</a>
             <?php endif; ?>
         </div>
     </header>

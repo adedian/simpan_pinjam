@@ -161,11 +161,11 @@ $allowedUse = [   // fungsi => berkas yang boleh memakainya (sudah ditinjau)
     'exec' => ['services/Preflight.php'],           // hanya $pdo->exec (metode), bukan fungsi global: ditandai metode dilewati di bawah
     'extract' => ['core/View.php'],                 // EXTR_SKIP pada data yang disusun controller
     'file_put_contents' => ['core/Logger.php', 'models/Dashboard.php', 'services/Backup.php', 'database/tools/create_app_user.php', 'database/tools/create_user.php', 'database/tools/extract_excel.py', 'database/tools/import_excel.php'],
-    'unlink' => ['services/Backup.php'],
+    'unlink' => ['services/Backup.php', 'services/Xlsx.php'],   // Xlsx: berkas zip sementara dari tempnam(), dihapus segera setelah dibaca
     'rename' => ['services/Backup.php', 'models/Dashboard.php'],   // Dashboard: cache integritas, penulisan atomik
     'md5' => ['models/Dashboard.php'],                               // hanya nama berkas cache per database, bukan keamanan
     'mkdir' => ['services/Backup.php', 'database/tools/import_excel.php', 'database/tools/create_user.php'],
-    'fopen' => ['services/ExcelImporter.php', 'services/ReportService.php'],
+    'fopen' => ['services/ExcelImporter.php'],
     'ini_set' => ['core/Session.php', 'core/bootstrap.php'],
     'header' => ['core/Response.php', 'core/SecurityHeaders.php'],
     'setcookie' => ['core/Session.php'],

@@ -13,7 +13,7 @@ use App\Services\ReportService;
 
 /**
  * Laporan. Hanya membaca. Cakupan data ditegakkan di ReportService (SQL); izin di route.
- * Unduhan CSV hanya untuk pemilik report.export (Head, Pemeriksa) dan SELALU tercatat di audit log.
+ * Unduhan Excel hanya untuk pemilik report.export (Head, Pemeriksa) dan SELALU tercatat di audit log.
  */
 final class ReportController extends BaseController
 {
@@ -64,6 +64,7 @@ final class ReportController extends BaseController
 
         return $this->view($request, 'laporan/members', [
             'title'   => 'Laporan Per Anggota',
+            'canExport' => Gate::allows($user, 'report.export'),
             'rows'    => array_slice($all, $pager['offset'], $pager['per_page']),
             'pager'   => $pager,
             'filters' => $f,
@@ -122,7 +123,9 @@ final class ReportController extends BaseController
     }
 
     /**
-     * Unduh CSV. Hanya report.export; tercatat di audit log (siapa, laporan apa, saringan, berapa baris).
+     * Unduh Excel (.xlsx). Hanya report.export; tercatat di audit log (siapa, laporan apa, saringan, berapa baris).
+     * Enam laporan rekap berbentuk tabel; "anggota" berisi formulir cetak (Rekap Pinjaman + Tabungan Hari Raya) satu anggota,
+     * atau semua anggota dalam cakupan bila tanpa ?anggota=.
      * @param array<string,string> $params
      */
     public function download(Request $request, array $params = []): Response
@@ -134,22 +137,30 @@ final class ReportController extends BaseController
         }
         $f = ReportService::filters($request->query, $user);
         if ($key === 'anggota') {
-            $card = ReportService::statement($user, $f['anggota']);
-            if ($card === null) {
+            $sheets = $f['anggota'] > 0
+                ? array_filter([\App\Services\MemberSheet::build($user, $f['anggota'])])
+                : \App\Services\MemberSheet::buildMany($user, $f);
+            if ($sheets === []) {
                 $this->abort(404);
             }
-            $report = $card['transactions'];
-            $report['key'] = 'anggota-' . $card['member']['member_no'];
+            $sheets = array_values($sheets);
+            $label  = $f['anggota'] > 0 ? 'anggota-' . $sheets[0]['member']['member_no'] : 'anggota-semua';
+            $rows   = count($sheets);
+            $bytes  = \App\Services\SheetWorkbook::build($sheets);
+            $name   = ($f['anggota'] > 0 ? 'formulir-' . $sheets[0]['member']['member_no'] : 'formulir-semua-anggota') . '-' . date('Y-m-d') . '.xlsx';
         } else {
             $report = ReportService::build($key, $user, $f, 1, true);
+            $label  = (string) $report['key'];
+            $rows   = count($report['rows']);
+            $bytes  = \App\Services\ReportWorkbook::build($report);
+            $name   = 'laporan-' . preg_replace('/[^a-z0-9_-]+/i', '-', $label) . '-' . date('Y-m-d') . '.xlsx';
         }
 
-        AuditLog::record($request, $user, 'REPORT_EXPORTED', 'report', null, $report['key'], null, [
-            'filters' => array_filter($f, static fn ($v): bool => $v !== '' && $v !== 0), 'rows' => count($report['rows']),
+        AuditLog::record($request, $user, 'REPORT_EXPORTED', 'report', null, $label, null, [
+            'filters' => array_filter($f, static fn ($v): bool => $v !== '' && $v !== 0), 'rows' => $rows,
         ]);
-        $name = 'laporan-' . preg_replace('/[^a-z0-9_-]+/i', '-', (string) $report['key']) . '-' . date('Y-m-d') . '.csv';
-        return new Response(ReportService::csv($report), 200, [
-            'Content-Type'        => 'text/csv; charset=UTF-8',
+        return new Response($bytes, 200, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="' . $name . '"',
             'Cache-Control'       => 'no-store',
             'X-Content-Type-Options' => 'nosniff',
@@ -170,6 +181,7 @@ final class ReportController extends BaseController
         $keep  = array_filter(['regu' => $filters['team'] > 0 ? (string) $filters['team'] : '', 'q' => $filters['q']], static fn (string $v): bool => $v !== '');
         return $this->view($request, 'laporan/lembar', [
             'title'   => $label . ($single !== null ? ' · ' . $single['member']['name'] : ' · semua anggota'),
+            'canExport' => Gate::allows(Auth::user(), 'report.export'),
             'kind'    => $kind,
             'sheets'  => $sheets,
             'single'  => $single,

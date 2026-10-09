@@ -13,7 +13,7 @@ use App\Services\ReportService;
 
 /**
  * Layar Audit Log (Phase 13): hanya membaca jejak yang tidak bisa diubah. Izin audit.view (Head, Pemeriksa);
- * unduhan CSV juga butuh report.export dan dirinya sendiri tercatat (AUDIT_EXPORTED).
+ * unduhan Excel juga butuh report.export dan dirinya sendiri tercatat (AUDIT_EXPORTED).
  */
 final class AuditController extends BaseController
 {
@@ -79,9 +79,10 @@ final class AuditController extends BaseController
         AuditLog::record($request, $user, 'AUDIT_EXPORTED', 'report', null, 'audit', null, [
             'filters' => array_filter($f, static fn (string $v): bool => $v !== ''), 'rows' => count($rows),
         ]);
-        return new Response(ReportService::csv(['columns' => $columns, 'rows' => $rows, 'totals' => null]), 200, [
-            'Content-Type'           => 'text/csv; charset=UTF-8',
-            'Content-Disposition'    => 'attachment; filename="audit-log-' . date('Y-m-d') . '.csv"',
+        $bytes = \App\Services\ReportWorkbook::build(['title' => 'Audit Log', 'subtitle' => 'Dicetak ' . date('d-m-Y H:i'), 'columns' => $columns, 'rows' => $rows, 'totals' => null]);
+        return new Response($bytes, 200, [
+            'Content-Type'           => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition'    => 'attachment; filename="audit-log-' . date('Y-m-d') . '.xlsx"',
             'Cache-Control'          => 'no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);

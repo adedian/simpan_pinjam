@@ -22,6 +22,7 @@ $other   = $kind === 'pinjaman' ? 'tabungan' : 'pinjaman';
                 <a class="btn btn--link" href="<?= e(url('/laporan/anggota')) ?>">Daftar anggota</a>
                 <a class="btn btn--secondary" href="<?= e(url('/laporan/anggota/cetak/' . $other . ($query !== '' ? '?' . $query : ''))) ?>"><?= e($names[$other]) ?></a>
             <?php endif; ?>
+            <?php if ($canExport): ?><a class="btn btn--secondary" href="<?= e(url('/laporan/anggota/unduh' . ($single !== null ? '?anggota=' . (int) $single['member']['id'] : ($query !== '' ? '?' . $query : '')))) ?>">Unduh Excel</a><?php endif; ?>
             <button type="button" class="btn btn--primary" data-print>Cetak</button>
         </div>
     </div>

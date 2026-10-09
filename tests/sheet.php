@@ -20,6 +20,7 @@ use App\Services\MemberSheet;
 use App\Services\Migrator;
 use App\Services\ProfitShare;
 use App\Services\ReportService;
+use App\Services\SheetWorkbook;
 
 $testDb = (string) App\Core\Env::get('DB_TEST_NAME', 'simpan_pinjam_adem_ayem_test');
 $admin  = [(string) Config::get('database.admin_user'), (string) Config::get('database.admin_pass')];
@@ -183,6 +184,35 @@ $htmlG = View::include('partials/sheet-tabungan', ['sheet' => MemberSheet::build
 check('tampilan: nama dengan HTML diloloskan (tidak ada tag mentah)', !str_contains($htmlG, '<b>Gama') && str_contains($htmlG, '&lt;b&gt;Gama'));
 check('tampilan: perkiraan diberi keterangan, bukan disajikan sebagai pasti', str_contains($htmlT, 'perkiraan') && str_contains($htmlT, 'April 2026'));
 check('helper: sheet_date dan sheet_num', sheet_date('2026-03-07') === '7-Mar-26' && sheet_date(null) === '-' && sheet_num(0) === '-' && sheet_num(1234567) === '1.234.567');
+
+// Unduhan Excel: tata letak mengikuti formulir (lihat SheetWorkbook)
+require_once __DIR__ . '/xlsx_reader.php';
+$wb  = xlsx_read(SheetWorkbook::build([$sheetA, $sheetB]));
+$lp  = $wb['sheets']['Rekap Pinjaman'] ?? [];
+$tb  = $wb['sheets']['Tabungan Hari Raya'] ?? [];
+check('excel formulir: berkas sah dengan dua lembar, bernama seperti formulir', $wb['ok'] && array_keys($wb['sheets']) === ['Rekap Pinjaman', 'Tabungan Hari Raya']);
+check('excel pinjaman: judul, identitas (NO. URUT / NAMA / ALAMAT), dan kepala tabel biru', xlsx_v($lp, 'A1') === 'REKAP PINJAMAN "ADEM AYEM"' && xlsx_v($lp, 'A2') === 'NO. URUT' && xlsx_v($lp, 'D2') === 1.0 && xlsx_v($lp, 'D3') === 'Bu Alfa' && xlsx_v($lp, 'D4') === 'E - 08A'
+    && xlsx_v($lp, 'A5') === 'NO' && xlsx_v($lp, 'C5') === "PINJAMAN
+POKOK" && xlsx_v($lp, 'E5') === "BAYAR ANGSURAN
++ BUNGA" && xlsx_v($lp, 'G5') === 'Keterangan' && in_array('A1:G1', $lp['merges'], true));
+check('excel pinjaman: baris bulan (tanggal asli Excel, pokok, bunga, bayar, sisa, keterangan) dan SISA PINJAMAN', xlsx_v($lp, 'B6') === 46086.0 && xlsx_v($lp, 'C6') === 1000000.0 && xlsx_v($lp, 'D6') === 40000.0 && xlsx_v($lp, 'F6') === 1040000.0 && xlsx_v($lp, 'G6') === 'Tenor 2 bulan'
+    && xlsx_v($lp, 'E7') === 520000.0 && xlsx_v($lp, 'F7') === 520000.0 && xlsx_v($lp, 'G7') === 'Cicilan ke-1' && xlsx_v($lp, 'A10') === 'SISA PINJAMAN' && xlsx_v($lp, 'F10') === 520000.0);
+check('excel pinjaman: formulir kedua (anggota B) menyusul di bawah dengan satu baris kosong', xlsx_v($lp, 'A12') === 'REKAP PINJAMAN "ADEM AYEM"' && xlsx_v($lp, 'D13') === 2.0 && xlsx_v($lp, 'D14') === 'Bu Beta' && xlsx_v($lp, 'D15') === 'Non JH' && xlsx_v($lp, 'A11') === null);
+check('excel tabungan: judul, identitas, "Aktif Per", kepala tabel', xlsx_v($tb, 'A1') === 'Tabungan Hari Raya  "Adem Ayem"' && xlsx_v($tb, 'A2') === 'NO. URUT' && xlsx_v($tb, 'C2') === 1.0 && xlsx_v($tb, 'C3') === 'Bu Alfa' && xlsx_v($tb, 'A4') === 'DAWIS / BLOK' && xlsx_v($tb, 'C4') === 'E - 08A'
+    && xlsx_v($tb, 'D5') === 'Aktif Per' && xlsx_v($tb, 'E5') === 'Maret 2026' && xlsx_v($tb, 'E6') === "TOTAL
+TABUNGAN");
+check('excel tabungan: masuk, keluar kosong, total berjalan, dan ringkasan (total, bagi hasil, total pinjaman, total di terima)', xlsx_v($tb, 'C7') === 100000.0 && xlsx_v($tb, 'E7') === 100000.0 && xlsx_v($tb, 'E8') === 200000.0 && ($tb['cells']['D7']['type'] ?? '') === 'empty'
+    && xlsx_v($tb, 'A11') === 'Total Tabungan' && xlsx_v($tb, 'E11') === 200000.0 && xlsx_v($tb, 'A12') === 'Bagi Hasil Tabungan' && xlsx_v($tb, 'E12') === 4071.0 && xlsx_v($tb, 'A13') === 'Total Pinjaman' && xlsx_v($tb, 'D13') === 1000000.0
+    && xlsx_v($tb, 'E14') === 15200.0 && xlsx_v($tb, 'A15') === 'Total di Terima' && xlsx_v($tb, 'E15') === 219271.0 && str_contains((string) xlsx_v($tb, 'A16'), 'perkiraan'));
+check('excel formulir: nama dengan HTML/rumus tersimpan sebagai teks', (function () use ($head): bool {
+    $g = MemberSheet::build($head, 3);
+    $g['member']['name'] = '=HYPERLINK("x")';
+    $x = xlsx_read(SheetWorkbook::build([$g]));
+    $c = $x['sheets']['Rekap Pinjaman']['cells']['D3'];
+    return $c['type'] === 'str' && $c['formula'] === false && $c['v'] === '=HYPERLINK("x")';
+})());
+$wb3 = xlsx_read(SheetWorkbook::build([$sheetA, $sheetB, $sheetA]));
+check('excel formulir: cetak banyak anggota memberi pemisah halaman tiap dua formulir (dua lembar)', $wb3['sheets']['Rekap Pinjaman']['breaks'] === [21] && $wb3['sheets']['Tabungan Hari Raya']['breaks'] === [33] && $wb['sheets']['Rekap Pinjaman']['breaks'] === []);
 
 // Koreksi: simpanan C dibalik (transaksi pembalik DISETUJUI di bulan asal) -> netral di formulir dan di bagi hasil.
 $rev = trx('SIMPANAN', 3, 1, 200000, $mo[2], '2026-04-04');

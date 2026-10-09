@@ -16,7 +16,7 @@ $s = $card['summary'];
             <a class="btn btn--secondary" href="<?= e(url('/laporan/anggota/' . (int) $m['id'] . '/pinjaman')) ?>">Formulir pinjaman</a>
             <a class="btn btn--secondary" href="<?= e(url('/laporan/anggota/' . (int) $m['id'] . '/tabungan')) ?>">Formulir tabungan</a>
             <button type="button" class="btn btn--secondary" data-print>Cetak</button>
-            <?php if ($canExport): ?><a class="btn btn--primary" href="<?= e(url('/laporan/anggota/unduh?anggota=' . (int) $m['id'])) ?>">Unduh transaksi (CSV)</a><?php endif; ?>
+            <?php if ($canExport): ?><a class="btn btn--primary" href="<?= e(url('/laporan/anggota/unduh?anggota=' . (int) $m['id'])) ?>">Unduh Excel (formulir)</a><?php endif; ?>
         </div>
     </header>
 

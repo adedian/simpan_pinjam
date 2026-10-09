@@ -5,6 +5,7 @@
             <?php $keep = http_build_query(array_filter(['q' => $filters['q'], 'regu' => $filters['team'] > 0 ? (string) $filters['team'] : ''], static fn (string $v): bool => $v !== '')); ?>
             <a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/cetak/pinjaman' . ($keep !== '' ? '?' . $keep : ''))) ?>">Cetak semua formulir pinjaman</a>
             <a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/cetak/tabungan' . ($keep !== '' ? '?' . $keep : ''))) ?>">Cetak semua formulir tabungan</a>
+            <?php if ($canExport): ?><a class="btn btn--primary btn--sm" href="<?= e(url('/laporan/anggota/unduh' . ($keep !== '' ? '?' . $keep : ''))) ?>">Unduh Excel semua formulir</a><?php endif; ?>
         </div>
     </div>
     <p class="muted">Pilih anggota untuk membuka kartu anggota: tabungan per bulan, pinjaman beserta jadwal cicilan, dan seluruh transaksinya. Siap dicetak.</p>

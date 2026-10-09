@@ -42,6 +42,11 @@ Dari **Laporan Per Anggota** (kartu anggota, atau tombol "Cetak semua formulir" 
 tabungan adalah *perkiraan* yang dihitung dari transaksi disetujui dan jadwal cicilan (`services/ProfitShare.php`);
 belum dikurangi sisa pinjaman. Nyalakan "Background graphics" di kotak cetak peramban agar warna kepala tabel ikut.
 
+**Unduhan** (Head dan Pemeriksa) berformat **Excel (.xlsx)**, bukan CSV: formulir per anggota atau semua anggota
+(satu lembar per jenis formulir, tata letak dan warna seperti template), serta enam laporan rekap dan audit log dengan
+gaya yang sama. Angka tersimpan sebagai angka dan teks tidak pernah dibaca sebagai rumus. Penulisnya `services/Xlsx.php`
+(hanya butuh ekstensi `zip` PHP, sudah aktif di XAMPP).
+
 ## Struktur
 ```
 config/       rute, menu, izin, pengaturan        core/         inti (router, DB, sesi, CSRF, HTTPS)
