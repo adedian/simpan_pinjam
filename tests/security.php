@@ -394,6 +394,9 @@ check('rahasia: tidak ada kredensial tertanam di kode; .env.example tanpa kata s
             return false;
         }
     }
+    if (!is_file(ROOT . '/.env.example')) {
+        return true; // contoh konfigurasi tidak disertakan di repositori
+    }
     $env = (string) file_get_contents(ROOT . '/.env.example');
     return (bool) preg_match('/^DB_PASS=\s*$/m', $env) && (bool) preg_match('/^DB_ADMIN_PASS=\s*$/m', $env);
 })());

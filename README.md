@@ -14,12 +14,14 @@ sudah disetujui tidak diedit atau dihapus, hanya dikoreksi dengan transaksi pemb
 
 ## Pemasangan
 1. Letakkan folder di `htdocs` (mis. `htdocs/simpan_pinjam`).
-2. `cp .env.example .env`, lalu isi kredensial database. Akun aplikasi sebaiknya berhak terbatas:
+2. Buat berkas `.env` di akar proyek (tidak ikut repositori) berisi `APP_ENV`, `APP_DEBUG`, `APP_BASE_PATH`,
+   `APP_URL`, `APP_FORCE_HTTPS`, `TRUSTED_PROXIES`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`,
+   `DB_ADMIN_USER`, `DB_ADMIN_PASS`. Akun aplikasi sebaiknya berhak terbatas:
    `php database/tools/create_app_user.php`.
 3. Pasang skema: `php database/tools/migrate.php`.
 4. Buat akun pertama: `php database/tools/create_user.php`.
 5. Periksa kesiapan: `php database/tools/preflight.php` (semua **GAGAL** harus beres sebelum
-   dibuka untuk pengguna; lihat `docs/tambahan-deploy-cadangan.md`).
+   dibuka untuk pengguna).
 
 Impor data awal dari Excel (`database/tools/import_excel.php`) membutuhkan berkas sumber
 milik koperasi dan tidak ikut repositori.
@@ -41,7 +43,7 @@ controllers/  penanganan permintaan               middleware/   auth, izin, CSRF
 models/       akses data dan cakupan              services/     aturan bisnis (validasi, pembalik, laporan, cadangan)
 views/        tampilan                            public/       satu-satunya folder yang dapat diakses web
 database/     migrasi + alat CLI                  storage/      sesi, log, cache, cadangan (tidak dilacak)
-tests/        suite tes mandiri                   docs/         dokumen per phase
+tests/        suite tes mandiri
 ```
 
 ## Tes
@@ -58,4 +60,3 @@ ke database sungguhan. Butuh `.env.testing`.
 `php database/tools/restore.php --file=...` (ke database baru). Jadwalkan dan simpan salinan di luar komputer.
 
 ## Dokumentasi
-Rancangan dan keputusan tiap phase ada di `docs/` (01 analisis → 17 pengujian; `18` polesan akhir).

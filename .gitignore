@@ -1,7 +1,6 @@
 # --- Konfigurasi & rahasia ---
 .env
 .env.*
-!.env.example
 storage/credentials-*.txt
 *.pem
 *.key
@@ -30,7 +29,8 @@ database/import/*.json
 
 # --- Berkas lokal / sensitif ---
 .claude/
-docs/01-analisis-phase1.md
+# Dokumen internal: memuat nama anggota, saldo, dan prosedur operasional
+docs/
 
 # --- Dependensi & hasil build ---
 /node_modules/
