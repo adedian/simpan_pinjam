@@ -153,6 +153,9 @@ final class MemberSheet
                 ],
                 'period' => (string) $period['name'],
                 'as_of'  => $share['as_of'],
+                'note'   => $share['excel']
+                    ? 'Bagi hasil adalah perkiraan mengikuti perhitungan Excel koperasi: cicilan dianggap dibayar sesuai jadwal. Belum dikurangi sisa pinjaman.'
+                    : 'Bagi hasil adalah perkiraan' . ($share['as_of'] !== null ? ' per data ' . month_label((string) $share['as_of']) : '') . '; cicilan yang belum dibayar dihitung sesuai jadwal. Belum dikurangi sisa pinjaman.',
                 'loan'   => ['rows' => $loanRows, 'remaining' => $remain],
                 'saving' => [
                     'rows' => $saveRows, 'total' => $total, 'saver_share' => (int) $s['saver'], 'loan_total' => $disbursed,

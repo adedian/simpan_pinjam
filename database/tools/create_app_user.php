@@ -43,7 +43,7 @@ try {
     }
 
     $insertOnly = ['audit_logs', 'transaction_validations'];
-    $readOnly   = ['schema_migrations', 'roles'];
+    $readOnly   = ['schema_migrations', 'roles', 'loan_plan_adjustments'];   // penyesuaian rencana hanya ditulis lewat plan_adjust.php
     $grants     = [];
     foreach ($tables as $t) {
         $grants[$t] = in_array($t, $insertOnly, true) ? 'SELECT, INSERT'

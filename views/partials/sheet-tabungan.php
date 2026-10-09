@@ -38,5 +38,5 @@ $s = $sheet['saving'];
             <tr class="sheet__sum sheet__sum--grand"><td colspan="4">Total di Terima</td><td class="sheet__num"><?= e(sheet_num($s['received'])) ?></td></tr>
         </tfoot>
     </table>
-    <p class="sheet__foot">Bagi hasil adalah perkiraan<?= $sheet['as_of'] !== null ? ' per data ' . e(month_label((string) $sheet['as_of'])) : '' ?>; cicilan yang belum dibayar dihitung sesuai jadwal. Belum dikurangi sisa pinjaman.</p>
+    <p class="sheet__foot"><?= e($sheet['note']) ?></p>
 </article>

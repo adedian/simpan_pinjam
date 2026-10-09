@@ -133,9 +133,7 @@ final class SheetWorkbook
         $r++;
         $s->set($r, 1, 'Total di Terima', $st['sum'])->merge($r, 1, $r, 4, $st['sum'])->set($r, 5, (int) $v['received'], $st['sumN']);
         $r++;
-        $note = 'Bagi hasil adalah perkiraan' . ($sh['as_of'] !== null ? ' per data ' . month_label((string) $sh['as_of']) : '')
-            . '; cicilan yang belum dibayar dihitung sesuai jadwal. Belum dikurangi sisa pinjaman.';
-        $s->set($r, 1, $note, $st['note'])->merge($r, 1, $r, 5, $st['note'])->height($r, 26);
+        $s->set($r, 1, (string) $sh['note'], $st['note'])->merge($r, 1, $r, 5, $st['note'])->height($r, 26);
         return $r + 1;
     }
 }

@@ -7,33 +7,46 @@ use App\Core\Database;
 
 /**
  * Perkiraan bagi hasil bunga per anggota untuk formulir cetak. HANYA MEMBACA: tidak ada angka yang disimpan, semuanya
- * dihitung dari transaksi DISETUJUI dan jadwal cicilan (jadi koreksi/pembalik ikut bersih).
+ * dihitung dari transaksi DISETUJUI, jadwal pinjaman, dan penyesuaian rencana (loan_plan_adjustments).
  *
- * Aturan (disetujui di Phase 1, Q8; analisis §3.2):
- *   - Bunga yang DITERIMA pada bulan k+1 dibagi berdasarkan keadaan akhir bulan k.
- *       pool penabung  = 40% x bunga diterima bulan k+1  (porsi = saldo tabungan anggota / total saldo semua anggota)
- *       pool peminjam  = 40% x bunga diterima bulan k+1  (porsi = sisa POKOK anggota / total sisa pokok semua anggota)
- *     Persentase dari pengaturan (profit_share_saver_pct, profit_share_borrower_pct).
- *   - Dari bagian penabung dan peminjam dipotong cadangan (reserve_pct, 5%), kecuali anggota berstatus reserve_exempt.
- *   - Bunga dalam satu pembayaran = pembayaran x total_bunga / total_tagihan pinjaman (bunga flat, pro rata).
- *   - Bunga bulan-bulan yang BELUM terjadi diproyeksikan dari jadwal cicilan: sisa tiap cicilan dianggap dibayar penuh
- *     pada bulan jatuh temponya, atau bulan setelah data terakhir bila sudah lewat. Pinjaman baru tidak diproyeksikan.
- *   - Seluruh pool terbagi (tidak ada bulan yang terlewat). Bila suatu bulan tak punya penerima, pool bulan itu tidak
- *     dibagikan (dilaporkan di `undistributed`).
+ * Dasar (Phase 1, analisis §3.2): bunga yang DITERIMA pada bulan k+1 dibagi menurut keadaan AKHIR bulan k.
+ *   pool penabung  = profit_share_saver_pct (40%) x bunga bulan k+1;  porsi = saldo tabungan / total saldo semua anggota
+ *   pool peminjam  = profit_share_borrower_pct (40%) x bunga bulan k+1; porsi = sisa dasar anggota / total sisa dasar
+ *   cadangan reserve_pct (5%) dipotong dari keduanya, kecuali anggota reserve_exempt.
+ *   Bunga dalam satu pembayaran = pembayaran x total bunga / total tagihan pinjaman (bunga flat, pro rata).
+ *   Tiap baris formulir dibulatkan ke rupiah; formulir menjumlahkan baris yang sudah dibulatkan.
  *
- * Hasil tiap anggota dibulatkan ke rupiah penuh per baris; formulir menjumlahkan baris yang sudah dibulatkan.
+ * Dua mode (konstanta FOLLOW_EXCEL):
+ *
+ * 1) FOLLOW_EXCEL = true (dipakai, atas permintaan pemilik): angkanya SAMA PERSIS dengan sheet Excel koperasi
+ *    "3-REKAP TABUNGAN+bunga" dan "7-BAGI HASIL PINJAMAN" (dibuktikan untuk 57 anggota, selisih 0 rupiah):
+ *      - pembayaran = RENCANA: tiap pinjaman dianggap dibayar (pokok + bunga) / tenor mulai bulan sesudah pencairan,
+ *        tanpa melihat pembayaran nyata (Excel mengetik rencana itu; Bu Parmi yang belum membayar tetap dianggap membayar),
+ *        ditambah penyesuaian bendahara di loan_plan_adjustments;
+ *      - dasar peminjam: sisa POKOK sampai Mei, lalu sisa BUNGA mulai Juni (Excel berganti dasar tanpa alasan tertulis);
+ *      - bagi hasil penabung bulan Desember tidak dibagikan (Excel membiarkannya 0; bagian itu tak diberikan ke siapa pun).
+ *    Kejanggalan di atas sengaja dipertahankan agar angka sama dengan Excel; hubungannya dengan periode ini saja
+ *    (siklus ke-4 = Juni, ke-10 = Desember pada Mar 2026 - Feb 2027).
+ *
+ * 2) FOLLOW_EXCEL = false: aturan Q8 apa adanya (dasar sisa pokok sepanjang tahun, semua pool terbagi, pembayaran nyata
+ *    ditambah proyeksi sisa jadwal untuk bulan yang belum terjadi). Perhitungan ini dipertahankan dan diuji.
  */
 final class ProfitShare
 {
+    public const FOLLOW_EXCEL = true;
+    private const EXCEL_BASIS_SWITCH_CYCLE = 4;    // siklus ke-4 (Juni): dasar peminjam berganti ke sisa bunga
+    private const EXCEL_SKIP_SAVER_CYCLE = 10;     // siklus ke-10 (Desember): pool penabung tidak dibagikan
+
     /**
      * @return array{
-     *   period_id:int, as_of:?string, months:int,
+     *   period_id:int, as_of:?string, months:int, excel:bool,
      *   interest_pool:float, undistributed:float,
      *   members:array<int,array{saver:int,borrower:int,saver_gross:float,borrower_gross:float,reserve_exempt:bool}>
      * }
      */
-    public static function compute(int $periodId): array
+    public static function compute(int $periodId, ?bool $excel = null): array
     {
+        $excel ??= self::FOLLOW_EXCEL;
         $months = Database::select('SELECT id, month_date FROM period_months WHERE period_id = ? ORDER BY month_date', [$periodId]);
         $idx = [];                                   // period_month_id => 1..N
         $dateIdx = [];                               // 'YYYY-MM-01' => 1..N
@@ -71,58 +84,81 @@ final class ProfitShare
         }
 
         // Pinjaman efektif (pencairan disetujui dan tidak dibalik) pada periode ini.
-        $loans = [];                                 // loan_id => [member, principal, interest, disbursed idx]
+        $loans = [];                                 // loan_id => [member, principal, interest, tenor, disbursed idx]
         foreach (Database::select(
-            'SELECT ln.id, ln.member_id, ln.principal, ln.total_interest, t.period_month_id
+            'SELECT ln.id, ln.member_id, ln.principal, ln.total_interest, ln.tenor_months, t.period_month_id
              FROM loans ln JOIN v_loan_balances b ON b.loan_id = ln.id JOIN transactions t ON t.id = ln.transaction_id
              JOIN period_months pm ON pm.id = t.period_month_id WHERE pm.period_id = ?',
             [$periodId]
         ) as $r) {
-            $loans[(int) $r['id']] = ['m' => (int) $r['member_id'], 'p' => (int) $r['principal'], 'i' => (int) $r['total_interest'], 'k' => $idx[(int) $r['period_month_id']]];
+            $loans[(int) $r['id']] = ['m' => (int) $r['member_id'], 'p' => (int) $r['principal'], 'i' => (int) $r['total_interest'], 'n' => max(1, (int) $r['tenor_months']), 'k' => $idx[(int) $r['period_month_id']]];
         }
 
-        // Pembayaran nyata per pinjaman per bulan (pembalik berbobot negatif sudah menetralkan).
-        $pay = [];                                   // loan => [idx => rupiah]
-        foreach (Database::select(
-            "SELECT li.loan_id, t.period_month_id, SUM(ip.amount) AS a
-             FROM installment_payments ip JOIN loan_installments li ON li.id = ip.installment_id
-             JOIN transactions t ON t.id = ip.transaction_id AND t.status = 'DISETUJUI' AND t.deleted_at IS NULL
-             JOIN period_months pm ON pm.id = t.period_month_id WHERE pm.period_id = ?
-             GROUP BY li.loan_id, t.period_month_id",
-            [$periodId]
-        ) as $r) {
-            if (isset($loans[(int) $r['loan_id']])) {
-                $pay[(int) $r['loan_id']][$idx[(int) $r['period_month_id']]] = (float) $r['a'];
+        $pay = [];                                   // loan => [idx => rupiah dibayar pada bulan itu]
+        if ($excel) {
+            // Rencana: (pokok + bunga) / tenor tiap bulan, mulai bulan sesudah pencairan; lalu penyesuaian bendahara.
+            foreach ($loans as $lid => $L) {
+                for ($j = 1; $j <= $L['n']; $j++) {
+                    if ($L['k'] + $j <= $n) {
+                        $pay[$lid][$L['k'] + $j] = ($L['p'] + $L['i']) / $L['n'];
+                    }
+                }
+            }
+            foreach (Database::select(
+                'SELECT a.loan_id, a.period_month_id, a.amount FROM loan_plan_adjustments a JOIN period_months pm ON pm.id = a.period_month_id WHERE pm.period_id = ?',
+                [$periodId]
+            ) as $r) {
+                if (isset($loans[(int) $r['loan_id']])) {
+                    $k = $idx[(int) $r['period_month_id']];
+                    $pay[(int) $r['loan_id']][$k] = ($pay[(int) $r['loan_id']][$k] ?? 0.0) + (float) $r['amount'];
+                }
+            }
+        } else {
+            // Pembayaran nyata per pinjaman per bulan (pembalik berbobot negatif sudah menetralkan).
+            foreach (Database::select(
+                "SELECT li.loan_id, t.period_month_id, SUM(ip.amount) AS a
+                 FROM installment_payments ip JOIN loan_installments li ON li.id = ip.installment_id
+                 JOIN transactions t ON t.id = ip.transaction_id AND t.status = 'DISETUJUI' AND t.deleted_at IS NULL
+                 JOIN period_months pm ON pm.id = t.period_month_id WHERE pm.period_id = ?
+                 GROUP BY li.loan_id, t.period_month_id",
+                [$periodId]
+            ) as $r) {
+                if (isset($loans[(int) $r['loan_id']])) {
+                    $pay[(int) $r['loan_id']][$idx[(int) $r['period_month_id']]] = (float) $r['a'];
+                }
+            }
+            // Proyeksi: sisa tiap cicilan dibayar pada max(bulan jatuh tempo, bulan sesudah data terakhir).
+            foreach (Database::select('SELECT loan_id, due_month, remaining_amount FROM v_installment_status WHERE remaining_amount > 0') as $r) {
+                $lid = (int) $r['loan_id'];
+                if (!isset($loans[$lid]) || !isset($dateIdx[(string) $r['due_month']])) {
+                    continue;
+                }
+                $k = max($dateIdx[(string) $r['due_month']], $asOf + 1);
+                if ($k <= $n) {
+                    $pay[$lid][$k] = ($pay[$lid][$k] ?? 0.0) + (float) $r['remaining_amount'];
+                }
             }
         }
 
-        // Proyeksi: sisa tiap cicilan dibayar pada max(bulan jatuh tempo, bulan sesudah data terakhir).
-        foreach (Database::select('SELECT loan_id, due_month, remaining_amount FROM v_installment_status WHERE remaining_amount > 0') as $r) {
-            $lid = (int) $r['loan_id'];
-            if (!isset($loans[$lid]) || !isset($dateIdx[(string) $r['due_month']])) {
-                continue;
-            }
-            $k = max($dateIdx[(string) $r['due_month']], $asOf + 1);
-            if ($k <= $n) {
-                $pay[$lid][$k] = ($pay[$lid][$k] ?? 0.0) + (float) $r['remaining_amount'];
-            }
-        }
-
-        // Bunga diterima per bulan, dan sisa pokok akhir bulan per anggota.
+        // Bunga diterima per bulan, serta sisa pokok dan sisa bunga akhir bulan per anggota.
         $interest = array_fill(1, max($n, 1), 0.0);
-        $out = [];                                   // member => [idx => sisa pokok]
+        $outP = [];                                  // member => [idx => sisa pokok]
+        $outI = [];                                  // member => [idx => sisa bunga]
         foreach ($loans as $lid => $L) {
             $due = $L['p'] + $L['i'];
             if ($due <= 0) {
                 continue;
             }
-            $rest = (float) $L['p'];
+            $restP = (float) $L['p'];
+            $restI = (float) $L['i'];
             for ($k = 1; $k <= $n; $k++) {
                 $x = $pay[$lid][$k] ?? 0.0;
                 $interest[$k] += $x * $L['i'] / $due;
-                $rest -= $x * $L['p'] / $due;
+                $restP -= $x * $L['p'] / $due;
+                $restI -= $x * $L['i'] / $due;
                 if ($k >= $L['k']) {
-                    $out[$L['m']][$k] = ($out[$L['m']][$k] ?? 0.0) + max(0.0, $rest);
+                    $outP[$L['m']][$k] = ($outP[$L['m']][$k] ?? 0.0) + max(0.0, $restP);
+                    $outI[$L['m']][$k] = ($outI[$L['m']][$k] ?? 0.0) + max(0.0, $restI);
                 }
             }
         }
@@ -140,7 +176,7 @@ final class ProfitShare
             }
             $touch($mid);
         }
-        foreach ($out as $mid => $_) {
+        foreach ($outP as $mid => $_) {
             $touch($mid);
         }
 
@@ -152,6 +188,7 @@ final class ProfitShare
                 continue;
             }
             $poolTotal += $base * ($saverPct + $borrowerPct);
+            $out = $excel && $k >= self::EXCEL_BASIS_SWITCH_CYCLE ? $outI : $outP;
             $sumS = 0.0;
             $sumB = 0.0;
             foreach ($balance as $b) {
@@ -160,7 +197,7 @@ final class ProfitShare
             foreach ($out as $o) {
                 $sumB += $o[$k] ?? 0.0;
             }
-            if ($sumS > 0) {
+            if ($sumS > 0 && !($excel && $k === self::EXCEL_SKIP_SAVER_CYCLE)) {
                 foreach ($balance as $mid => $b) {
                     $members[$mid]['saver_gross'] += max(0, $b[$k]) / $sumS * $base * $saverPct;
                 }
@@ -184,7 +221,7 @@ final class ProfitShare
         unset($m);
 
         return [
-            'period_id' => $periodId, 'as_of' => $asOf > 0 ? (string) $months[$asOf - 1]['month_date'] : null, 'months' => $n,
+            'period_id' => $periodId, 'as_of' => $asOf > 0 ? (string) $months[$asOf - 1]['month_date'] : null, 'months' => $n, 'excel' => $excel,
             'interest_pool' => $poolTotal, 'undistributed' => $undistributed, 'members' => $members,
         ];
     }

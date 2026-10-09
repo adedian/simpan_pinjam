@@ -39,8 +39,9 @@ Pencatat tidak boleh memvalidasi transaksinya sendiri. Matriks izin: `config/per
 ## Formulir cetak
 Dari **Laporan Per Anggota** (kartu anggota, atau tombol "Cetak semua formulir" untuk satu regu/semua anggota):
 **Rekap Pinjaman** dan **Tabungan Hari Raya**, A4 tegak, mengikuti formulir Excel koperasi. Bagi hasil di formulir
-tabungan adalah *perkiraan* yang dihitung dari transaksi disetujui dan jadwal cicilan (`services/ProfitShare.php`);
-belum dikurangi sisa pinjaman. Nyalakan "Background graphics" di kotak cetak peramban agar warna kepala tabel ikut.
+tabungan adalah *perkiraan* yang angkanya sama persis dengan Excel koperasi (`services/ProfitShare.php`: tiap pinjaman
+dianggap dibayar sesuai jadwal; penyesuaian bendahara dicatat lewat `php database/tools/plan_adjust.php`); belum
+dikurangi sisa pinjaman. Nyalakan "Background graphics" di kotak cetak peramban agar warna kepala tabel ikut.
 
 **Unduhan** (Head dan Pemeriksa) berformat **Excel (.xlsx)**, bukan CSV: formulir per anggota atau semua anggota
 (satu lembar per jenis formulir, tata letak dan warna seperti template), serta enam laporan rekap dan audit log dengan

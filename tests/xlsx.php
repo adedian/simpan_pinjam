@@ -116,5 +116,5 @@ if ($failed === []) {
     echo "Penulis Excel: {$passed} lulus, 0 gagal.\n";
     exit(0);
 }
-echo "Penulis Excel: {$passed} lulus, " . count($failed) . " GAGAL.\n";
+echo "Penulis Excel: {$passed} lulus, " . count($failed) . " gagal.\n";
 exit(1);

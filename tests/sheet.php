@@ -182,7 +182,7 @@ check('tampilan tabungan: judul, ringkasan, dan total di terima', str_contains($
 check('tampilan tabungan: aktif per bulan mulai', str_contains($htmlT, 'Maret 2026'));
 $htmlG = View::include('partials/sheet-tabungan', ['sheet' => MemberSheet::build($head, 3)]);
 check('tampilan: nama dengan HTML diloloskan (tidak ada tag mentah)', !str_contains($htmlG, '<b>Gama') && str_contains($htmlG, '&lt;b&gt;Gama'));
-check('tampilan: perkiraan diberi keterangan, bukan disajikan sebagai pasti', str_contains($htmlT, 'perkiraan') && str_contains($htmlT, 'April 2026'));
+check('tampilan: bagi hasil diberi keterangan perkiraan mengikuti Excel, belum dikurangi sisa pinjaman', str_contains($htmlT, 'perkiraan mengikuti perhitungan Excel') && str_contains($htmlT, 'Belum dikurangi sisa pinjaman'));
 check('helper: sheet_date dan sheet_num', sheet_date('2026-03-07') === '7-Mar-26' && sheet_date(null) === '-' && sheet_num(0) === '-' && sheet_num(1234567) === '1.234.567');
 
 // Unduhan Excel: tata letak mengikuti formulir (lihat SheetWorkbook)
@@ -228,5 +228,5 @@ if ($failed === []) {
     echo "Formulir cetak dan bagi hasil: {$passed} lulus, 0 gagal.\n";
     exit(0);
 }
-echo "Formulir cetak dan bagi hasil: {$passed} lulus, " . count($failed) . " GAGAL.\n";
+echo "Formulir cetak dan bagi hasil: {$passed} lulus, " . count($failed) . " gagal.\n";
 exit(1);

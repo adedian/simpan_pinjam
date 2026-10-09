@@ -60,6 +60,7 @@ final class Audit
         'REPORT_EXPORTED'     => ['Laporan diunduh', 'laporan'],
         'AUDIT_EXPORTED'      => ['Audit log diunduh', 'laporan'],
         'IMPOR_EXCEL'         => ['Impor data dari Excel', 'master'],
+        'PLAN_ADJUSTED'       => ['Penyesuaian rencana pembayaran (bagi hasil)', 'master'],
     ];
 
     /** @var array<string,string> */
