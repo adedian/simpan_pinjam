@@ -1296,6 +1296,17 @@ $auditDenied = $audits('ACCESS_DENIED_SCOPE');
 check('laporan/anggota: Ketua Regu Alfa tidak bisa membuka anggota Beta (404 sama dengan tidak ada, tercatat); anggota tidak ada 404', $sa->get('/laporan/anggota/' . $mid(4))['status'] === 404 && $sa->get('/laporan/anggota/99999999')['status'] === 404 && $audits('ACCESS_DENIED_SCOPE') === $auditDenied + 1);
 check('laporan/anggota: Ketua Regu Alfa hanya mendaftar anggota regunya', $has($sa->get('/laporan/anggota'), 'Anggota Alfa Dua') && !$has($sa->last, 'Anggota Beta Dua'));
 
+// formulir cetak per anggota (Rekap Pinjaman, Tabungan Hari Raya)
+$fPinjam  = $sh->get('/laporan/anggota/' . $mid(2) . '/pinjaman');
+$fTabung  = $sh->get('/laporan/anggota/' . $mid(2) . '/tabungan');
+check('laporan/formulir: Rekap Pinjaman dan Tabungan Hari Raya satu anggota (judul, nama, kolom, ringkasan, tombol cetak)', $fPinjam['status'] === 200 && $has($fPinjam, 'REKAP PINJAMAN') && $has($fPinjam, 'Anggota Alfa Dua') && $has($fPinjam, 'BAYAR ANGSURAN') && $has($fPinjam, 'SISA PINJAMAN') && $has($fPinjam, 'data-print') && $fTabung['status'] === 200 && $has($fTabung, 'Tabungan Hari Raya') && $has($fTabung, 'Bagi Hasil Tabungan') && $has($fTabung, 'Total di Terima') && $has($fTabung, 'data-print'));
+$deniedBefore = $audits('ACCESS_DENIED_SCOPE');
+check('laporan/formulir: Ketua Regu Alfa tidak bisa membuka formulir anggota Beta (404 sama dengan tidak ada, tercatat); anggota tidak ada 404', $sa->get('/laporan/anggota/' . $mid(4) . '/pinjaman')['status'] === 404 && $sa->get('/laporan/anggota/' . $mid(4) . '/tabungan')['status'] === 404 && $sa->get('/laporan/anggota/99999999/pinjaman')['status'] === 404 && $audits('ACCESS_DENIED_SCOPE') === $deniedBefore + 2);
+check('laporan/formulir: jenis formulir ngawur 404; tamu dialihkan ke login; Anggota biasa 403', $sh->get('/laporan/anggota/' . $mid(2) . '/lain')['status'] === 404 && $sh->get('/laporan/anggota/cetak/lain')['status'] === 404 && $guestRep->get('/laporan/anggota/' . $mid(2) . '/pinjaman')['status'] === 302 && $guestRep->get('/laporan/anggota/cetak/tabungan')['status'] === 302 && $sm->get('/laporan/anggota/' . $mid(2) . '/tabungan')['status'] === 403 && $sm->get('/laporan/anggota/cetak/pinjaman')['status'] === 403);
+check('laporan/formulir: cetak massal Head memuat semua regu, Ketua Regu Alfa hanya regunya, saringan nama berlaku', $has($sh->get('/laporan/anggota/cetak/tabungan'), 'Anggota Alfa Dua') && $has($sh->last, 'Anggota Beta Dua') && $has($sa->get('/laporan/anggota/cetak/pinjaman'), 'Anggota Alfa Dua') && !$has($sa->last, 'Anggota Beta Dua') && !$has($sh->get('/laporan/anggota/cetak/tabungan?q=Alfa'), 'Anggota Beta Dua') && $has($sh->get('/laporan/anggota/cetak/pinjaman?q=zzzz-tidak-ada'), 'Tidak ada anggota yang cocok'));
+check('laporan/formulir: kartu anggota dan daftar anggota menautkan ke formulir; menu "Laporan Per Anggota" tetap menyala', $has($kartuH, '/pinjaman"') && $has($kartuH, '/tabungan"') && $has($sh->get('/laporan/anggota'), '/laporan/anggota/cetak/pinjaman') && $has($sh->last, '/laporan/anggota/cetak/tabungan') && $has($sh->get('/laporan/anggota/cetak/pinjaman'), 'aria-current="page"'));
+check('laporan/formulir: nama anggota dan isian pencarian diloloskan (XSS)', !$has($sh->get('/laporan/anggota/cetak/tabungan?q=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)') && $has($sh->last, '&lt;script&gt;alert(1)&lt;/script&gt;'));
+
 // unduhan CSV
 $auditExport = $audits('REPORT_EXPORTED');
 $csvH = $sh->get('/laporan/simpanan/unduh');
@@ -1621,7 +1632,7 @@ $serverError = static fn (array $r): bool => $r['status'] >= 500 || (bool) preg_
 
 // -- 13a. CSRF: setiap route pengubah-data menolak permintaan tanpa token, walau sesi sah
 preg_match_all("/\\\$r->(get|post)\\('([^']+)'/", (string) file_get_contents(BASE_PATH . '/config/routes.php'), $rm, PREG_SET_ORDER);
-$concrete = static fn (string $p): string => (string) preg_replace(['/\{id:\\\\d\+\}/', '/\{key:\[a-z\]\+\}/'], ['1', 'simpanan'], $p);
+$concrete = static fn (string $p): string => (string) preg_replace(['/\{id:\\\\d\+\}/', '/\{key:\[a-z\]\+\}/', '/\{kind:pinjaman\|tabungan\}/'], ['1', 'simpanan', 'pinjaman'], $p);
 $routeList = [];
 foreach ($rm as [, $method, $pattern]) {
     $routeList[strtoupper($method)][] = $concrete($pattern);
@@ -1951,6 +1962,11 @@ $matrix = [
     ['/anggota/' . $anggotaBeta,                'ok', 'ok', 'x',  'ok', 'r'],   // anggota regu Beta (= pengguna anggota4)
     ['/laporan/anggota/' . $ketuaPeriksa,       'ok', 'ok', 'ok', 'x',  'r'],
     ['/laporan/anggota/' . $anggotaBeta,        'ok', 'ok', 'x',  'x',  'r'],
+    ['/laporan/anggota/' . $ketuaPeriksa . '/pinjaman', 'ok', 'ok', 'ok', 'x', 'r'],
+    ['/laporan/anggota/' . $ketuaPeriksa . '/tabungan', 'ok', 'ok', 'ok', 'x', 'r'],
+    ['/laporan/anggota/' . $anggotaBeta . '/tabungan',  'ok', 'ok', 'x',  'x', 'r'],
+    ['/laporan/anggota/cetak/pinjaman',         'ok', 'ok', 'ok', 'x',  'r'],
+    ['/laporan/anggota/cetak/tabungan',         'ok', 'ok', 'ok', 'x',  'r'],
     ['/transaksi/' . $newId,                    'ok', 'ok', 'ok', 'x',  'r'],   // transaksi anggota regu Alfa
     ['/master/anggota/' . $ketuaPeriksa . '/ubah', 'ok', 'x', 'x',  'x',  'r'],
     ['/master/ketua-regu/1/ubah',               'ok', 'x',  'x',  'x',  'r'],

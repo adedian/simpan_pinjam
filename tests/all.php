@@ -27,7 +27,7 @@ foreach (array_slice($argv, 1) as $a) {
         $opts[$m[1]] = $m[2] ?? true;
     }
 }
-$all = ['run', 'db', 'import', 'auth', 'master', 'saving', 'loan', 'payment', 'validation', 'reversal', 'dashboard', 'report', 'audit', 'live', 'ops', 'security', 'concurrency', 'simulation', 'http', 'perf'];
+$all = ['run', 'db', 'import', 'auth', 'master', 'saving', 'loan', 'payment', 'validation', 'reversal', 'dashboard', 'report', 'sheet', 'audit', 'live', 'ops', 'security', 'concurrency', 'simulation', 'http', 'perf'];
 $heavy = ['simulation', 'concurrency', 'ops'];
 $suites = array_values(array_filter($all, static fn (string $s): bool => $s !== 'perf' || isset($opts['perf'])));
 if (isset($opts['fast'])) {

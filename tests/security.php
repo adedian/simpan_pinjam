@@ -58,7 +58,8 @@ $sqlReviewed = [
     'services/LiveFeed.php' => ['ValidationService', 'self'],   // konstanta kelas
     'services/LoanService.php' => ['$tenor'],             // (int) $data['tenor']
     'services/ReportService.php' => ['$column', '$mIn', '$pIn', '$in', '$from', '$w', '$scope', 'implode', '$mScope'],   // kolom divalidasi regex; IN() dari intval
-    'services/Scope.php' => ['$memberColumn'],            // divalidasi regex ^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$
+    'services/MemberSheet.php' => ['$scope', '$in'],      // $scope dari ReportService::memberCondition (potongan tetap + parameter ?); $in = deretan "?,?" dari jumlah id
+    'services/Scope.php' => ['$memberColumn'],           // divalidasi regex ^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$
     'services/ValidationService.php' => ['self'],         // konstanta kelas HEAD_RELATED_SQL
 ];
 

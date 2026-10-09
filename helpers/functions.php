@@ -88,3 +88,17 @@ function clean_text(mixed $value): string
     $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string) $value) ?? '';
     return trim(preg_replace('/\s+/u', ' ', $text) ?? '');
 }
+
+/** Tanggal gaya formulir Excel: "2026-03-07" -> "7-Mar-26" (singkatan bulan tetap, tidak bergantung locale). */
+function sheet_date(?string $date): string
+{
+    static $abbr = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    $ts = $date === null ? false : strtotime($date);
+    return $ts === false ? '-' : (int) date('j', $ts) . '-' . $abbr[(int) date('n', $ts)] . '-' . date('y', $ts);
+}
+
+/** Angka formulir: nol tampil "-" (seperti Excel), selain itu pemisah ribuan titik. */
+function sheet_num(int $amount): string
+{
+    return $amount === 0 ? '-' : \App\Helpers\Money::format($amount, false);
+}

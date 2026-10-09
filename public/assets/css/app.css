@@ -579,3 +579,59 @@ textarea.input { resize: vertical; min-height: 84px; }
     a { color: inherit; text-decoration: none; }
     .report__stamp { display: block; }
 }
+
+/* ---- Formulir cetak per anggota: Rekap Pinjaman dan Tabungan Hari Raya (meniru formulir Excel koperasi) ----
+   Kertas selalu putih berhuruf hitam, apa pun tema aplikasi. */
+.sheet { --sheet-line: #202020; --sheet-blue: #c9e2f6; --sheet-peach: #fbe3d6; box-sizing: border-box; width: 100%; background: #fff; color: #000; border: 1px solid var(--sheet-line); font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif; font-size: 14px; line-height: 1.25; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.sheet--pinjaman { max-width: 840px; }
+.sheet--tabungan { max-width: 360px; }
+.sheet__title { margin: 0; padding: 8px 10px 4px; text-align: center; font-size: 1.4em; font-weight: 700; letter-spacing: 0; }
+.sheet__title--underline { font-size: 1.05em; text-decoration: underline; }
+.sheet__meta { display: grid; grid-template-columns: max-content 1fr; column-gap: 0; margin: 0; padding: 4px 8px 8px; font-size: 1.15em; }
+.sheet__meta dt { margin: 0; padding-right: 2.2em; font-weight: 700; }
+.sheet__meta dd { margin: 0; }
+.sheet--pinjaman .sheet__meta dd::before { content: ":\00a0\00a0"; font-weight: 700; margin-left: -1.6em; margin-right: .3em; }
+.sheet--tabungan .sheet__meta { font-size: .95em; padding-bottom: 2px; }
+.sheet--tabungan .sheet__meta dt { font-weight: 400; padding-right: 1.4em; }
+.sheet__active { margin: 0; padding: 0 8px 6px; text-align: right; font-style: italic; font-size: .95em; }
+.sheet__active span { text-decoration: underline; }
+.sheet__table { width: 100%; border-collapse: collapse; }
+.sheet__table th, .sheet__table td { border: 1px solid var(--sheet-line); padding: 2px 6px; vertical-align: middle; }
+.sheet__table thead th { text-align: center; font-weight: 700; padding: 5px 6px; }
+.sheet--pinjaman .sheet__table { font-size: 1.05em; }
+.sheet__table--blue thead th, .sheet__table--blue .sheet__sum td { background: var(--sheet-blue); }
+.sheet__table--peach thead th { background: var(--sheet-peach); }
+.sheet__no { width: 2.8em; text-align: center; }
+.sheet__date { text-align: center; white-space: nowrap; }
+.sheet__num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sheet__text { text-align: left; }
+.sheet__note-col { min-width: 9em; }
+.sheet__sum td { font-weight: 700; padding-top: 4px; padding-bottom: 4px; }
+.sheet__sum td:first-child { text-align: center; }
+.sheet__sum td.sheet__num { text-align: right; }
+.sheet__sub td { font-style: italic; }
+.sheet__sub td:first-child { text-align: center; }
+.sheet__sum--grand td { font-size: 1.05em; }
+.sheet__foot { margin: 0; padding: 4px 8px 6px; color: #444; font-size: .72em; font-style: italic; border-top: 1px solid var(--sheet-line); }
+.sheet-grid { display: grid; gap: 18px; }
+.sheet-grid--pinjaman { grid-template-columns: minmax(0, 1fr); }
+.sheet-grid--tabungan { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
+.sheet-cell { min-width: 0; overflow-x: auto; }
+.sheet--pinjaman .sheet__table { min-width: 560px; }
+
+@media print {
+    @page sheet { size: A4 portrait; margin: 10mm; }
+    .sheet-page { page: sheet; }
+    .sheet-grid { gap: 8mm; }
+    .sheet-grid--pinjaman { grid-template-columns: minmax(0, 1fr); }
+    .sheet-grid--tabungan { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .sheet-cell { overflow: visible; break-inside: avoid; }
+    .sheet { font-size: 10.5px; max-width: none; }
+    .sheet--pinjaman { font-size: 11px; }
+    .sheet--pinjaman .sheet__table { min-width: 0; }
+    .sheet__table th, .sheet__table td { border: 1px solid var(--sheet-line) !important; background-clip: padding-box; padding: 1.5px 5px; }
+    .sheet__table--blue thead th, .sheet__table--blue .sheet__sum td { background: var(--sheet-blue) !important; }
+    .sheet__table--peach thead th { background: var(--sheet-peach) !important; }
+    .sheet__table td { background: #fff; }
+    .sheet__table--blue .sheet__sum td { background: var(--sheet-blue) !important; }
+}

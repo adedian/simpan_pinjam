@@ -36,6 +36,12 @@ milik koperasi dan tidak ikut repositori.
 
 Pencatat tidak boleh memvalidasi transaksinya sendiri. Matriks izin: `config/permissions.php`.
 
+## Formulir cetak
+Dari **Laporan Per Anggota** (kartu anggota, atau tombol "Cetak semua formulir" untuk satu regu/semua anggota):
+**Rekap Pinjaman** dan **Tabungan Hari Raya**, A4 tegak, mengikuti formulir Excel koperasi. Bagi hasil di formulir
+tabungan adalah *perkiraan* yang dihitung dari transaksi disetujui dan jadwal cicilan (`services/ProfitShare.php`);
+belum dikurangi sisa pinjaman. Nyalakan "Background graphics" di kotak cetak peramban agar warna kepala tabel ikut.
+
 ## Struktur
 ```
 config/       rute, menu, izin, pengaturan        core/         inti (router, DB, sesi, CSRF, HTTPS)

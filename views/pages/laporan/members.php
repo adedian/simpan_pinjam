@@ -1,6 +1,11 @@
 <section class="card">
     <div class="card__head">
         <h2 class="card__title">Laporan per anggota <span class="muted">· <?= (int) $pager['total'] ?></span></h2>
+        <div class="actions">
+            <?php $keep = http_build_query(array_filter(['q' => $filters['q'], 'regu' => $filters['team'] > 0 ? (string) $filters['team'] : ''], static fn (string $v): bool => $v !== '')); ?>
+            <a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/cetak/pinjaman' . ($keep !== '' ? '?' . $keep : ''))) ?>">Cetak semua formulir pinjaman</a>
+            <a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/cetak/tabungan' . ($keep !== '' ? '?' . $keep : ''))) ?>">Cetak semua formulir tabungan</a>
+        </div>
     </div>
     <p class="muted">Pilih anggota untuk membuka kartu anggota: tabungan per bulan, pinjaman beserta jadwal cicilan, dan seluruh transaksinya. Siap dicetak.</p>
 

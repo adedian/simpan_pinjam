@@ -95,6 +95,33 @@ final class ReportController extends BaseController
     }
 
     /**
+     * Formulir cetak (Rekap Pinjaman / Tabungan Hari Raya) satu anggota. Di luar cakupan = 404 yang sama dengan tidak ada.
+     * @param array<string,string> $params
+     */
+    public function sheet(Request $request, array $params = []): Response
+    {
+        $user  = Auth::user();
+        $id    = (int) $params['id'];
+        $sheet = \App\Services\MemberSheet::build($user, $id);
+        if ($sheet === null) {
+            if (\App\Models\Member::exists($id)) {
+                AuditLog::record($request, $user, 'ACCESS_DENIED_SCOPE', 'member', $id, null, null, ['path' => $request->path]);
+            }
+            $this->abort(404);
+        }
+        return $this->sheetView($request, (string) $params['kind'], [$sheet], $sheet, ReportService::filters([], $user), []);
+    }
+
+    /** Formulir cetak massal: semua anggota dalam cakupan, bisa disaring regu atau nama. @param array<string,string> $params */
+    public function sheets(Request $request, array $params = []): Response
+    {
+        $user = Auth::user();
+        $f    = ReportService::filters($request->query, $user);
+        $teams = ReportService::level($user) === ReportService::ALL ? ReportService::teams() : [];
+        return $this->sheetView($request, (string) $params['kind'], \App\Services\MemberSheet::buildMany($user, $f), null, $f, $teams);
+    }
+
+    /**
      * Unduh CSV. Hanya report.export; tercatat di audit log (siapa, laporan apa, saringan, berapa baris).
      * @param array<string,string> $params
      */
@@ -130,6 +157,27 @@ final class ReportController extends BaseController
     }
 
     // ------------------------------------------------------------------ bantu
+
+    /**
+     * @param array<int,array<string,mixed>> $sheets
+     * @param array<string,mixed>|null $single
+     * @param array<string,mixed> $filters
+     * @param array<int,array{id:int,name:string}> $teams
+     */
+    private function sheetView(Request $request, string $kind, array $sheets, ?array $single, array $filters, array $teams): Response
+    {
+        $label = $kind === 'pinjaman' ? 'Rekap Pinjaman' : 'Tabungan Hari Raya';
+        $keep  = array_filter(['regu' => $filters['team'] > 0 ? (string) $filters['team'] : '', 'q' => $filters['q']], static fn (string $v): bool => $v !== '');
+        return $this->view($request, 'laporan/lembar', [
+            'title'   => $label . ($single !== null ? ' · ' . $single['member']['name'] : ' · semua anggota'),
+            'kind'    => $kind,
+            'sheets'  => $sheets,
+            'single'  => $single,
+            'filters' => $filters,
+            'teams'   => $teams,
+            'query'   => http_build_query($keep),
+        ]);
+    }
 
     private function table(Request $request, string $key): Response
     {

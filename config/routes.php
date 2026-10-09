@@ -103,6 +103,9 @@ return static function (Router $r): void {
     $r->get('/laporan/regu', [ReportController::class, 'regu'], ['auth', 'can:report.view.global']);
     $r->get('/laporan/anggota', [ReportController::class, 'members'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/anggota/{id:\d+}', [ReportController::class, 'member'], ['auth', 'can:report.view.global|report.view.team']);
+    // Formulir cetak per anggota (Rekap Pinjaman, Tabungan Hari Raya): satu anggota, atau massal per regu/pencarian.
+    $r->get('/laporan/anggota/{id:\d+}/{kind:pinjaman|tabungan}', [ReportController::class, 'sheet'], ['auth', 'can:report.view.global|report.view.team']);
+    $r->get('/laporan/anggota/cetak/{kind:pinjaman|tabungan}', [ReportController::class, 'sheets'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/{key:[a-z]+}/unduh', [ReportController::class, 'download'], ['auth', 'can:report.export']);
 
     // Audit log (Head dan Pemeriksa). Hanya baca; unduhan butuh report.export juga (dicek di controller) dan tercatat.
