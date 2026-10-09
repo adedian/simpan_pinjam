@@ -1,15 +1,49 @@
+# --- Konfigurasi & rahasia ---
 .env
+.env.*
+!.env.example
+storage/credentials-*.txt
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12
+
+# --- Data runtime (isi dilacak hanya .gitkeep) ---
 storage/logs/*
 storage/sessions/*
 storage/cache/*
+storage/backups/*
 !storage/**/.gitkeep
-database/import/*.json
-.env.testing
-storage/credentials-*.txt
 
-# Berkas lokal / sensitif
+# --- Data anggota & keuangan (sumber Excel, hasil ekstraksi, dump DB) ---
+database/import/*.json
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.sql.gz
+*.sql.sha256
+*.sha256
+*.dump
+*.bak
+
+# --- Berkas lokal / sensitif ---
 .claude/
 docs/01-analisis-phase1.md
 
-storage/backups/*
-!storage/backups/.gitkeep
+# --- Dependensi & hasil build ---
+/node_modules/
+/vendor/
+__pycache__/
+*.pyc
+
+# --- Editor & sistem operasi ---
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
