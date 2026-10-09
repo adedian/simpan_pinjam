@@ -58,5 +58,3 @@ ke database sungguhan. Butuh `.env.testing`.
 ## Cadangan
 `php database/tools/backup.php` (tambahkan `--prove` untuk membuktikan cadangan bisa dipulihkan),
 `php database/tools/restore.php --file=...` (ke database baru). Jadwalkan dan simpan salinan di luar komputer.
-
-## Dokumentasi
