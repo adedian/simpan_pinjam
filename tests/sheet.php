@@ -223,6 +223,22 @@ $ps2 = ProfitShare::compute($period);
 check('koreksi: simpanan yang dibalik tidak muncul di formulir (masuk 0, total 0)', $sheetC['saving']['rows'][1]['in'] === 0 && $sheetC['saving']['total'] === 0);
 check('koreksi: bagi hasil C jadi 0 dan seluruh pool tetap terbagi (A dan B menerima lebih)', $ps2['members'][3]['saver'] === 0 && abs($ps2['undistributed']) < 0.001 && $ps2['members'][2]['saver'] > 8957);
 
+// Keterangan: dua pinjaman satu anggota, pembayaran sebagian, dan teks panjang tidak meluber di Excel.
+// D (id 4): L1 pokok 1.000.000 tenor 2 (cicilan 520.000 x 2, jatuh tempo bln 2 dan 3); L2 pokok 500.000 tenor 1 (cicilan 510.000, bln 2).
+// Bln 2: bayar L1 #1 penuh dan L2 #1 hanya 80.000 (sebagian). Bln 3: L2 #1 dilunasi 430.000.
+$d1 = loan(4, 2, 1000000, 2, 40000, $mo[1], '2026-03-05', [$mo[2], $mo[3]], [520000, 520000]);
+$d2 = loan(4, 2, 500000, 1, 10000, $mo[1], '2026-03-05', [$mo[2]], [510000]);
+payment(4, 2, $mo[2], '2026-04-04', $d1[0], 520000);
+payment(4, 2, $mo[2], '2026-04-04', $d2[0], 80000);
+payment(4, 2, $mo[3], '2026-05-01', $d2[0], 430000);
+$notesD = array_column(MemberSheet::build($head, 4)['loan']['rows'], 'note');
+check('keterangan: tenor dua pinjaman satu bulan digabung ("Tenor 2 & 1 bulan")', $notesD[0] === 'Tenor 2 & 1 bulan');
+check('keterangan: cicilan dua pinjaman dibedakan per pinjaman (pokok) dan yang baru terbayar sebagian ditandai', $notesD[1] === 'Pinj. 1.000.000: cicilan ke-1; Pinj. 500.000: cicilan ke-1 (sebagian)');
+check('keterangan: pelunasan sisa cicilan yang tadinya sebagian tidak lagi ditandai sebagian', $notesD[2] === 'Cicilan ke-1' && $notesD[3] === '');
+$wbD = xlsx_read(SheetWorkbook::build([MemberSheet::build($head, 4)]));
+$lpD = $wbD['sheets']['Rekap Pinjaman'];
+check('excel: kolom Keterangan lebar (38) dan teks panjang diberi tinggi baris agar membungkus, bukan meluber; teks pendek memakai tinggi bawaan', ($lpD['cols'][7] ?? 0) >= 38.0 && ($lpD['heights'][7] ?? 0) >= 30.0 && !isset($lpD['heights'][6]) && xlsx_v($lpD, 'G7') === $notesD[1]);
+
 echo "\n";
 if ($failed === []) {
     echo "Formulir cetak dan bagi hasil: {$passed} lulus, 0 gagal.\n";

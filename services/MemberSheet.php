@@ -92,18 +92,29 @@ final class MemberSheet
             $loans[(int) $r['member_id']][(int) $r['period_month_id']] = ['interest' => (int) $r['interest'], 'tenors' => array_map('intval', explode(',', (string) $r['tenors']))];
         }
 
-        // Nomor cicilan yang dilunasi (bersih) tiap bulan, untuk kolom Keterangan.
-        $seqs = [];
+        // Cicilan yang dibayar (bersih) tiap bulan per pinjaman, untuk kolom Keterangan. Cicilan yang baru terbayar sebagian
+        // pada bulan itu (kumulatif sampai bulan itu masih kurang dari tagihannya) ditandai "(sebagian)".
+        $seqs = [];   // anggota => bulan => pinjaman => ['p' => pokok, 'items' => [[seq, sebagian]]]
+        $cum = [];
         foreach (Database::select(
-            "SELECT t.member_id, t.period_month_id, li.seq, SUM(ip.amount) AS a
-             FROM installment_payments ip JOIN loan_installments li ON li.id = ip.installment_id
+            "SELECT t.member_id, t.period_month_id, li.id AS inst, li.loan_id, ln.principal, li.seq, li.amount_due, SUM(ip.amount) AS a
+             FROM installment_payments ip JOIN loan_installments li ON li.id = ip.installment_id JOIN loans ln ON ln.id = li.loan_id
              JOIN transactions t ON t.id = ip.transaction_id AND t.status = 'DISETUJUI' AND t.deleted_at IS NULL
              JOIN period_months pm ON pm.id = t.period_month_id
              WHERE pm.period_id = ? AND t.member_id IN ({$in})
-             GROUP BY t.member_id, t.period_month_id, li.seq HAVING SUM(ip.amount) > 0 ORDER BY li.seq",
+             GROUP BY t.member_id, t.period_month_id, pm.month_date, li.id, li.loan_id, ln.principal, li.seq, li.amount_due
+             ORDER BY pm.month_date, li.loan_id, li.seq",
             array_merge([$periodId], $ids)
         ) as $r) {
-            $seqs[(int) $r['member_id']][(int) $r['period_month_id']][] = (int) $r['seq'];
+            $inst = (int) $r['inst'];
+            $cum[$inst] = ($cum[$inst] ?? 0) + (int) $r['a'];
+            if ((int) $r['a'] <= 0) {
+                continue;
+            }
+            $g = &$seqs[(int) $r['member_id']][(int) $r['period_month_id']][(int) $r['loan_id']];
+            $g['p'] = (int) $r['principal'];
+            $g['items'][] = [(int) $r['seq'], $cum[$inst] < (int) $r['amount_due']];
+            unset($g);
         }
 
         $share = ProfitShare::compute($periodId);
@@ -139,7 +150,11 @@ final class MemberSheet
                     $notes[] = 'Tenor ' . implode(' & ', $loans[$id][$pid]['tenors']) . ' bulan';
                 }
                 if (isset($seqs[$id][$pid])) {
-                    $notes[] = 'Cicilan ke-' . implode(' & ', $seqs[$id][$pid]);
+                    $fmt = static fn (array $items): string => implode(' & ', array_map(static fn (array $i): string => $i[0] . ($i[1] ? ' (sebagian)' : ''), $items));
+                    $groups = $seqs[$id][$pid];
+                    $notes[] = count($groups) === 1
+                        ? 'Cicilan ke-' . $fmt(reset($groups)['items'])
+                        : implode('; ', array_map(static fn (array $g): string => 'Pinj. ' . \App\Helpers\Money::format($g['p'], false) . ': cicilan ke-' . $fmt($g['items']), $groups));
                 }
                 $loanRows[] = ['no' => $i + 1, 'date' => $date, 'pokok' => $pokok, 'bunga' => $bunga, 'bayar' => $bayar, 'sisa' => $remain, 'note' => implode('; ', $notes)];
             }

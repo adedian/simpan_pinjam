@@ -8,7 +8,7 @@ declare(strict_types=1);
  * xlsx_read($bytes) => [
  *   'ok' => bool, 'error' => ?string, 'parts' => [nama berkas], 'styles' => jumlah <xf>,
  *   'sheets' => [nama => ['cells' => ['A1' => ['v' => nilai, 'type' => 'str'|'num'|'empty', 'formula' => bool, 's' => id gaya]],
- *                         'merges' => ['A1:G1'], 'breaks' => [baris], 'orientation' => string, 'freeze' => int, 'cols' => [nomor => lebar]]]
+ *                         'merges' => ['A1:G1'], 'breaks' => [baris], 'heights' => [baris => poin], 'orientation' => string, 'freeze' => int, 'cols' => [nomor => lebar]]]
  * ]
  */
 function xlsx_read(string $bytes): array
@@ -49,7 +49,11 @@ function xlsx_read(string $bytes): array
         $rid = (string) $sh->attributes('http://schemas.openxmlformats.org/officeDocument/2006/relationships')['id'];
         $ws = simplexml_load_string((string) $read('xl/' . $target[$rid]));
         $cells = [];
+        $heights = [];
         foreach ($ws->sheetData->row as $row) {
+            if (isset($row['ht'])) {
+                $heights[(int) $row['r']] = (float) $row['ht'];
+            }
             foreach ($row->c as $c) {
                 $ref = (string) $c['r'];
                 $t = (string) $c['t'];
@@ -75,7 +79,7 @@ function xlsx_read(string $bytes): array
             $cols[(int) $col['min']] = (float) $col['width'];
         }
         $out['sheets'][(string) $sh['name']] = [
-            'cells' => $cells, 'merges' => $merges, 'breaks' => $breaks, 'cols' => $cols,
+            'cells' => $cells, 'heights' => $heights, 'merges' => $merges, 'breaks' => $breaks, 'cols' => $cols,
             'orientation' => (string) $ws->pageSetup['orientation'], 'freeze' => (int) ($ws->sheetViews->sheetView->pane['ySplit'] ?? 0),
         ];
     }

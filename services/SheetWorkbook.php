@@ -13,6 +13,7 @@ final class SheetWorkbook
     private const BLUE = 'C9E2F6';
     private const PEACH = 'FBE3D6';
     private const PER_PAGE = 2;
+    private const NOTE_WIDTH = 38;   // lebar kolom Keterangan (karakter); teks lebih panjang membungkus ke baris berikut
 
     /**
      * @param array<int,array<string,mixed>> $sheets hasil MemberSheet
@@ -36,7 +37,7 @@ final class SheetWorkbook
             'no'     => $x->style(['border' => 'thin', 'h' => 'center']),
             'date'   => $x->style(['border' => 'thin', 'h' => 'center', 'fmt' => 'date']),
             'num'    => $x->style(['border' => 'thin', 'h' => 'right', 'fmt' => 'int']),
-            'text'   => $x->style(['border' => 'thin', 'h' => 'left']),
+            'text'   => $x->style(['border' => 'thin', 'h' => 'left', 'wrap' => true]),   // keterangan panjang membungkus, tidak meluber
             'sumBlue' => $x->style(['b' => true, 'fill' => self::BLUE, 'border' => 'thin', 'h' => 'center']),
             'sumBlueN' => $x->style(['b' => true, 'fill' => self::BLUE, 'border' => 'thin', 'h' => 'right', 'fmt' => 'int']),
             'sum'    => $x->style(['b' => true, 'border' => 'thin', 'h' => 'center']),
@@ -47,7 +48,7 @@ final class SheetWorkbook
         ];
 
         $loan = $x->sheet('Rekap Pinjaman');
-        foreach ([1 => 5, 2 => 11, 3 => 16, 4 => 13, 5 => 22, 6 => 16, 7 => 24] as $c => $w) {
+        foreach ([1 => 5, 2 => 11, 3 => 16, 4 => 13, 5 => 22, 6 => 16, 7 => self::NOTE_WIDTH] as $c => $w) {
             $loan->width($c, $w);
         }
         $save = $x->sheet('Tabungan Hari Raya');
@@ -91,6 +92,10 @@ final class SheetWorkbook
             $s->set($r, 1, (int) $row['no'], $st['no'])->set($r, 2, Xlsx::date((string) $row['date']), $st['date']);
             $s->set($r, 3, (int) $row['pokok'], $st['num'])->set($r, 4, (int) $row['bunga'], $st['num'])->set($r, 5, (int) $row['bayar'], $st['num'])->set($r, 6, (int) $row['sisa'], $st['num']);
             $s->set($r, 7, (string) $row['note'], $st['text']);
+            $lines = (int) ceil(mb_strlen((string) $row['note']) / (self::NOTE_WIDTH - 2));
+            if ($lines > 1) {
+                $s->height($r, 15.0 * $lines);   // tinggi baris eksplisit agar semua baris teks terlihat di Excel
+            }
             $r++;
         }
         $s->set($r, 1, 'SISA PINJAMAN', $st['sumBlue'])->merge($r, 1, $r, 5, $st['sumBlue']);
