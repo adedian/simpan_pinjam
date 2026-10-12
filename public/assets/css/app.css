@@ -133,6 +133,7 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 .userchip__text small { font-size: 12px; color: var(--ink-3); }
 
 .content { width: 100%; max-width: 1180px; padding: 8px 28px 32px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-content: start; }   /* minmax(0,1fr): anak lebar tidak boleh melebarkan kolom melewati layar */
+.content--wide { max-width: none; }   /* halaman tabel lebar (laporan): seluruh lebar area kerja, bukan kolom 1180px */
 
 .icon-btn {
     display: inline-grid; place-items: center; width: 44px; height: 44px;
@@ -556,15 +557,42 @@ textarea.input { resize: vertical; min-height: 84px; }
 /* ---------- Laporan (Phase 12) ---------- */
 .report__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .report__stamp, .report__note { font-size: 12.5px; }
+.report { padding: 22px 20px; }
 .table-wrap--report { max-height: 70vh; }
-.table--report { font-size: 13.5px; }
-.table--report th, .table--report td { padding: 9px 12px; white-space: nowrap; }
+/* Lebar kolom mengikuti isi: angka dan nomor tidak pernah patah, teks (nama, regu) dan judul kolom boleh turun baris.
+   Dulu semuanya nowrap, sehingga tabel 12 bulan selalu lebih lebar dari kartunya dan harus digeser ke samping. */
+.table--report { font-size: 13px; }
+.table--report th, .table--report td { padding: 8px 10px; }
+.table--report th { white-space: normal; line-height: 1.25; vertical-align: bottom; letter-spacing: .04em; }
+.table--report td.num, .table--report td:first-child { white-space: nowrap; }
+.table--report th.num { white-space: normal; }
 .table--report thead th { position: sticky; top: 0; background: var(--brand-50); z-index: 1; }
 .table--report tfoot th { background: var(--brand-50); }
 .table--report tbody tr:nth-child(even) td { background: #fbfaff; }
 .table--report td:first-child, .table--report th:first-child { position: sticky; left: 0; background: var(--surface); }
 .table--report thead th:first-child, .table--report tfoot th:first-child { background: var(--brand-50); }
 .table--report tbody tr:nth-child(even) td:first-child { background: #fbfaff; }
+
+/* Saringan laporan: kolom pencarian melebar mengisi sisa baris, pilihan seukuran isinya */
+.report .toolbar { gap: 10px 12px; }
+.toolbar__field { min-width: 0; }
+.toolbar__field--search { flex: 1 1 260px; }
+.toolbar__field--select { flex: 0 1 auto; }
+.toolbar__field--select .input { min-width: 150px; }
+.toolbar__field--date { flex: 0 0 auto; }
+@media (max-width: 1500px) {
+    .table--report { font-size: 12.5px; }
+    .table--report th, .table--report td { padding: 7px 8px; }
+}
+@media (max-width: 640px) {
+    .report { padding: 18px 14px; }
+    .report__head .actions { width: 100%; flex-wrap: nowrap; }   /* Cetak dan Unduh sebaris, masing-masing separuh lebar */
+    .report__head .actions .btn { flex: 1 1 0; }
+    .table--report td { white-space: nowrap; }   /* tabel pasti digeser di ponsel: baris tidak perlu ditinggikan oleh teks yang dipatah */
+    .report .toolbar > .toolbar__field, .report .toolbar > .btn { flex: 1 1 100%; }
+    .report .toolbar > .btn--link { flex: 0 0 auto; margin: 0 auto; }
+    .toolbar__field--select .input { width: 100%; }
+}
 
 @media print {
     @page { size: A4 landscape; margin: 12mm; }

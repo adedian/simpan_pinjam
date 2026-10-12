@@ -1279,6 +1279,7 @@ check('laporan/menu: item laporan aktif (tanpa penanda "belum dibangun")', $has(
 // isi dan cakupan
 $simH = $sh->get('/laporan/simpanan');
 check('laporan/simpanan: Head melihat semua regu; judul, periode, cap cetak, tombol cetak dan unduh', $has($simH, 'Rekap Simpanan') && $has($simH, 'Anggota Alfa Dua') && $has($simH, 'Anggota Beta Dua') && $has($simH, 'Periode Uji') && $has($simH, 'Dicetak') && $has($simH, 'data-print') && $has($simH, '/laporan/simpanan/unduh'));
+check('laporan/tata letak: tabel laporan memakai seluruh lebar area kerja (content--wide); halaman lain tetap kolom biasa', $has($simH, '<main class="content content--wide">') && $has($sh->get('/laporan/regu'), 'content--wide') && !$has($sh->get('/laporan/anggota'), 'content--wide') && $has($sh->get('/'), '<main class="content">'));
 $simA = $sa->get('/laporan/simpanan');
 check('laporan/simpanan: Ketua Regu Alfa hanya anggota regunya; tanpa tombol unduh', $has($simA, 'Anggota Alfa Dua') && !$has($simA, 'Anggota Beta Dua') && !$has($simA, 'Ketua Regu Beta') && !$has($simA, '/unduh') && $has($simA, 'data-print'));
 $simM = $sm->get('/laporan/simpanan');

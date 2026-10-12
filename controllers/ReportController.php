@@ -200,6 +200,7 @@ final class ReportController extends BaseController
 
         return $this->view($request, 'laporan/table', [
             'title'     => $report['title'],
+            'wide'      => true,   // tabel laporan lebar: pakai seluruh lebar area kerja
             'report'    => $report,
             'filters'   => $f,
             'fields'    => $this->fields($key, $f, $level),

@@ -21,7 +21,7 @@ $exportQuery = http_build_query($query);
 
     <form class="toolbar no-print" method="get" action="<?= e(url($basePath)) ?>">
         <?php foreach ($fields as $fd): $id = 'r_' . $fd['name']; ?>
-            <div>
+            <div class="toolbar__field toolbar__field--<?= e($fd['type']) ?>">
                 <label class="sr-only" for="<?= e($id) ?>"><?= e($fd['label']) ?></label>
                 <?php if ($fd['type'] === 'select'): ?>
                     <select id="<?= e($id) ?>" class="input" name="<?= e($fd['name']) ?>" title="<?= e($fd['label']) ?>">

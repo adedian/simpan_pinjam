@@ -39,7 +39,7 @@
             <?php endif; ?>
         </header>
 
-        <main class="content">
+        <main class="content<?= !empty($wide) ? ' content--wide' : '' ?>">
             <?= \App\Core\View::include('partials/flash', ['flash' => $flash ?? []]) ?>
             <?php if (($liveVersion ?? null) !== null): ?>
                 <div data-live-region data-live-version="<?= (int) $liveVersion ?>" data-live-tick="<?= e(url('/live/tick')) ?>"><?= $content ?></div>
