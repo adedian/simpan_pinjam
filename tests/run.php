@@ -200,12 +200,10 @@ check('mw can: izin tidak ada -> 403', throwsStatus(fn () => (new CanMiddleware(
 check('mw can: tak satu pun dari beberapa izin -> 403', throwsStatus(fn () => (new CanMiddleware('transaction.validate|settings.manage'))->handle(new Request('GET', '/'), $ok), 403));
 check('mw can: tanpa argumen -> 403 (gagal aman)', throwsStatus(fn () => (new CanMiddleware())->handle(new Request('GET', '/'), $ok), 403));
 
+// Penanda lama must_change_password (akun lama di database) tidak lagi memaksa apa pun.
 Auth::actingAs($mkUser(['HEAD'], true));
-$forced = $auth->handle(new Request('GET', '/'), $ok);
-check('mw auth: kata sandi sementara -> dialihkan ke ganti kata sandi', $forced->status === 302 && str_ends_with($forced->headers['Location'], '/profil/password'));
-check('mw auth: halaman ganti kata sandi tetap boleh', $pass(fn () => $auth->handle(new Request('GET', '/profil/password'), $ok)->body));
-check('mw auth: logout tetap boleh', $pass(fn () => $auth->handle(new Request('POST', '/logout'), $ok)->body));
-check('mw auth: AJAX saat wajib ganti kata sandi -> 403', $auth->handle(new Request('GET', '/api/x'), $ok)->status === 403);
+check('mw auth: penanda sandi sementara lama TIDAK memblokir halaman mana pun', $pass(fn () => $auth->handle(new Request('GET', '/'), $ok)->body) && $pass(fn () => $auth->handle(new Request('GET', '/anggota/1'), $ok)->body));
+check('mw auth: AJAX dengan penanda lama tetap lolos', $auth->handle(new Request('GET', '/api/x'), $ok)->status === 200);
 
 Auth::actingAs(null);
 check('mw can: tamu -> 403', throwsStatus(fn () => (new CanMiddleware('dashboard.view'))->handle(new Request('GET', '/'), $ok), 403));
@@ -463,7 +461,7 @@ Auth::actingAs($mkUser(['KETUA_REGU']));
 check('galat: pengguna login mendapat kerangka aplikasi untuk 403, 404, 405, 419', array_reduce([403, 404, 405, 419], static fn (bool $c, int $s): bool => $c && ErrorController::framedUser($s) !== null, true));
 check('galat: 500 dan status lain TIDAK memakai kerangka walau pengguna login (500 bisa disebabkan database)', ErrorController::framedUser(500) === null && ErrorController::framedUser(200) === null && ErrorController::framedUser(401) === null);
 Auth::actingAs($mkUser(['KETUA_REGU'], true));
-check('galat: pengguna wajib ganti kata sandi tidak mendapat kerangka (menu tidak boleh dipakai)', ErrorController::framedUser(404) === null);
+check('galat: penanda sandi sementara lama tidak menghilangkan kerangka aplikasi', ErrorController::framedUser(404) !== null);
 Auth::actingAs(null);
 check('galat: tamu tidak mendapat kerangka', ErrorController::framedUser(404) === null && ErrorController::framedUser(403) === null);
 

@@ -26,7 +26,6 @@
                     <td data-label="Status">
                         <span class="badge badge--<?= $u['is_active'] ? 'disetujui' : 'draft' ?>"><?= $u['is_active'] ? 'Aktif' : 'Nonaktif' ?></span>
                         <?php if ($u['is_locked']): ?><span class="badge badge--ditolak">Terkunci</span><?php endif; ?>
-                        <?php if ($u['must_change_password']): ?><span class="badge badge--menunggu-validasi">Sandi sementara</span><?php endif; ?>
                     </td>
                     <td class="cell-actions">
                         <a class="btn btn--secondary btn--sm" href="<?= e(url('/master/pengguna/' . (int) $u['id'] . '/ubah')) ?>">Ubah</a>

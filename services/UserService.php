@@ -15,8 +15,8 @@ final class UserService
     private const USERNAME_PATTERN = '/^[a-z0-9][a-z0-9._-]{2,29}$/';
 
     /**
-     * Buat pengguna. Kata sandi sementara dibuat acak bila tidak diberikan dan pengguna WAJIB
-     * menggantinya saat masuk pertama.
+     * Buat pengguna. Kata sandi sementara dibuat acak bila tidak diberikan; pengguna boleh langsung
+     * memakainya dan menggantinya kapan saja lewat Profil (tidak dipaksa).
      *
      * @param array<int,string> $roleCodes
      * @param array{id:?int,username:string,roles:array<int,string>}|null $actor
@@ -53,7 +53,7 @@ final class UserService
             self::assertAccessRules($pdo, $roleCodes, $memberId);
 
             try {
-                $pdo->prepare('INSERT INTO users (username, name, password_hash, member_id, must_change_password) VALUES (?,?,?,?,1)')
+                $pdo->prepare('INSERT INTO users (username, name, password_hash, member_id, must_change_password) VALUES (?,?,?,?,0)')
                     ->execute([$username, $name, PasswordPolicy::hash($password), $memberId]);
             } catch (\PDOException $e) {
                 if ($e->getCode() === '23000') {
@@ -147,7 +147,7 @@ final class UserService
     }
 
     /**
-     * Setel ulang kata sandi: kata sandi sementara baru, wajib diganti, dan SEMUA sesi akun itu mati.
+     * Setel ulang kata sandi: kata sandi sementara baru (tidak dipaksa diganti) dan SEMUA sesi akun itu mati.
      * @param array{id:int,username:string,roles:array<int,string>} $actor
      * @return string kata sandi sementara (tampilkan sekali saja)
      */
@@ -159,7 +159,7 @@ final class UserService
         $password = PasswordPolicy::generate();
         Database::transaction(static function (\PDO $pdo) use ($request, $actor, $id, $version, $password): void {
             $row = self::lock($pdo, $id, $version);
-            $pdo->prepare('UPDATE users SET password_hash = ?, must_change_password = 1, credentials_changed_at = NOW(), failed_logins = 0, locked_until = NULL WHERE id = ?')
+            $pdo->prepare('UPDATE users SET password_hash = ?, must_change_password = 0, credentials_changed_at = NOW(), failed_logins = 0, locked_until = NULL WHERE id = ?')
                 ->execute([PasswordPolicy::hash($password), $id]);
             AuditLog::record($request, $actor, 'USER_PASSWORD_RESET', 'user', $id, (string) $row['username'], null, null, $pdo);
         });

@@ -253,7 +253,7 @@ check('pengguna/reset: sesi aktif sebelum reset', Auth::user() !== null);
 $oldHash = (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']]);
 $temp = UserService::resetPassword(req(), $actor, $pem['id'], $uv($pem['id']));
 check('pengguna/reset: kata sandi sementara memenuhi kebijakan', PasswordPolicy::check($temp, 'pengguna1') === []);
-check('pengguna/reset: hash berubah, wajib ganti, kunci/gagal bersih', (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']]) !== $oldHash && (int) one('SELECT must_change_password FROM users WHERE id = ?', [$pem['id']]) === 1 && password_verify($temp, (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']])));
+check('pengguna/reset: hash berubah, TIDAK dipaksa ganti, kunci/gagal bersih', (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']]) !== $oldHash && (int) one('SELECT must_change_password FROM users WHERE id = ?', [$pem['id']]) === 0 && password_verify($temp, (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']])));
 Auth::reset();
 check('pengguna/reset: SESI LAMA akun itu langsung tidak sah', Auth::user() === null);
 check('pengguna/reset: kata sandi lama tidak berlaku, yang baru berlaku', Auth::attempt(req(), 'pengguna1', 'Contoh-Uji-2026')['ok'] === false && Auth::attempt(req(), 'pengguna1', $temp)['ok'] === true);

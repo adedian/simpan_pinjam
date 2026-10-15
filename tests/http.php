@@ -325,34 +325,34 @@ check('kunci: kata sandi benar tetap ditolak saat terkunci', str_contains($k->ge
 check('kunci: sesi lain beta yang sudah masuk tetap berfungsi (kunci hanya menahan login baru)', $beta->get('/anggota/' . $mid(4))['status'] === 200);
 $pdo->exec("UPDATE users SET locked_until = NULL, failed_logins = 0 WHERE username = 'beta'");
 
-// ---------- 8. wajib ganti kata sandi sementara ----------
+// ---------- 8. ganti kata sandi bersifat sukarela ----------
 $n = new Browser();
 $n2 = new Browser();
 $n2->login('baru');                                    // sesi lama, akan mati setelah ganti sandi
 $r = $n->login('baru');
-check('wajib-ganti: login diarahkan ke ganti kata sandi', $r['status'] === 302 && $loc($r) === '/profil/password');
-check('wajib-ganti: beranda dialihkan kembali', $n->get('/')['status'] === 302 && $loc($n->last) === '/profil/password');
-check('wajib-ganti: detail anggota juga dialihkan', $n->get('/anggota/' . $mid(2))['status'] === 302);
+check('sandi-sukarela: akun baru langsung masuk ke beranda (tidak dipaksa ganti)', $r['status'] === 302 && $loc($r) === '/');
+check('sandi-sukarela: beranda terbuka dengan menu', $n->get('/')['status'] === 200 && str_contains($n->last['body'], 'class="sidebar"'));
+check('sandi-sukarela: detail anggota terbuka', $n->get('/anggota/' . $mid(2))['status'] === 200);
 $nf = $n->get('/tidak-ada-halaman-ini');
-check('wajib-ganti: halaman galat tampil sebagai kartu tamu (tanpa menu aplikasi)', $nf['status'] === 404 && !str_contains($nf['body'], 'class="sidebar"') && str_contains($nf['body'], 'guest__card'));
+check('sandi-sukarela: halaman galat memakai kerangka aplikasi', $nf['status'] === 404 && str_contains($nf['body'], 'class="sidebar"'));
 $p = $n->get('/profil/password');
-check('wajib-ganti: halaman ganti kata sandi tampil tanpa menu', $p['status'] === 200 && !str_contains($p['body'], 'class="sidebar"'));
+check('sandi-sukarela: halaman ganti kata sandi tampil dengan menu, tanpa peringatan wajib', $p['status'] === 200 && str_contains($p['body'], 'class="sidebar"') && !str_contains($p['body'], 'masih sementara'));
 $n->post('/profil/password', ['current_password' => 'bukan-sandi-saya1', 'password' => 'Kopi-Susu-47x', 'password_confirmation' => 'Kopi-Susu-47x']);
-check('wajib-ganti: kata sandi saat ini salah ditolak', str_contains($n->get('/profil/password')['body'], 'Kata sandi saat ini salah'));
+check('sandi-sukarela: kata sandi saat ini salah ditolak', str_contains($n->get('/profil/password')['body'], 'Kata sandi saat ini salah'));
 $n->post('/profil/password', ['current_password' => PASS, 'password' => 'Kopi-Susu-47x', 'password_confirmation' => 'beda-beda-123']);
-check('wajib-ganti: konfirmasi tidak sama ditolak', str_contains($n->get('/profil/password')['body'], 'tidak sama'));
+check('sandi-sukarela: konfirmasi tidak sama ditolak', str_contains($n->get('/profil/password')['body'], 'tidak sama'));
 $n->post('/profil/password', ['current_password' => PASS, 'password' => '12345678', 'password_confirmation' => '12345678']);
-check('wajib-ganti: kata sandi lemah ditolak', str_contains($n->get('/profil/password')['body'], 'huruf dan angka') || str_contains($n->last['body'], 'umum'));
+check('sandi-sukarela: kata sandi lemah ditolak', str_contains($n->get('/profil/password')['body'], 'huruf dan angka') || str_contains($n->last['body'], 'umum'));
 $leak = $n->get('/profil/password')['body'];
-check('wajib-ganti: kata sandi tidak dikembalikan ke formulir', !str_contains($leak, '12345678') && !str_contains($leak, PASS));
+check('sandi-sukarela: kata sandi tidak dikembalikan ke formulir', !str_contains($leak, '12345678') && !str_contains($leak, PASS));
 $done = $n->post('/profil/password', ['current_password' => PASS, 'password' => 'Kopi-Susu-47x', 'password_confirmation' => 'Kopi-Susu-47x']);
-check('wajib-ganti: berhasil, kembali ke beranda', $done['status'] === 302 && $loc($done) === '/');
+check('sandi-sukarela: berhasil, kembali ke beranda', $done['status'] === 302 && $loc($done) === '/');
 $home = $n->get('/');
-check('wajib-ganti: beranda kini terbuka dan menampilkan pesan sukses', $home['status'] === 200 && str_contains($home['body'], 'Kata sandi berhasil diganti'));
-check('wajib-ganti: sesi LAIN pengguna yang sama otomatis keluar', $n2->get('/')['status'] === 302);
+check('sandi-sukarela: beranda terbuka dan menampilkan pesan sukses', $home['status'] === 200 && str_contains($home['body'], 'Kata sandi berhasil diganti'));
+check('sandi-sukarela: sesi LAIN pengguna yang sama otomatis keluar', $n2->get('/')['status'] === 302);
 $again = new Browser();
-check('wajib-ganti: kata sandi lama tidak berlaku lagi', $again->login('baru', PASS)['status'] === 302 && str_contains($again->get('/login')['body'], 'salah'));
-check('wajib-ganti: kata sandi baru berlaku', (new Browser())->login('baru', 'Kopi-Susu-47x')['status'] === 302);
+check('sandi-sukarela: kata sandi lama tidak berlaku lagi', $again->login('baru', PASS)['status'] === 302 && str_contains($again->get('/login')['body'], 'salah'));
+check('sandi-sukarela: kata sandi baru berlaku', (new Browser())->login('baru', 'Kopi-Susu-47x')['status'] === 302);
 
 // ---------- 9. logout ----------
 $o = new Browser();
@@ -527,8 +527,8 @@ check('master/pengguna: muat ulang -> kata sandi tidak tampil lagi', $secretOf($
 check('master/pengguna: kata sandi sementara tidak ada di audit/database mana pun', $count("SELECT COUNT(*) FROM audit_logs WHERE COALESCE(after_data,'') LIKE ?", ['%' . $temp . '%']) === 0);
 $nb = new Browser();
 $lr = $nb->login('bu.edit', (string) $temp);
-check('master/pengguna: akun baru bisa masuk lalu WAJIB ganti kata sandi', $lr['status'] === 302 && $loc($lr) === '/profil/password');
-check('master/pengguna: akun baru tidak bisa membuka halaman admin', $nb->get('/master/pengguna')['status'] === 302);
+check('master/pengguna: akun baru bisa masuk langsung ke beranda (tidak dipaksa ganti kata sandi)', $lr['status'] === 302 && $loc($lr) === '/');
+check('master/pengguna: akun baru tidak bisa membuka halaman admin', $nb->get('/master/pengguna')['status'] === 403);
 
 // reset kata sandi
 $ang2 = new Browser();
@@ -537,6 +537,7 @@ check('master/pengguna: anggota4 aktif sebelum reset', $ang2->get('/profil')['st
 $ul = $hd->get('/master/pengguna');
 $resetTarget = (int) $count("SELECT id FROM users WHERE username = 'anggota4'");
 $verTarget = (string) Database::pdo()->query("SELECT updated_at FROM users WHERE id = {$resetTarget}")->fetchColumn();
+sleep(1);   // sesi dibatalkan bila kredensial berubah SETELAH sesi terbit (resolusi detik); hindari detik yang sama
 $rs = $hd->post('/master/pengguna/' . $resetTarget . '/reset-password', ['_version' => $verTarget]);
 $hd->get('/master/pengguna');
 $temp2 = $secretOf($hd);

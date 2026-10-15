@@ -101,7 +101,7 @@ $pdo->exec("UPDATE transactions SET status='DISETUJUI' WHERE id={$tid}");
 $head = UserService::create('purwati', 'Purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001');
 check('user: kata sandi sementara memenuhi kebijakan', PasswordPolicy::check($head['password'], 'purwati') === []);
 $row = $pdo->query("SELECT * FROM users WHERE username='purwati'")->fetch();
-check('user: wajib ganti kata sandi di login pertama', (int) $row['must_change_password'] === 1);
+check('user: akun baru TIDAK dipaksa ganti kata sandi', (int) $row['must_change_password'] === 0);
 check('user: hash bcrypt, bukan plaintext', $row['password_hash'] !== $head['password'] && password_verify($head['password'], $row['password_hash']) && str_starts_with($row['password_hash'], '$2y$12$'));
 check('user: dua peran tersimpan', (int) one('SELECT COUNT(*) FROM user_roles WHERE user_id = ?', [$row['id']]) === 2);
 check('user: audit USER_CREATED ada', audits('USER_CREATED') === 1);
@@ -129,7 +129,7 @@ check('login: sesi menyimpan id pengguna', is_int($_SESSION['auth_id'] ?? null))
 check('login: token CSRF dirotasi', !isset($_SESSION['_csrf']));
 $u = Auth::user();
 check('login: Auth::user memuat peran, anggota, dan regu', $u['roles'] === ['HEAD', 'KETUA_REGU'] && $u['member_id'] === $mid(1) && $u['team_id'] === $teamA);
-check('login: must_change_password terbawa', $u['must_change_password'] === true);
+check('login: must_change_password tidak aktif', $u['must_change_password'] === false);
 check('login: tidak ada password_hash di profil sesi', !array_key_exists('password_hash', $u));
 check('login: audit LOGIN_SUCCESS', audits('LOGIN_SUCCESS') === 1);
 check('login: last_login_at terisi', one("SELECT last_login_at FROM users WHERE username='purwati'") !== null);
@@ -245,13 +245,13 @@ check('sandi: kata sandi saat ini salah ditolak', isset(Auth::changePassword(req
 check('sandi: sama dengan yang lama ditolak', isset(Auth::changePassword(req(), $user, $head['password'], $head['password'])['password']));
 check('sandi: lemah ditolak', isset(Auth::changePassword(req(), $user, $head['password'], '12345678')['password']));
 check('sandi: mengandung username ditolak', isset(Auth::changePassword(req(), $user, $head['password'], 'purwati-2026')['password']));
-check('sandi: belum ada yang berubah setelah penolakan', (int) one("SELECT must_change_password FROM users WHERE username='purwati'") === 1);
+check('sandi: belum ada yang berubah setelah penolakan', password_verify($head['password'], (string) one("SELECT password_hash FROM users WHERE username='purwati'")));
 check('sandi: kegagalan tercatat di audit (1 baru + yang dibuat tes pembatasan di atas)', audits('PASSWORD_CHANGE_FAILED') === 1 + $throttleFails);
 
 $otherSession = ['auth_id' => $user['id'], 'auth_issued' => time() - 30]; // sesi lain, diterbitkan lebih awal
 $errors = Auth::changePassword(req(), $user, $head['password'], 'Kopi-Susu-2026');
 check('sandi: ganti berhasil', $errors === []);
-check('sandi: hash berubah dan flag wajib-ganti padam', password_verify('Kopi-Susu-2026', (string) one("SELECT password_hash FROM users WHERE username='purwati'")) && (int) one("SELECT must_change_password FROM users WHERE username='purwati'") === 0);
+check('sandi: hash berubah dan flag wajib-ganti tetap padam', password_verify('Kopi-Susu-2026', (string) one("SELECT password_hash FROM users WHERE username='purwati'")) && (int) one("SELECT must_change_password FROM users WHERE username='purwati'") === 0);
 check('sandi: sesi ini tetap sah', Auth::user() !== null && Auth::user()['must_change_password'] === false);
 check('sandi: audit PASSWORD_CHANGED, tanpa kata sandi', audits('PASSWORD_CHANGED') === 1 && !str_contains((string) one("SELECT GROUP_CONCAT(COALESCE(after_data,'')) FROM audit_logs"), 'Kopi-Susu-2026'));
 $_SESSION = $otherSession;

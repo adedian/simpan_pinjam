@@ -38,11 +38,6 @@ final class AuthController extends BaseController
             return $this->backWithErrors('/login', ['form' => (string) $result['error']], ['username' => $username]);
         }
 
-        $user = Auth::user();
-        if ($user !== null && $user['must_change_password']) {
-            Session::forget('intended');
-            return $this->redirect('/profil/password');
-        }
         return $this->redirect(Auth::safeRedirect(Session::pull('intended')));
     }
 

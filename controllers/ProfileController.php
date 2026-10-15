@@ -24,10 +24,7 @@ final class ProfileController extends BaseController
     /** @param array<string,string> $params */
     public function showPassword(Request $request, array $params = []): Response
     {
-        $user     = Auth::user();
-        $forced   = (bool) $user['must_change_password'];
-        // Saat wajib ganti kata sandi, sembunyikan menu (semua tujuan lain dialihkan kembali ke sini).
-        return $this->view($request, 'password', ['title' => 'Ganti Kata Sandi', 'forced' => $forced], $forced ? 'guest' : 'app');
+        return $this->view($request, 'password', ['title' => 'Ganti Kata Sandi']);
     }
 
     /** @param array<string,string> $params */

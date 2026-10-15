@@ -24,7 +24,7 @@ final class ErrorController extends BaseController
 
     /**
      * Pengguna login yang boleh melihat kerangka aplikasi, atau null bila halaman harus tampil sebagai tamu
-     * (belum masuk, wajib ganti kata sandi, atau status 500 yang bisa saja disebabkan database).
+     * (belum masuk, atau status 500 yang bisa saja disebabkan database).
      *
      * @return array<string,mixed>|null
      */
@@ -38,7 +38,7 @@ final class ErrorController extends BaseController
         } catch (\Throwable $e) {
             return null;
         }
-        return $user !== null && !$user['must_change_password'] ? $user : null;
+        return $user;
     }
 
     public function show(Request $request, int $status, string $message): Response

@@ -10,12 +10,10 @@ use App\Services\Auth;
 
 /**
  * Wajib login. Untuk request AJAX/JSON dijawab 401 (bukan redirect) agar fetch() bisa menanganinya.
- * Pengguna dengan kata sandi sementara hanya boleh membuka halaman ganti kata sandi dan keluar.
+ * Mengganti kata sandi bersifat sukarela: tidak ada pengguna yang dipaksa mengganti sebelum memakai sistem.
  */
 final class AuthMiddleware extends Middleware
 {
-    private const ALLOWED_WHEN_MUST_CHANGE = ['/profil/password', '/logout'];
-
     public function handle(Request $request, callable $next): Response
     {
         $user = Auth::user();
@@ -30,11 +28,6 @@ final class AuthMiddleware extends Middleware
             return Response::redirect('/login');
         }
 
-        if ($user['must_change_password'] && !in_array($request->path, self::ALLOWED_WHEN_MUST_CHANGE, true)) {
-            return $request->expectsJson()
-                ? Response::json(['error' => 'Anda harus mengganti kata sandi sementara terlebih dahulu.'], 403)
-                : Response::redirect('/profil/password');
-        }
         return $next($request);
     }
 }

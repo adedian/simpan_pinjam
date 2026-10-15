@@ -1,9 +1,4 @@
-<?php if (!empty($forced)): ?>
-    <h1 class="guest__title">Buat kata sandi baru</h1>
-    <div class="alert alert--warning" role="status">Kata sandi Anda masih sementara. Ganti dulu sebelum memakai sistem.</div>
-<?php endif; ?>
-
-<?php if (empty($forced)): ?><section class="card"><h2 class="card__title">Ganti kata sandi</h2><?php endif; ?>
+<section class="card"><h2 class="card__title">Ganti kata sandi</h2>
 
 <form class="form" method="post" action="<?= e(url('/profil/password')) ?>" novalidate>
     <?= csrf_field() ?>
@@ -30,8 +25,5 @@
     <button type="submit" class="btn btn--primary">Simpan kata sandi</button>
 </form>
 
-<?php if (empty($forced)): ?></section><?php endif; ?>
+</section>
 
-<?php if (!empty($forced)): ?>
-    <form method="post" action="<?= e(url('/logout')) ?>"><?= csrf_field() ?><button type="submit" class="btn btn--secondary btn--block">Keluar</button></form>
-<?php endif; ?>
