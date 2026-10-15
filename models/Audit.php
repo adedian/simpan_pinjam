@@ -59,6 +59,7 @@ final class Audit
         'SETTING_UPDATED'     => ['Pengaturan diubah', 'pengaturan'],
         'REPORT_EXPORTED'     => ['Laporan diunduh', 'laporan'],
         'PROFIT_SNAPSHOT_CREATED' => ['Snapshot bagi hasil ditetapkan', 'laporan'],
+        'PROFIT_SNAPSHOT_VOIDED' => ['Snapshot bagi hasil dibatalkan', 'laporan', 'keamanan'],
         'AUDIT_EXPORTED'      => ['Audit log diunduh', 'laporan'],
         'IMPOR_EXCEL'         => ['Impor data dari Excel', 'master'],
         'PLAN_ADJUSTED'       => ['Penyesuaian rencana pembayaran (bagi hasil)', 'master'],

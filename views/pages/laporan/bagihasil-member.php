@@ -17,6 +17,10 @@ $rp  = static fn (float|int $v): string => e(\App\Helpers\Money::format((int) ro
         </div>
     </header>
 
+    <?php if (!empty($x['voided'])): ?>
+        <div class="alert alert--danger" role="alert"><strong>Snapshot ini DIBATALKAN</strong> pada <?= e(date('d-m-Y H:i', (int) strtotime((string) $x['voided']['at']))) ?> oleh <?= e($x['voided']['by']) ?>. Alasan: <?= e($x['voided']['reason']) ?>. Hanya riwayat; jangan dipakai sebagai dasar pembagian.</div>
+    <?php endif; ?>
+
     <div class="stats stats--report">
         <div class="stat"><span class="stat__label">Total bagi hasil</span><strong class="stat__value"><?= e(money($sum['total'])) ?></strong><span class="stat__hint">Penabung + peminjam, setelah cadangan</span></div>
         <div class="stat"><span class="stat__label">Bagi hasil penabung</span><strong class="stat__value"><?= e(money($sum['saver'])) ?></strong><span class="stat__hint"><?= (int) $x['saver_pct'] ?>% dari bunga</span></div>

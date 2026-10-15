@@ -63,7 +63,7 @@ final class ReportController extends BaseController
         $asOf   = $report['meta']['as_of'] ?? null;
         $exists = false;
         foreach (\App\Services\ProfitReport::snapshots($f['period']) as $s) {
-            $exists = $exists || ($asOf !== null && $s['as_of'] === $asOf);
+            $exists = $exists || ($asOf !== null && $s['as_of'] === $asOf && $s['voided'] === null);   // snapshot yang dibatalkan tidak menghalangi penetapan ulang
         }
         return $this->view($request, 'laporan/table', [
             'title'     => $report['title'],
@@ -79,6 +79,8 @@ final class ReportController extends BaseController
             'basePath'  => '/laporan/bagihasil',
             'snapshotForm' => Gate::allows($user, 'profit.snapshot') && ($report['meta']['source'] ?? '') === \App\Services\ProfitReport::SOURCE_LIVE && $asOf !== null
                 ? ['period' => $f['period'], 'as_of' => $asOf, 'exists' => $exists] : null,
+            'voidForm' => Gate::allows($user, 'profit.snapshot') && ($report['meta']['source'] ?? '') === \App\Services\ProfitReport::SOURCE_SNAPSHOT && ($report['meta']['voided'] ?? null) === null
+                ? ['period' => $f['period'], 'snapshot' => (int) $report['meta']['snapshot_id'], 'as_of' => $asOf] : null,
         ]);
     }
 
@@ -121,6 +123,27 @@ final class ReportController extends BaseController
         }
         \App\Core\Session::flash('success', 'Snapshot bagi hasil disimpan dan tidak akan berubah lagi.');
         return $this->redirect('/laporan/bagihasil?periode=' . $period . '&snapshot=' . $id);
+    }
+
+    /** Batalkan snapshot bagi hasil (hanya Superadmin; hanya-tambah, wajib beralasan). @param array<string,string> $params */
+    public function bagihasilSnapshotVoid(Request $request, array $params = []): Response
+    {
+        $user     = Auth::user();
+        $period   = (int) ($request->post['periode'] ?? 0);
+        $snapshot = (int) ($request->post['snapshot'] ?? 0);
+        $valid    = array_column(ReportService::periods(), 'id');
+        if (!in_array($period, $valid, true) || $snapshot <= 0) {
+            $this->abort(404);
+        }
+        $back = '/laporan/bagihasil?periode=' . $period . '&snapshot=' . $snapshot;
+        try {
+            \App\Services\ProfitReport::voidSnapshot($request, $user, $period, $snapshot, $request->str('reason'));
+        } catch (\App\Services\RuleViolation $e) {
+            \App\Core\Session::flash('danger', implode(' ', $e->errors));
+            return $this->redirect($back);
+        }
+        \App\Core\Session::flash('success', 'Snapshot dibatalkan. Datanya tetap tersimpan sebagai riwayat; bulan data yang sama kini boleh ditetapkan ulang.');
+        return $this->redirect($back);
     }
 
     /** Pilih anggota untuk kartu anggota. @param array<string,string> $params */
@@ -320,7 +343,7 @@ final class ReportController extends BaseController
         if ($key === 'bagihasil') {
             $opts = ['0' => 'Perhitungan langsung (perkiraan)'];
             foreach (\App\Services\ProfitReport::snapshots($f['period']) as $sn) {
-                $opts[$sn['id']] = 'Snapshot data ' . month_label($sn['as_of']) . ' (ditetapkan ' . date('d-m-Y', (int) strtotime($sn['created_at'])) . ')';
+                $opts[$sn['id']] = 'Snapshot data ' . month_label($sn['as_of']) . ' (ditetapkan ' . date('d-m-Y', (int) strtotime($sn['created_at'])) . ($sn['voided'] === null ? '' : ', DIBATALKAN') . ')';
             }
             $out[] = ['name' => 'snapshot', 'label' => 'Sumber angka', 'type' => 'select', 'options' => $opts, 'value' => (string) $f['snap']];
         }

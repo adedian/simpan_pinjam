@@ -12,7 +12,9 @@ use App\Core\Request;
  *
  * Dua sumber angka:
  *   langsung : dihitung dari transaksi DISETUJUI saat laporan dibuka (perkiraan; bisa berubah saat data baru masuk)
- *   snapshot : hasil hitung yang disimpan Superadmin (tabel profit_share_snapshots/lines, hanya-tambah), tidak berubah
+ *   snapshot : hasil hitung yang disimpan Superadmin (tabel profit_share_snapshots/lines, hanya-tambah), tidak berubah.
+ *              Dapat DIBATALKAN (profit_share_snapshot_voids, juga hanya-tambah): snapshot tetap tersimpan dan terbaca,
+ *              tetapi ditandai batal dan tidak dihitung sebagai penetapan yang berlaku.
  *
  * Cakupan data ditegakkan di sini (bukan di tampilan): anggota yang tampil dibatasi lewat ReportService::members; angka global
  * (pool bunga, total saldo semua anggota, total dasar peminjam) hanya dikembalikan untuk pengguna cakupan seluruh koperasi.
@@ -24,14 +26,22 @@ final class ProfitReport
 
     // ------------------------------------------------------------------ data sumber
 
-    /** @return array<int,array{id:int,as_of:string,created_at:string,created_by:string,note:?string}> terbaru dulu */
+    /**
+     * Semua snapshot periode ini, termasuk yang dibatalkan (untuk riwayat). 'voided' = null bila masih berlaku.
+     * @return array<int,array{id:int,as_of:string,created_at:string,created_by:string,note:?string,voided:?array{reason:string,at:string,by:string}}> terbaru dulu
+     */
     public static function snapshots(int $periodId): array
     {
         return array_map(static fn (array $r): array => [
             'id' => (int) $r['id'], 'as_of' => (string) $r['as_of_month'], 'created_at' => (string) $r['created_at'],
             'created_by' => (string) ($r['name'] ?? '-'), 'note' => $r['note'] === null ? null : (string) $r['note'],
+            'voided' => $r['void_id'] === null ? null : ['reason' => (string) $r['void_reason'], 'at' => (string) $r['voided_at'], 'by' => (string) ($r['void_by'] ?? '-')],
         ], Database::select(
-            'SELECT s.id, s.as_of_month, s.created_at, s.note, u.name FROM profit_share_snapshots s LEFT JOIN users u ON u.id = s.created_by
+            'SELECT s.id, s.as_of_month, s.created_at, s.note, u.name, v.id AS void_id, v.reason AS void_reason, v.voided_at, vu.name AS void_by
+             FROM profit_share_snapshots s
+             LEFT JOIN users u ON u.id = s.created_by
+             LEFT JOIN profit_share_snapshot_voids v ON v.snapshot_id = s.id
+             LEFT JOIN users vu ON vu.id = v.voided_by
              WHERE s.period_id = ? ORDER BY s.as_of_month DESC, s.id DESC',
             [$periodId]
         ));
@@ -52,11 +62,18 @@ final class ProfitReport
                 'saver_pct' => (int) SettingsService::get('profit_share_saver_pct'), 'borrower_pct' => (int) SettingsService::get('profit_share_borrower_pct'),
                 'shu_pct' => (int) SettingsService::get('profit_share_shu_pct'), 'reserve_pct' => (float) SettingsService::get('reserve_pct'),
                 'interest_pool' => $r['interest_pool'], 'undistributed' => $r['undistributed'], 'members' => $r['members'], 'cycles' => $r['cycles'] ?? [],
+                'voided' => null,
             ];
         }
         $s = Database::select('SELECT * FROM profit_share_snapshots WHERE id = ? AND period_id = ?', [$snapshotId, $periodId])[0] ?? null;
         if ($s === null) {
             return null;
+        }
+        $voided = null;
+        foreach (self::snapshots($periodId) as $sn) {
+            if ($sn['id'] === $snapshotId) {
+                $voided = $sn['voided'];
+            }
         }
         $members = [];
         foreach (Database::select('SELECT * FROM profit_share_lines WHERE snapshot_id = ?', [$snapshotId]) as $l) {
@@ -69,10 +86,10 @@ final class ProfitReport
         }
         return [
             'source' => self::SOURCE_SNAPSHOT, 'snapshot_id' => (int) $s['id'], 'period_id' => $periodId, 'as_of' => (string) $s['as_of_month'], 'mode' => (string) $s['mode'],
-            'calculated_at' => (string) $s['created_at'], 'status' => 'Snapshot ditetapkan',
+            'calculated_at' => (string) $s['created_at'], 'status' => $voided === null ? 'Snapshot ditetapkan' : 'Snapshot DIBATALKAN',
             'saver_pct' => (int) $s['saver_pct'], 'borrower_pct' => (int) $s['borrower_pct'], 'shu_pct' => (int) $s['shu_pct'], 'reserve_pct' => (float) $s['reserve_pct'],
             'interest_pool' => (float) $s['interest_pool'], 'undistributed' => (float) $s['undistributed'], 'members' => $members,
-            'cycles' => json_decode((string) ($s['cycles_json'] ?? '[]'), true) ?: [], 'note' => $s['note'],
+            'cycles' => json_decode((string) ($s['cycles_json'] ?? '[]'), true) ?: [], 'note' => $s['note'], 'voided' => $voided,
         ];
     }
 
@@ -142,8 +159,8 @@ final class ProfitReport
         $base['subtitle'] = 'Periode ' . $period . ' · data sampai ' . $asOf . ' · ' . $data['status'] . ' · dihitung ' . $when . ' · rupiah';
         $base['rows'] = $rows;
         $base['totals'] = $rows === [] ? null : $totals;
-        $base['note'] = ($fallback ? 'Snapshot yang dipilih tidak ada pada periode ini, jadi yang tampil perhitungan langsung. ' : '') . self::ruleText($data);
-        $base['meta'] = ['source' => $data['source'], 'snapshot_id' => $data['snapshot_id'], 'as_of' => $data['as_of'], 'mode' => $data['mode'], 'status' => $data['status'], 'when' => $when, 'global' => $global];
+        $base['note'] = ($fallback ? 'Snapshot yang dipilih tidak ada pada periode ini, jadi yang tampil perhitungan langsung. ' : '') . self::voidText($data) . self::ruleText($data);
+        $base['meta'] = ['source' => $data['source'], 'snapshot_id' => $data['snapshot_id'], 'as_of' => $data['as_of'], 'mode' => $data['mode'], 'status' => $data['status'], 'when' => $when, 'global' => $global, 'voided' => $data['voided']];
 
         // Ringkasan. Angka GLOBAL (pool seluruh koperasi) hanya untuk cakupan seluruh koperasi; yang lain melihat jumlah barisnya saja.
         $base['summary'] = [
@@ -175,7 +192,20 @@ final class ProfitReport
             $txt .= 'Mengikuti perhitungan Excel koperasi: cicilan dianggap dibayar sesuai jadwal (bukan pembayaran nyata), dasar peminjam = sisa pokok sampai Mei lalu sisa bunga sejak Juni, '
                 . 'dan bagi hasil penabung bulan Desember tidak dibagikan. ';
         }
-        return $txt . ($data['source'] === self::SOURCE_LIVE ? 'Angka ini perkiraan yang dihitung ulang tiap dibuka; simpan snapshot untuk menetapkannya.' : 'Angka ini snapshot yang sudah ditetapkan dan tidak berubah.');
+        if ($data['source'] === self::SOURCE_LIVE) {
+            return $txt . 'Angka ini perkiraan yang dihitung ulang tiap dibuka; simpan snapshot untuk menetapkannya.';
+        }
+        return $txt . ($data['voided'] === null ? 'Angka ini snapshot yang sudah ditetapkan dan tidak berubah.' : 'Angka ini dari snapshot yang sudah dibatalkan dan hanya disimpan sebagai riwayat.');
+    }
+
+    /** Peringatan di awal catatan laporan bila snapshot yang tampil sudah dibatalkan. @param array<string,mixed> $data */
+    private static function voidText(array $data): string
+    {
+        $v = $data['voided'] ?? null;
+        if ($v === null) {
+            return '';
+        }
+        return 'SNAPSHOT INI DIBATALKAN pada ' . date('d-m-Y H:i', (int) strtotime((string) $v['at'])) . ' oleh ' . $v['by'] . '. Alasan: ' . $v['reason'] . '. Jangan dipakai sebagai dasar pembagian. ';
     }
 
     /** Query string saringan aktif untuk tautan ke rincian. @param array<string,mixed> $f */
@@ -224,7 +254,7 @@ final class ProfitReport
         $gross = (float) $d['saver_gross'] + (float) $d['borrower_gross'];
         return [
             'member' => $m, 'global' => $global, 'data' => ['source' => $data['source'], 'status' => $data['status'], 'as_of' => $data['as_of'], 'mode' => $data['mode'],
-                'calculated_at' => $data['calculated_at'], 'saver_pct' => $data['saver_pct'], 'borrower_pct' => $data['borrower_pct'], 'shu_pct' => $data['shu_pct'], 'reserve_pct' => $data['reserve_pct'], 'snapshot_id' => $data['snapshot_id']],
+                'calculated_at' => $data['calculated_at'], 'saver_pct' => $data['saver_pct'], 'borrower_pct' => $data['borrower_pct'], 'shu_pct' => $data['shu_pct'], 'reserve_pct' => $data['reserve_pct'], 'snapshot_id' => $data['snapshot_id'], 'voided' => $data['voided']],
             'cycles' => $cycles, 'rule' => self::ruleText($data),
             'sum' => ['saver_gross' => (float) $d['saver_gross'], 'borrower_gross' => (float) $d['borrower_gross'], 'gross' => $gross,
                 'reserve' => $d['reserve_exempt'] ? 0.0 : $gross * (float) $data['reserve_pct'] / 100, 'exempt' => (bool) $d['reserve_exempt'],
@@ -236,8 +266,8 @@ final class ProfitReport
     // ------------------------------------------------------------------ snapshot
 
     /**
-     * Simpan hasil hitung saat ini sebagai snapshot (hanya-tambah). Satu snapshot per (periode, bulan data): mencegah
-     * penetapan ganda untuk keadaan data yang sama. Tidak mengubah transaksi atau saldo apa pun.
+     * Simpan hasil hitung saat ini sebagai snapshot (hanya-tambah). Satu snapshot BERLAKU per (periode, bulan data): mencegah
+     * penetapan ganda untuk keadaan data yang sama; snapshot yang sudah dibatalkan tidak dihitung. Tidak mengubah transaksi atau saldo apa pun.
      * @param array{id:int,username:string,roles:array<int,string>} $actor
      */
     public static function createSnapshot(Request $request, array $actor, int $periodId, ?string $note): int
@@ -266,7 +296,13 @@ final class ProfitReport
         }
 
         return Database::transaction(static function (\PDO $pdo) use ($request, $actor, $periodId, $note, $r, $team, $gross, $reserve, $saver, $borrower, $reservePct): int {
-            $dup = $pdo->prepare('SELECT id FROM profit_share_snapshots WHERE period_id = ? AND as_of_month = ? FOR UPDATE');
+            // Kunci baris periode: dua penetapan bersamaan untuk periode yang sama berjalan bergantian, jadi pemeriksaan ganda di bawah andal
+            // (indeks unik diganti di migrasi 010 supaya snapshot yang dibatalkan boleh ditetapkan ulang).
+            $pdo->prepare('SELECT id FROM periods WHERE id = ? FOR UPDATE')->execute([$periodId]);
+            $dup = $pdo->prepare(
+                'SELECT s.id FROM profit_share_snapshots s LEFT JOIN profit_share_snapshot_voids v ON v.snapshot_id = s.id
+                 WHERE s.period_id = ? AND s.as_of_month = ? AND v.id IS NULL'
+            );
             $dup->execute([$periodId, $r['as_of']]);
             if ($dup->fetchColumn() !== false) {
                 throw RuleViolation::field('_form', 'Snapshot untuk data per ' . month_label((string) $r['as_of']) . ' sudah ada. Pembagian tidak boleh ditetapkan dua kali untuk keadaan data yang sama.');
@@ -294,6 +330,36 @@ final class ProfitReport
                 'period_id' => $periodId, 'as_of' => $r['as_of'], 'anggota' => count($r['members']), 'penabung' => $saver, 'peminjam' => $borrower, 'tak_terbagi' => (int) round($r['undistributed']), 'catatan' => $note,
             ], $pdo);
             return $id;
+        });
+    }
+    /**
+     * Batalkan snapshot (hanya-tambah): snapshot dan barisnya TIDAK diubah atau dihapus; yang ditambah satu catatan
+     * pembatalan berisi alasan, pelaku, dan waktu. Sesudahnya bulan data yang sama boleh ditetapkan ulang. Tidak mengubah
+     * transaksi, saldo, atau kas. Hanya sekali per snapshot.
+     * @param array{id:int,username:string,roles:array<int,string>} $actor
+     */
+    public static function voidSnapshot(Request $request, array $actor, int $periodId, int $snapshotId, string $reason): void
+    {
+        $reason = mb_substr(clean_text($reason), 0, 255);
+        if (mb_strlen($reason) < 5) {
+            throw RuleViolation::field('reason', 'Alasan pembatalan wajib diisi (minimal 5 karakter).');
+        }
+        Database::transaction(static function (\PDO $pdo) use ($request, $actor, $periodId, $snapshotId, $reason): void {
+            $q = $pdo->prepare('SELECT id, as_of_month FROM profit_share_snapshots WHERE id = ? AND period_id = ? FOR UPDATE');
+            $q->execute([$snapshotId, $periodId]);
+            $s = $q->fetch(\PDO::FETCH_ASSOC);
+            if ($s === false) {
+                throw RuleViolation::field('_form', 'Snapshot tidak ditemukan pada periode ini.');
+            }
+            $done = $pdo->prepare('SELECT id FROM profit_share_snapshot_voids WHERE snapshot_id = ?');
+            $done->execute([$snapshotId]);
+            if ($done->fetchColumn() !== false) {
+                throw RuleViolation::field('_form', 'Snapshot ini sudah dibatalkan.');
+            }
+            $pdo->prepare('INSERT INTO profit_share_snapshot_voids (snapshot_id, reason, voided_by) VALUES (?,?,?)')->execute([$snapshotId, $reason, $actor['id']]);
+            AuditLog::record($request, $actor, 'PROFIT_SNAPSHOT_VOIDED', 'profit_snapshot', $snapshotId, month_label((string) $s['as_of_month']), null, [
+                'period_id' => $periodId, 'as_of' => (string) $s['as_of_month'], 'alasan' => $reason,
+            ], $pdo);
         });
     }
 }

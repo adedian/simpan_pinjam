@@ -106,6 +106,7 @@ return static function (Router $r): void {
     $r->get('/laporan/bagihasil', [ReportController::class, 'bagihasil'], ['auth', $viewReport]);
     $r->get('/laporan/bagihasil/{id:\d+}', [ReportController::class, 'bagihasilMember'], ['auth', $viewReport]);
     $r->post('/laporan/bagihasil/snapshot', [ReportController::class, 'bagihasilSnapshot'], ['auth', 'can:profit.snapshot']);
+    $r->post('/laporan/bagihasil/snapshot/batal', [ReportController::class, 'bagihasilSnapshotVoid'], ['auth', 'can:profit.snapshot']);
     $r->get('/laporan/regu', [ReportController::class, 'regu'], ['auth', 'can:report.view.global']);
     $r->get('/laporan/anggota', [ReportController::class, 'members'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/anggota/{id:\d+}', [ReportController::class, 'member'], ['auth', 'can:report.view.global|report.view.team']);

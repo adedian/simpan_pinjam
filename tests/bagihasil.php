@@ -230,5 +230,44 @@ check('snapshot: rincian anggota dari snapshot sama dengan yang disimpan (Y 28.5
     return $d !== null && $d['sum']['total'] === 71567 && count($d['cycles']) === 5 && $d['data']['source'] === 'snapshot';
 })());
 
+// ======================= pembatalan snapshot =======================
+$second = ProfitReport::snapshots($period)[0];   // terbaru dulu: bulan data 9; [1] = bulan data 7 ($snap)
+check('batal: snapshot yang masih berlaku tidak bertanda batal', $second['as_of'] === '2027-09-01' && $second['voided'] === null && ProfitReport::snapshots($period)[1]['voided'] === null);
+check('batal: alasan wajib (kosong atau kurang dari 5 karakter ditolak), tidak ada catatan tersimpan',
+    isset(violation(fn () => ProfitReport::voidSnapshot(req(), $head, $period, $second['id'], '   '))['reason'])
+    && isset(violation(fn () => ProfitReport::voidSnapshot(req(), $head, $period, $second['id'], 'abc'))['reason'])
+    && (int) one('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 0);
+check('batal: snapshot tak dikenal ditolak', isset(violation(fn () => ProfitReport::voidSnapshot(req(), $head, $period, 99999, 'alasan yang cukup'))['_form']) && (int) one('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 0);
+$linesBefore = (int) one('SELECT COUNT(*) FROM profit_share_lines');
+$snapsBefore = (int) one('SELECT COUNT(*) FROM profit_share_snapshots');
+$noteBefore  = (string) one('SELECT note FROM profit_share_snapshots WHERE id = ?', [$second['id']]);
+ProfitReport::voidSnapshot(req(), $head, $period, $second['id'], 'Ada simpanan yang terlewat');
+$afterVoid = ProfitReport::snapshots($period)[0];
+check('batal: tercatat dengan alasan, pelaku, dan waktu; di audit; snapshot dan barisnya TIDAK berubah',
+    $afterVoid['voided'] !== null && $afterVoid['voided']['reason'] === 'Ada simpanan yang terlewat' && $afterVoid['voided']['by'] === 'Kepala' && $afterVoid['voided']['at'] !== ''
+    && (int) one("SELECT COUNT(*) FROM audit_logs WHERE action = 'PROFIT_SNAPSHOT_VOIDED' AND entity_id = ?", [$second['id']]) === 1
+    && (int) one('SELECT COUNT(*) FROM profit_share_lines') === $linesBefore && (int) one('SELECT COUNT(*) FROM profit_share_snapshots') === $snapsBefore
+    && (string) one('SELECT note FROM profit_share_snapshots WHERE id = ?', [$second['id']]) === $noteBefore);
+check('batal: tidak bisa dibatalkan dua kali', str_contains(violation(fn () => ProfitReport::voidSnapshot(req(), $head, $period, $second['id'], 'Coba lagi dua kali'))['_form'] ?? '', 'sudah dibatalkan') && (int) one('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 1);
+$voidRep = ReportService::build('bagihasil', $head, $f($head, ['snapshot' => (string) $second['id']]));
+check('batal: laporan snapshot batal masih terbaca, berstatus DIBATALKAN, memuat alasan, dan kontrolnya tetap seimbang',
+    $voidRep['meta']['source'] === 'snapshot' && $voidRep['meta']['voided'] !== null && str_contains($voidRep['subtitle'], 'Snapshot DIBATALKAN') && str_contains($voidRep['note'], 'Ada simpanan yang terlewat') && $voidRep['rows'] !== [] && $voidRep['control']['ok'] === true);
+check('batal: rincian anggota dari snapshot batal membawa penanda batal', ProfitReport::memberDetail($head, 2, $f($head, ['snapshot' => (string) $second['id']]))['data']['voided'] !== null && ProfitReport::memberDetail($head, 2, $f($head, ['snapshot' => (string) $snap['id']]))['data']['voided'] === null);
+check('batal: catatan pembatalan tidak bisa diubah atau dihapus (trigger)', (function () use ($pdo): bool {
+    $blocked = 0;
+    foreach (["UPDATE profit_share_snapshot_voids SET reason = 'x'", 'DELETE FROM profit_share_snapshot_voids'] as $sql) {
+        try {
+            $pdo->exec($sql);
+        } catch (PDOException $e) {
+            $blocked++;
+        }
+    }
+    return $blocked === 2;
+})());
+check('batal: bulan data yang sama boleh ditetapkan ulang; yang dibatalkan tetap ada; penetapan ganda atas yang berlaku tetap ditolak',
+    ProfitReport::createSnapshot(req(), $head, $period, 'Ulang setelah batal') > 0 && count(ProfitReport::snapshots($period)) === 3
+    && str_contains(violation(fn () => ProfitReport::createSnapshot(req(), $head, $period, null))['_form'] ?? '', 'sudah ada') && count(ProfitReport::snapshots($period)) === 3);
+check('batal: snapshot bulan lain tidak terpengaruh', array_values(array_filter(ProfitReport::snapshots($period), static fn (array $s): bool => $s['id'] === $snap['id']))[0]['voided'] === null);
+
 echo "\n" . ($failed === [] ? "Semua {$passed} pemeriksaan lulus.\n" : count($failed) . " GAGAL dari " . ($passed + count($failed)) . ".\n");
 exit($failed === [] ? 0 : 1);

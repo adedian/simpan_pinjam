@@ -361,15 +361,19 @@ check('izin: hanya Superadmin (HEAD) yang punya transaction.validate; Admin (ket
 // ---- Laporan (Phase 12): hanya baca; unduhan hanya report.export ----
 $repRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/laporan')));
 $canOf = static fn (array $r): array => array_values(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:')));
-check('struktur: 14 route laporan: 13 GET (auth + tepat satu can:) dan 1 POST snapshot bagi hasil', count($repRoutes) === 14 && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'GET' && in_array('auth', $r['middleware'], true) && count(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:'))) === 1)) === 13
-    && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 1);
-check('struktur: satu-satunya route laporan yang mengubah data (snapshot bagi hasil) HANYA can:profit.snapshot dan hanya HEAD yang punya izinnya', (function () use ($repRoutes, $canOf): bool {
+check('struktur: 15 route laporan: 13 GET (auth + tepat satu can:) dan 2 POST (tetapkan dan batalkan snapshot bagi hasil)', count($repRoutes) === 15 && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'GET' && in_array('auth', $r['middleware'], true) && count(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:'))) === 1)) === 13
+    && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 2);
+check('struktur: satu-satunya route laporan yang mengubah data (tetapkan dan batalkan snapshot bagi hasil) HANYA can:profit.snapshot dan hanya HEAD yang punya izinnya', (function () use ($repRoutes, $canOf): bool {
+    $posts = 0;
     foreach ($repRoutes as $r) {
         if ($r['method'] === 'POST') {
-            return str_contains($r['regex'], 'bagihasil/snapshot') && $canOf($r) === ['can:profit.snapshot'] && in_array('auth', $r['middleware'], true);
+            $posts++;
+            if (!(str_contains($r['regex'], 'bagihasil/snapshot') && $canOf($r) === ['can:profit.snapshot'] && in_array('auth', $r['middleware'], true))) {
+                return false;
+            }
         }
     }
-    return false;
+    return $posts === 2;
 })() && Gate::allows(['roles' => ['HEAD']], 'profit.snapshot') && !Gate::allows(['roles' => ['KETUA_REGU']], 'profit.snapshot') && !Gate::allows(['roles' => ['ANGGOTA']], 'profit.snapshot'));
 check('struktur: unduhan HANYA can:report.export; laporan per regu HANYA global; kartu anggota global|team', (function () use ($repRoutes, $canOf): bool {
     foreach ($repRoutes as $r) {

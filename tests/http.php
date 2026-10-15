@@ -2168,6 +2168,23 @@ check('snapshot/web: halaman snapshot berstatus ditetapkan; tombol simpan digant
 check('snapshot/web: penetapan kedua untuk keadaan data yang sama ditolak dengan pesan; tetap 1 snapshot', $has($sh->get($loc($post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1']))), 'sudah ada') && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 1 && $count('SELECT COUNT(*) FROM profit_share_lines') === (int) $count('SELECT COUNT(*) FROM profit_share_lines WHERE snapshot_id = ' . $snapId));
 check('snapshot/web: Ketua Regu melihat snapshot hanya untuk anggota regunya; periode tak dikenal 404', $has($sa->get('/laporan/bagihasil?snapshot=' . $snapId), 'Snapshot ditetapkan') && $has($sa->last, 'AGT-002') && !$has($sa->last, 'AGT-004') && $post($sh, '/laporan/bagihasil/snapshot', ['periode' => '999'])['status'] === 404);
 
+// -- Pembatalan snapshot lewat web
+$voidUrl = '/laporan/bagihasil/snapshot/batal';
+$beforeVoid = $sh->get('/laporan/bagihasil?periode=1&snapshot=' . $snapId);
+check('batal/web: tombol batal tampil untuk Superadmin pada snapshot berlaku, tidak untuk Ketua Regu', $has($beforeVoid, 'Batalkan snapshot ini') && !$has($sa->get('/laporan/bagihasil?periode=1&snapshot=' . $snapId), 'Batalkan snapshot ini'));
+check('batal/web: Ketua Regu dan Anggota tidak bisa membatalkan (403), tanpa catatan tersimpan', $post($sa, $voidUrl, ['periode' => '1', 'snapshot' => (string) $snapId, 'reason' => 'Mencoba membatalkan'])['status'] === 403 && $post($sm, $voidUrl, ['periode' => '1', 'snapshot' => (string) $snapId, 'reason' => 'Mencoba membatalkan'])['status'] === 403 && $count('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 0);
+check('batal/web: alasan kosong ditolak dengan pesan; snapshot tetap berlaku', $has($sh->get($loc($post($sh, $voidUrl, ['periode' => '1', 'snapshot' => (string) $snapId, 'reason' => '']))), 'Alasan pembatalan wajib') && $count('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 0);
+check('batal/web: periode atau snapshot tak valid 404', $post($sh, $voidUrl, ['periode' => '999', 'snapshot' => (string) $snapId, 'reason' => 'Alasan cukup panjang'])['status'] === 404 && $post($sh, $voidUrl, ['periode' => '1', 'snapshot' => '0', 'reason' => 'Alasan cukup panjang'])['status'] === 404);
+$vr = $post($sh, $voidUrl, ['periode' => '1', 'snapshot' => (string) $snapId, 'reason' => 'Ada <b>transaksi</b> terlewat']);
+$afterVoid = $sh->get($loc($vr));
+check('batal/web: Superadmin membatalkan; dialihkan ke snapshot, pesan sukses, tercatat di audit, 1 catatan', $vr['status'] === 302 && str_contains($loc($vr), 'snapshot=' . $snapId) && $has($afterVoid, 'Snapshot dibatalkan') && $count('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 1 && $audits('PROFIT_SNAPSHOT_VOIDED') === 1);
+check('batal/web: halaman menampilkan DIBATALKAN dan alasan (aman dari XSS); tombol batal hilang; snapshot masih tersimpan', $has($afterVoid, 'Snapshot ini DIBATALKAN') && $has($afterVoid, 'transaksi') && !$has($afterVoid, '<b>transaksi</b>') && !$has($afterVoid, 'Batalkan snapshot ini') && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 1);
+check('batal/web: pembatalan kedua ditolak dengan pesan; tetap 1 catatan', $has($sh->get($loc($post($sh, $voidUrl, ['periode' => '1', 'snapshot' => (string) $snapId, 'reason' => 'Batal sekali lagi']))), 'sudah dibatalkan') && $count('SELECT COUNT(*) FROM profit_share_snapshot_voids') === 1);
+check('batal/web: Ketua Regu melihat snapshot batal bertanda DIBATALKAN; rincian anggota juga bertanda batal', $has($sa->get('/laporan/bagihasil?periode=1&snapshot=' . $snapId), 'Snapshot ini DIBATALKAN') && $has($sh->get('/laporan/bagihasil/' . $mid(2) . '?periode=1&snapshot=' . $snapId), 'Snapshot ini DIBATALKAN'));
+check('batal/web: sesudah batal, penetapan ulang tersedia lagi dan daftar sumber menandai yang dibatalkan', $has($sh->get('/laporan/bagihasil?periode=1'), 'Simpan sebagai snapshot') && $has($sh->last, 'DIBATALKAN'));
+$re = $post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1', 'note' => 'Ulang setelah batal']);
+check('batal/web: penetapan ulang berhasil (2 snapshot, 1 batal) dan tidak bisa digandakan lagi', $re['status'] === 302 && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 2 && $has($sh->get($loc($post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1']))), 'sudah ada') && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 2);
+
 // -- cakupan route: setiap route yang terdaftar harus pernah diminta oleh suite ini
 $routerAll = new App\Core\Router();
 (require BASE_PATH . '/config/routes.php')($routerAll);

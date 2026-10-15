@@ -41,7 +41,7 @@ $exportQuery = http_build_query($query);
     </form>
 
     <?php if ($report['key'] === 'bagihasil'): ?>
-        <?= View::include('partials/profit-extra', ['report' => $report, 'snapshotForm' => $snapshotForm ?? null, 'filters' => $filters]) ?>
+        <?= View::include('partials/profit-extra', ['report' => $report, 'snapshotForm' => $snapshotForm ?? null, 'voidForm' => $voidForm ?? null, 'filters' => $filters]) ?>
     <?php endif; ?>
 
     <?php if ($level === 'none'): ?>
