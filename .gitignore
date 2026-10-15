@@ -47,3 +47,6 @@ __pycache__/
 Thumbs.db
 desktop.ini
 *.log
+
+# --- Paket demo hosting (berisi akun & .env) ---
+deploy-demo/
