@@ -26,4 +26,10 @@
             </div>
         <?php endforeach; ?>
     </nav>
+
+    <?php /* Muncul hanya bila peramban bisa memasang aplikasi (diatur pwa.js); tersembunyi di mode aplikasi terpasang. */ ?>
+    <div class="sidebar__install" data-pwa-box hidden>
+        <button type="button" class="btn btn--secondary btn--block" data-pwa-install hidden>Pasang aplikasi</button>
+        <p class="sidebar__install-hint" data-pwa-ios hidden>Untuk memasang di iPhone atau iPad: ketuk tombol Bagikan, lalu <strong>Tambah ke Layar Utama</strong>.</p>
+    </div>
 </aside>

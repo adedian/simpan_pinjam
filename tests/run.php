@@ -271,7 +271,7 @@ check('scope: nama kolom berbahaya ditolak', (function (): bool {
 // ---- Penjaga struktural: setiap route harus terlindungi ----
 $guard = new Router();
 (require BASE_PATH . '/config/routes.php')($guard);
-$publicOk = ['#^/login$#' => ['guest'], '#^/health$#' => [], '#^/styleguide$#' => []]; // pengecualian yang disengaja
+$publicOk = ['#^/login$#' => ['guest'], '#^/health$#' => [], '#^/styleguide$#' => [], '#^/offline$#' => [], '#^/manifest\.webmanifest$#' => []]; // pengecualian yang disengaja (PWA: tanpa data, diambil tanpa login)
 $unprotected = [];
 $noPermission = [];
 foreach ($guard->all() as $route) {

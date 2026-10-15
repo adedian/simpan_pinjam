@@ -1691,7 +1691,7 @@ check('keamanan/csrf: token sah lewat header X-CSRF-TOKEN diterima (jalur AJAX):
 
 // -- 13b. Autentikasi: tamu tidak mendapat apa pun dari route mana pun
 $anon = new Browser();
-$publicGet = ['/login', '/health', '/styleguide'];
+$publicGet = ['/login', '/health', '/styleguide', '/offline', '/manifest.webmanifest'];
 $leak = [];
 foreach ($routeList['GET'] ?? [] as $p) {
     if (in_array($p, $publicGet, true)) {
@@ -2032,6 +2032,48 @@ foreach ($matrix as $row) {
 check("matriks peran: {$cells} sel (" . count($matrix) . ' halaman x 5 peran) sesuai aturan prompt master §5' . ($matrixBad ? ' [' . implode('; ', array_slice($matrixBad, 0, 6)) . ']' : ''), $matrixBad === []);
 
 check('styleguide: hanya hidup di lingkungan lokal (200 di APP_ENV=local uji ini; produksi dijaga controller dan preflight)', $sh->get('/styleguide')['status'] === 200 && $sh->get('/styleguide?peran=KETUA_REGU')['status'] === 200 && $sh->get('/styleguide?peran=<script>')['status'] === 200);
+
+// ---- 14b. PWA: manifest, halaman offline, service worker ----
+$pubDir = BASE_PATH . '/public';
+$man    = (new Browser())->get('/manifest.webmanifest');
+$mj     = json_decode($man['body'], true);
+check('pwa/manifest: publik (tamu 200), application/manifest+json, JSON valid', $man['status'] === 200 && str_contains($man['headers']['content-type'] ?? '', 'application/manifest+json') && is_array($mj));
+$iconOk = is_array($mj) && count($mj['icons'] ?? []) >= 3;
+$purposes = [];
+foreach ($mj['icons'] ?? [] as $ic) {
+    $file = $pubDir . strtok((string) $ic['src'], '?');
+    $purposes[$ic['purpose']][$ic['sizes']] = true;
+    $iconOk = $iconOk && is_file($file) && (getimagesize($file)['mime'] ?? '') === 'image/png' && (getimagesize($file)[0] . 'x' . getimagesize($file)[1]) === $ic['sizes'];
+}
+check('pwa/manifest: standalone, start_url dan scope di dalam aplikasi, nama, warna, bahasa', is_array($mj) && $mj['display'] === 'standalone' && $mj['start_url'] === '/' && $mj['scope'] === '/' && $mj['short_name'] === 'Adem Ayem'
+    && preg_match('/^#[0-9a-f]{6}$/i', (string) $mj['theme_color']) === 1 && $mj['lang'] === 'id');
+check('pwa/manifest: ikon 192 dan 512 (any) plus 512 maskable, semuanya PNG sungguhan berukuran sesuai', $iconOk && isset($purposes['any']['192x192'], $purposes['any']['512x512'], $purposes['maskable']['512x512']));
+$offAnon = (new Browser())->get('/offline');
+$offHead = $sh->get('/offline');
+check('pwa/offline: publik, berisi pesan, tanpa token CSRF, tanpa nama pengguna atau angka, juga saat dibuka dengan sesi login',
+    $offAnon['status'] === 200 && str_contains($offAnon['body'], 'Tidak ada koneksi') && !str_contains($offAnon['body'], 'csrf-token')
+    && $offHead['status'] === 200 && !str_contains($offHead['body'], 'Kepala Koperasi') && !str_contains($offHead['body'], 'Kas tersedia') && !str_contains($offHead['body'], 'name="_token"'));
+$sw = (new Browser())->get('/sw.js');
+check('pwa/service worker: berkas statis JavaScript yang bisa diambil tamu', $sw['status'] === 200 && str_contains($sw['headers']['content-type'] ?? '', 'javascript') && str_contains($sw['body'], "addEventListener('fetch'"));
+check('pwa/service worker: hanya GET, hanya asal sendiri, halaman TIDAK disimpan (navigasi ke jaringan, jatuh ke /offline), simpan hanya /assets/ dan /offline',
+    str_contains($sw['body'], "req.method !== 'GET'") && str_contains($sw['body'], "url.origin !== self.location.origin") && str_contains($sw['body'], "req.mode === 'navigate'")
+    && str_contains($sw['body'], "indexOf('data-reload')") && str_contains($sw['body'], "'text/html'") && !str_contains($sw['body'], "credentials: 'omit'")
+    && substr_count($sw['body'], 'cache.put(') + substr_count($sw['body'], 'c.put(') === 3
+    && !preg_match('/localStorage|indexedDB|\\/live\\/|\\/laporan|\\/transaksi/', $sw['body']));
+$loginPage = (new Browser())->get('/login');
+$noInline = static fn (string $html): bool => preg_match('/<script(?![^>]*\ssrc=)[^>]*>/i', $html) === 0;
+$hasPwa = static fn (string $html): bool => str_contains($html, 'rel="manifest" href="/manifest.webmanifest"') && str_contains($html, 'name="theme-color"')
+    && str_contains($html, 'js/pwa.js') && str_contains($html, 'data-sw="/sw.js"') && str_contains($html, 'rel="apple-touch-icon"');
+check('pwa/tag: halaman tamu, halaman aplikasi, dan halaman offline sama-sama memuat manifest, theme-color, pwa.js (tanpa inline script, CSP tetap ketat)',
+    $hasPwa($loginPage['body']) && $hasPwa($sh->get('/')['body']) && $hasPwa($offAnon['body']) && $noInline($loginPage['body']) && $noInline($offAnon['body']) && $noInline($sh->get('/')['body']));
+$dash = $sh->get('/');
+check('pwa/pasang: kotak "Pasang aplikasi" ada di menu tetapi tersembunyi (hidden) sampai skrip menyalakannya', str_contains($dash['body'], 'data-pwa-box hidden') && str_contains($dash['body'], 'Pasang aplikasi')
+    && str_contains($dash['body'], 'data-pwa-install hidden') && str_contains($dash['body'], 'Tambah ke Layar Utama'));
+$pwaJs = file_get_contents($pubDir . '/assets/js/pwa.js');
+check('pwa/skrip: pwa.js mendaftarkan service worker dari data-sw, tanpa eval/inline handler', str_contains($pwaJs, "serviceWorker.register(swUrl)") && !preg_match('/\beval\(|new Function|document\.write|innerHTML/', $pwaJs));
+$pwaSrc = file_get_contents(BASE_PATH . '/controllers/PwaController.php');
+check('pwa/controller: tidak memakai BaseController::view (yang mengambil pesan flash sesi) dan tidak menyentuh Auth atau Session', !str_contains($pwaSrc, 'extends BaseController') && !preg_match('/Auth::|Session::|pullFlash/', $pwaSrc));
+check('pwa/header: manifest dan halaman offline membawa header keamanan penuh (CSP, nosniff, DENY)', $hdrOk(array_merge($offAnon, ['headers' => $offAnon['headers']])) && ($man['headers']['x-content-type-options'] ?? '') === 'nosniff' && str_contains($man['headers']['content-security-policy'] ?? '', "object-src 'none'"));
 
 // -- cakupan route: setiap route yang terdaftar harus pernah diminta oleh suite ini
 $routerAll = new App\Core\Router();

@@ -8,6 +8,7 @@ use App\Controllers\HomeController;
 use App\Controllers\LiveController;
 use App\Controllers\MemberController;
 use App\Controllers\ProfileController;
+use App\Controllers\PwaController;
 use App\Controllers\ReportController;
 use App\Controllers\SettingController;
 use App\Controllers\StyleguideController;
@@ -121,6 +122,10 @@ return static function (Router $r): void {
     $r->get('/live/tick', [LiveController::class, 'tick'], ['auth']);
 
     $r->get('/health', [HealthController::class, 'index']);
+
+    // PWA: manifest dan halaman offline. Publik dan tanpa data (diambil browser/service worker tanpa login).
+    $r->get('/manifest.webmanifest', [PwaController::class, 'manifest']);
+    $r->get('/offline', [PwaController::class, 'offline']);
 
     // Halaman acuan gaya. Hanya hidup bila APP_ENV=local (dicek di controller). Hapus sebelum produksi.
     $r->get('/styleguide', [StyleguideController::class, 'index']);

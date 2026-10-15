@@ -108,6 +108,10 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 }
 .nav__badge[hidden] { display: none; }
 .nav__item.is-active .nav__badge { background: var(--brand-700); color: #fff; }
+/* Pasang aplikasi (PWA): disembunyikan sampai pwa.js tahu peramban bisa memasang */
+.sidebar__install { margin: 22px 8px 0; display: grid; gap: 10px; }
+.sidebar__install[hidden], .sidebar__install [hidden] { display: none; }
+.sidebar__install-hint { margin: 0; font-size: 13px; line-height: 1.45; color: rgba(255, 255, 255, .85); }
 
 .topbar {
     position: sticky; top: 0; z-index: 10;

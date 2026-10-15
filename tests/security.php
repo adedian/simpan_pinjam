@@ -429,9 +429,9 @@ check('berkas: setiap folder non-publik punya .htaccess "Require all denied"; ak
     $root = (string) file_get_contents(ROOT . '/.htaccess');
     return str_contains($root, 'Options -Indexes') && str_contains($root, '(env|git)') && str_contains($root, 'public/');
 })());
-check('berkas: public/ hanya berisi index.php, .htaccess, dan assets (tidak ada berkas sensitif atau cadangan)', (function (): bool {
+check('berkas: public/ hanya berisi index.php, .htaccess, sw.js (service worker PWA, wajib di akar agar cakupannya seluruh aplikasi), dan assets (tidak ada berkas sensitif atau cadangan)', (function (): bool {
     foreach (scandir(ROOT . '/public') ?: [] as $e) {
-        if (!in_array($e, ['.', '..', 'index.php', '.htaccess', 'assets'], true)) {
+        if (!in_array($e, ['.', '..', 'index.php', '.htaccess', 'sw.js', 'assets'], true)) {
             echo "    tak terduga di public/: {$e}\n";
             return false;
         }
