@@ -42,7 +42,7 @@ abstract class BaseController
             'user'        => $user,
             'nav'         => Navigation::forUser($user, $request->path),
             'roleLabel'   => Navigation::roleLabel($user),
-            'back'        => $layout === 'app' ? Navigation::backTarget($user, $request->path) : null,
+            'backLink'    => $layout === 'app' ? Navigation::backTarget($user, $request->path) : null,
             'flash'       => $background ? (array) Session::get('_flash', []) : Session::pullFlash(),
             'errors'      => $background ? (array) Session::get('_errors', []) : Session::pull('_errors', []),
             'old'         => $background ? (array) Session::get('_old', []) : Session::pull('_old', []),

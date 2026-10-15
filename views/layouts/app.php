@@ -23,8 +23,8 @@
     <div class="main">
         <header class="topbar">
             <button type="button" class="icon-btn topbar__menu" data-drawer-open aria-controls="sidebar" aria-label="Buka menu"><?= icon('menu') ?></button>
-            <?php if (!empty($back)): ?>
-                <a class="topbar__back" href="<?= e(url($back['path'])) ?>"<?= $back['parent'] ? '' : ' data-back' ?> aria-label="Kembali" title="Kembali"><?= icon('arrow-left', 18) ?><span>Kembali</span></a>
+            <?php if (!empty($backLink)): ?>
+                <a class="topbar__back" href="<?= e(url($backLink['path'])) ?>"<?= $backLink['parent'] ? '' : ' data-back' ?> aria-label="Kembali" title="Kembali"><?= icon('arrow-left', 18) ?><span>Kembali</span></a>
             <?php endif; ?>
             <h1 class="topbar__title"><?= e($title ?? '') ?></h1>
             <?php if (!empty($user)): ?>
