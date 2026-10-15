@@ -58,6 +58,7 @@ final class Audit
         'USER_UNLOCKED'       => ['Kunci akun dibuka', 'master', 'keamanan'],
         'SETTING_UPDATED'     => ['Pengaturan diubah', 'pengaturan'],
         'REPORT_EXPORTED'     => ['Laporan diunduh', 'laporan'],
+        'PROFIT_SNAPSHOT_CREATED' => ['Snapshot bagi hasil ditetapkan', 'laporan'],
         'AUDIT_EXPORTED'      => ['Audit log diunduh', 'laporan'],
         'IMPOR_EXCEL'         => ['Impor data dari Excel', 'master'],
         'PLAN_ADJUSTED'       => ['Penyesuaian rencana pembayaran (bagi hasil)', 'master'],

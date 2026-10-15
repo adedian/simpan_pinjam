@@ -119,6 +119,8 @@ $instB = loan(2, 1000000, 5, 100000, $mo[7], '2027-07-05', [$mo[8], $mo[9], $mo[
  */
 $period = (int) one('SELECT id FROM periods LIMIT 1');
 $ex = ProfitShare::compute($period, true);
+// Hanya angka bagi hasil yang dibandingkan: posisi akhir (savings_last, outstanding_last) mengikuti bulan data terakhir dan boleh bergeser.
+$core = static fn (array $ms): array => array_map(static fn (array $m): array => array_intersect_key($m, array_flip(['saver', 'borrower', 'saver_gross', 'borrower_gross', 'reserve_exempt'])), $ms);
 $no = ProfitShare::compute($period, false);
 check('mode Excel: bendera mode, pool total = 80% x bunga (96.000)', $ex['excel'] === true && $no['excel'] === false && abs($ex['interest_pool'] - 96000.0) < 0.001 && abs($no['interest_pool'] - 96000.0) < 0.001);
 check('mode Excel: pool penabung siklus ke-10 (Desember) tidak dibagikan (8.000 tersisa); mode normal membagi semuanya', abs($ex['undistributed'] - 8000.0) < 0.001 && abs($no['undistributed']) < 0.001);
@@ -133,7 +135,7 @@ $payId = trx('ANGSURAN', 2, 440000, $mo[8], '2027-08-05');
 $pdo->prepare('INSERT INTO installment_payments (transaction_id, installment_id, amount) VALUES (?,?,?)')->execute([$payId, $instB[0], 220000]);
 $pdo->prepare('INSERT INTO installment_payments (transaction_id, installment_id, amount) VALUES (?,?,?)')->execute([$payId, $instB[1], 220000]);
 approve($payId);
-check('mode Excel: pembayaran nyata (B melunasi dua cicilan lebih awal) tidak mengubah angka', ProfitShare::compute($period, true)['members'] === $ex['members']);
+check('mode Excel: pembayaran nyata (B melunasi dua cicilan lebih awal) tidak mengubah angka', $core(ProfitShare::compute($period, true)['members']) === $core($ex['members']));
 check('mode normal: pembayaran nyata mengubah angka (bunga dan sisa pokok bergeser)', ProfitShare::compute($period, false)['members'] !== $no['members']);
 $noAfter = ProfitShare::compute($period, false);
 
@@ -198,7 +200,7 @@ check('skema: penyesuaian tidak boleh nol, unik per pinjaman+bulan, dan mengikut
 $r = cli(['--remove-all']);
 check('alat: --remove-all tanpa --apply hanya rencana', $r['code'] === 0 && (int) one('SELECT COUNT(*) FROM loan_plan_adjustments') === 2);
 $r = cli(['--remove-all', '--apply']);
-check('alat: --remove-all --apply menghapus semua; angka kembali seperti semula', $r['code'] === 0 && (int) one('SELECT COUNT(*) FROM loan_plan_adjustments') === 0 && ProfitShare::compute($period, true)['members'] === $ex['members']);
+check('alat: --remove-all --apply menghapus semua; angka kembali seperti semula', $r['code'] === 0 && (int) one('SELECT COUNT(*) FROM loan_plan_adjustments') === 0 && $core(ProfitShare::compute($period, true)['members']) === $core($ex['members']));
 unlink($tmp);
 
 echo "\n";

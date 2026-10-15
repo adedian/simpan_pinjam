@@ -36,9 +36,12 @@ final class HomeController extends BaseController
             'month'  => month_label(date('Y-m-01')),
             'charts' => true,
             'recent' => Dashboard::recent($user, 6),
-            'dues'   => $level === Scope::NONE ? [] : array_slice(array_values(array_filter(Transaction::dueByMember($user), static fn (array $r): bool => (int) $r['overdue'] > 0)), 0, 5),
             'blocks' => [],
         ];
+
+        if ($level === Scope::ALL || $level === Scope::TEAM) {
+            $d['overdue'] = \App\Services\OverdueService::panel($user, 10);
+        }
 
         $flow = Dashboard::monthly($user);
         $d['flowCharts'] = $this->flowCharts($flow);
@@ -68,6 +71,7 @@ final class HomeController extends BaseController
                 'overdue'     => array_sum(array_column($members, 'overdue')),
                 'chart'       => $this->membersChart($members),
                 'work'        => Dashboard::ownWork((int) $user['id']),
+                'finance'     => \App\Services\TeamFinance::summary((int) $user['team_id']),
             ];
         }
 

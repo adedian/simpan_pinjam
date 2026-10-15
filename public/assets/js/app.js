@@ -342,6 +342,8 @@
         var timer = null;
         var inFlight = false;
         var failures = 0;
+        var REFRESH_MS = 300000;   // segarkan paling lama tiap 5 menit (keadaan berbasis tanggal, mis. tunggakan, bisa berubah tanpa transaksi)
+        var lastRefresh = Date.now();
         var offline = false;
         var toast = null;
         var toastTimer = null;
@@ -457,6 +459,7 @@
                 var fresh = new DOMParser().parseFromString(text, 'text/html').querySelector('[data-live-region]');
                 if (!fresh) { window.location.reload(); return; }
                 version = Number(fresh.getAttribute('data-live-version'));
+                lastRefresh = Date.now();
                 var html = fresh.innerHTML;
                 if (html === shownHtml) { pending = null; hideToast(); return; }
                 if (busy()) {
@@ -482,7 +485,7 @@
                     failures = 0;
                     var reconnected = offline;
                     offline = false;
-                    var stale = canRefresh && typeof data.v === 'number' && data.v !== version;
+                    var stale = canRefresh && ((typeof data.v === 'number' && data.v !== version) || Date.now() - lastRefresh > REFRESH_MS);
                     var news = applyBadges(data.b);
                     if (reconnected && !stale) { showToast('Tersambung kembali.'); }
                     else if (news && !stale) {   // bila isi halaman ikut berubah, toast "Data diperbarui" sudah cukup

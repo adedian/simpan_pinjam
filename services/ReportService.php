@@ -27,7 +27,7 @@ final class ReportService
     public const SELF = 'self';
     public const NONE = 'none';
 
-    public const KEYS = ['simpanan', 'pinjaman', 'angsuran', 'saldo', 'transaksi', 'regu'];
+    public const KEYS = ['simpanan', 'pinjaman', 'angsuran', 'saldo', 'transaksi', 'regu', 'bagihasil'];
     public const EXPORT_MAX_ROWS = 50000;
     public const PER_PAGE = 50;
 
@@ -96,7 +96,7 @@ final class ReportService
      * Saringan dari query string, sudah dibersihkan dan dibatasi. Periode tak dikenal jatuh ke periode aktif.
      * @param array<string,mixed> $q
      * @param array<string,mixed>|null $user
-     * @return array{period:int,team:int,q:string,from:string,to:string,type:string,status:string,anggota:int,bulan:int}
+     * @return array{period:int,team:int,q:string,from:string,to:string,type:string,status:string,anggota:int,bulan:int,snap:int}
      */
     public static function filters(array $q, ?array $user): array
     {
@@ -128,6 +128,7 @@ final class ReportService
             'status'  => in_array($status, array_merge(Transaction::STATUSES, ['AKTIF', 'LUNAS']), true) ? $status : '',
             'anggota' => max(0, (int) ($q['anggota'] ?? 0)),
             'bulan'   => max(0, (int) ($q['bulan'] ?? 0)),
+            'snap'    => max(0, (int) ($q['snapshot'] ?? 0)),
         ];
     }
 
@@ -239,6 +240,7 @@ final class ReportService
             'saldo'     => self::balanceReport($user, $f),
             'pinjaman'  => self::loanReport($user, $f),
             'regu'      => self::teamReport($user, $f),
+            'bagihasil' => ProfitReport::build($user, $f),
             'transaksi' => self::transactionReport($user, $f, $page, $all),
             default     => throw new \InvalidArgumentException('Laporan tidak dikenal.'),
         };
@@ -441,9 +443,10 @@ final class ReportService
             ['key' => 'team', 'label' => 'Regu', 'type' => 'text'], ['key' => 'leader', 'label' => 'Ketua regu', 'type' => 'text'], ['key' => 'members', 'label' => 'Anggota', 'type' => 'int'],
             ['key' => 'saved', 'label' => 'Setoran periode', 'type' => 'money'], ['key' => 'paid', 'label' => 'Angsuran periode', 'type' => 'money'], ['key' => 'lent', 'label' => 'Pencairan periode', 'type' => 'money'],
             ['key' => 'savings', 'label' => 'Tabungan sekarang', 'type' => 'money'], ['key' => 'outstanding', 'label' => 'Sisa pinjaman', 'type' => 'money'], ['key' => 'overdue', 'label' => 'Tunggakan', 'type' => 'money'],
+            ['key' => 'interest', 'label' => 'Total bunga', 'type' => 'money'], ['key' => 'cash', 'label' => 'Arus kas regu', 'type' => 'money'],
         ];
         $base = ['key' => 'regu', 'title' => 'Laporan Per Ketua Regu', 'subtitle' => 'Periode ' . self::periodName($f) . ' · rupiah', 'columns' => $columns, 'rows' => [], 'totals' => null,
-                 'note' => 'Anggota menurut keanggotaan regu saat ini. Setoran, angsuran, dan pencairan = jumlah bersih dalam periode; tabungan, sisa, tunggakan = keadaan sekarang.'];
+                 'note' => 'Anggota menurut keanggotaan regu saat ini. Setoran, angsuran, dan pencairan = jumlah bersih dalam periode; tabungan, sisa, tunggakan = keadaan sekarang. Total bunga = bunga dibukukan di muka dari pinjaman berlaku. Arus kas regu = setoran + angsuran − pencairan − penarikan atas regu itu (bukan uang fisik); jumlah semua regu berbeda dari kas koperasi sebesar biaya yang belum dibebankan ke regu.'];
         if (self::level($user) !== self::ALL) {
             return $base;
         }
@@ -462,7 +465,11 @@ final class ReportService
         );
         $rows = [];
         foreach ($teams as $t) {
-            $row = ['team' => (string) $t['name'], 'leader' => (string) ($t['leader'] ?? '-'), 'members' => 0, 'saved' => 0, 'paid' => 0, 'lent' => 0, 'savings' => 0, 'outstanding' => 0, 'overdue' => 0];
+            $row = ['team' => (string) $t['name'], 'leader' => (string) ($t['leader'] ?? '-'), 'members' => 0, 'saved' => 0, 'paid' => 0, 'lent' => 0, 'savings' => 0, 'outstanding' => 0, 'overdue' => 0, 'interest' => 0, 'cash' => 0];
+            // Total bunga dan arus kas regu: definisi yang SAMA dengan dashboard Ketua Regu (TeamFinance).
+            $fin = TeamFinance::summary((int) $t['id']);
+            $row['interest'] = $fin['interest'];
+            $row['cash'] = $fin['cash'];
             foreach ($members as $m) {
                 if ($m['team_id'] !== (int) $t['id']) {
                     continue;

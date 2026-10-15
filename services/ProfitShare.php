@@ -38,13 +38,17 @@ final class ProfitShare
     private const EXCEL_SKIP_SAVER_CYCLE = 10;     // siklus ke-10 (Desember): pool penabung tidak dibagikan
 
     /**
+     * $detail = true menambahkan rincian per siklus (untuk Report Pembagian Bunga): 'cycles' (bunga bulan itu, pool, jumlah dasar)
+     * dan 'rows' per anggota (saldo, bagian penabung, dasar peminjam, bagian peminjam). Rumusnya SAMA; angka akhir tidak berubah.
+     *
      * @return array{
      *   period_id:int, as_of:?string, months:int, excel:bool,
      *   interest_pool:float, undistributed:float,
-     *   members:array<int,array{saver:int,borrower:int,saver_gross:float,borrower_gross:float,reserve_exempt:bool}>
+     *   members:array<int,array{saver:int,borrower:int,saver_gross:float,borrower_gross:float,reserve_exempt:bool,savings_last:int,outstanding_last:int}>,
+     *   cycles?:array<int,array<string,mixed>>
      * }
      */
-    public static function compute(int $periodId, ?bool $excel = null): array
+    public static function compute(int $periodId, ?bool $excel = null, bool $detail = false): array
     {
         $excel ??= self::FOLLOW_EXCEL;
         $months = Database::select('SELECT id, month_date FROM period_months WHERE period_id = ? ORDER BY month_date', [$periodId]);
@@ -182,6 +186,8 @@ final class ProfitShare
 
         $poolTotal = 0.0;
         $undistributed = 0.0;
+        $cycles = [];                               // rincian per siklus (hanya bila $detail)
+        $rows = [];                                 // member => [siklus => rincian]
         for ($k = 1; $k < $n; $k++) {
             $base = $interest[$k + 1];
             if ($base <= 0) {
@@ -197,16 +203,35 @@ final class ProfitShare
             foreach ($out as $o) {
                 $sumB += $o[$k] ?? 0.0;
             }
-            if ($sumS > 0 && !($excel && $k === self::EXCEL_SKIP_SAVER_CYCLE)) {
+            $saverPaid = $sumS > 0 && !($excel && $k === self::EXCEL_SKIP_SAVER_CYCLE);
+            $borrowerPaid = $sumB > 0;
+            if ($detail) {
+                $cycles[$k] = [
+                    'k' => $k, 'month' => (string) $months[$k - 1]['month_date'], 'interest_month' => (string) $months[$k]['month_date'], 'interest' => $base,
+                    'saver_pool' => $base * $saverPct, 'borrower_pool' => $base * $borrowerPct, 'sum_savings' => $sumS, 'sum_basis' => $sumB,
+                    'basis' => $excel && $k >= self::EXCEL_BASIS_SWITCH_CYCLE ? 'bunga' : 'pokok', 'saver_paid' => $saverPaid, 'borrower_paid' => $borrowerPaid,
+                ];
+            }
+            if ($saverPaid) {
                 foreach ($balance as $mid => $b) {
-                    $members[$mid]['saver_gross'] += max(0, $b[$k]) / $sumS * $base * $saverPct;
+                    $part = max(0, $b[$k]) / $sumS * $base * $saverPct;
+                    $members[$mid]['saver_gross'] += $part;
+                    if ($detail) {
+                        $rows[$mid][$k]['bal'] = max(0, $b[$k]);
+                        $rows[$mid][$k]['sg'] = $part;
+                    }
                 }
             } else {
                 $undistributed += $base * $saverPct;
             }
-            if ($sumB > 0) {
+            if ($borrowerPaid) {
                 foreach ($out as $mid => $o) {
-                    $members[$mid]['borrower_gross'] += ($o[$k] ?? 0.0) / $sumB * $base * $borrowerPct;
+                    $part = ($o[$k] ?? 0.0) / $sumB * $base * $borrowerPct;
+                    $members[$mid]['borrower_gross'] += $part;
+                    if ($detail) {
+                        $rows[$mid][$k]['out'] = $o[$k] ?? 0.0;
+                        $rows[$mid][$k]['bg'] = $part;
+                    }
                 }
             } else {
                 $undistributed += $base * $borrowerPct;
@@ -217,12 +242,22 @@ final class ProfitShare
             $keep = $m['reserve_exempt'] ? 1.0 : 1.0 - $reservePct;
             $m['saver']    = (int) round($m['saver_gross'] * $keep);
             $m['borrower'] = (int) round($m['borrower_gross'] * $keep);
+            // Posisi akhir bulan data terakhir (untuk laporan dan snapshot): saldo tabungan dan sisa pinjaman (pokok + bunga).
+            $m['savings_last']     = $asOf > 0 ? (int) ($balance[$mid][$asOf] ?? 0) : 0;
+            $m['outstanding_last'] = $asOf > 0 ? (int) round(($outP[$mid][$asOf] ?? 0.0) + ($outI[$mid][$asOf] ?? 0.0)) : 0;
+            if ($detail) {
+                $m['rows'] = $rows[$mid] ?? [];
+            }
         }
         unset($m);
 
-        return [
+        $result = [
             'period_id' => $periodId, 'as_of' => $asOf > 0 ? (string) $months[$asOf - 1]['month_date'] : null, 'months' => $n, 'excel' => $excel,
             'interest_pool' => $poolTotal, 'undistributed' => $undistributed, 'members' => $members,
         ];
+        if ($detail) {
+            $result['cycles'] = $cycles;
+        }
+        return $result;
     }
 }

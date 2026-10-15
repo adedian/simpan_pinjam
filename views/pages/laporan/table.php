@@ -40,6 +40,10 @@ $exportQuery = http_build_query($query);
         <a class="btn btn--link" href="<?= e(url($basePath)) ?>">Atur ulang</a>
     </form>
 
+    <?php if ($report['key'] === 'bagihasil'): ?>
+        <?= View::include('partials/profit-extra', ['report' => $report, 'snapshotForm' => $snapshotForm ?? null, 'filters' => $filters]) ?>
+    <?php endif; ?>
+
     <?php if ($level === 'none'): ?>
         <div class="alert alert--warning" role="note">Akun Anda belum tertaut ke data anggota atau regu, jadi belum ada laporan yang bisa ditampilkan.</div>
     <?php endif; ?>

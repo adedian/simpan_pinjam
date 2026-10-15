@@ -56,6 +56,7 @@ $sqlReviewed = [
     'models/Validation.php' => ['$from', '$whereSql', '$pager'],
     'services/ExcelImporter.php' => ['$table'],           // daftar tabel konstan, hanya CLI
     'services/LoanService.php' => ['$tenor'],             // (int) $data['tenor']
+    'services/OverdueService.php' => ['implode'],         // $where = potongan tetap + Scope::memberCondition (berparameter); tak ada nilai pengguna
     'services/ReportService.php' => ['$column', '$mIn', '$pIn', '$in', '$from', '$w', '$scope', 'implode', '$mScope'],   // kolom divalidasi regex; IN() dari intval
     'services/MemberSheet.php' => ['$scope', '$in'],      // $scope dari ReportService::memberCondition (potongan tetap + parameter ?); $in = deretan "?,?" dari jumlah id
     'services/Scope.php' => ['$memberColumn'],           // divalidasi regex ^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$

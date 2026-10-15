@@ -86,13 +86,22 @@ $count    = static fn (string $label, int $value, string $hint = ''): string =>
 <?php endif; ?>
 
 <?php /* ---------- regu saya: Ketua Regu (dan Purwati) ---------- */ ?>
-<?php if ($hasTeam): ?>
+<?php if ($hasTeam): $fin = $team['finance']; ?>
+<section class="section" id="keuangan-regu">
+    <h2 class="section__title">Ringkasan Keuangan Regu<?= $team['name'] !== '' ? ' · ' . e($team['name']) : '' ?></h2>
+    <div class="stats stats--fin">
+        <?= $stat('Saldo Total', (int) $fin['savings'], 'Tabungan anggota regu Anda') ?>
+        <?= $stat('Sisa Pinjaman', (int) $fin['outstanding'], 'Sisa tagihan pinjaman anggota regu Anda') ?>
+        <?= $stat('Sisa Kas', (int) $fin['cash'], 'Arus kas transaksi regu (bukan uang fisik)', true) ?>
+        <?= $stat('Total Bunga', (int) $fin['interest'], 'Dibukukan di muka; sudah terbayar ' . money((int) $fin['interest_received'])) ?>
+    </div>
+    <p class="muted">Hanya transaksi yang sudah disetujui, hanya anggota regu Anda. Sisa Kas = setoran + angsuran − pencairan − penarikan atas regu ini; kas koperasi satu dan dipinjamkan lintas regu, jadi angka ini bisa negatif.</p>
+</section>
+
 <section class="section" id="regu-saya">
     <h2 class="section__title">Regu saya<?= $team['name'] !== '' ? ' · ' . e($team['name']) : '' ?></h2>
     <div class="stats">
         <?= $count('Anggota aktif', $team['count']) ?>
-        <?= $stat('Tabungan regu', (int) $team['savings']) ?>
-        <?= $stat('Sisa pinjaman', (int) $team['outstanding']) ?>
         <?= $stat('Tunggakan', (int) $team['overdue'], $team['overdue'] > 0 ? 'Cicilan lewat jatuh tempo' : 'Tidak ada tunggakan') ?>
     </div>
     <?php if (\App\Core\Gate::allows($user, 'transaction.create')): ?>
@@ -194,33 +203,9 @@ $count    = static fn (string $label, int $value, string $hint = ''): string =>
 </section>
 <?php endif; ?>
 
-<?php /* ---------- tunggakan teratas (semua peran, sesuai cakupan) ---------- */ ?>
-<?php if ($level !== 'none' && !$hasMe): ?>
-<section class="card">
-    <div class="card__head">
-        <h2 class="card__title">Tunggakan teratas</h2>
-        <a class="btn btn--secondary btn--sm" href="<?= e(url('/transaksi/angsuran/tagihan')) ?>">Semua tagihan</a>
-    </div>
-    <?php if ($dues === []): ?>
-        <p class="empty">Tidak ada tunggakan. Semua cicilan yang jatuh tempo sudah dibayar.</p>
-    <?php else: ?>
-    <div class="table-wrap">
-        <table class="table table--stack">
-            <thead><tr><th>Anggota</th><th>Regu</th><th class="num">Tunggakan</th><th class="num">Sisa pinjaman</th></tr></thead>
-            <tbody>
-            <?php foreach ($dues as $r): ?>
-                <tr>
-                    <td data-label="Anggota"><a href="<?= e(url('/anggota/' . (int) $r['id'])) ?>"><?= e($r['name']) ?></a> <span class="muted">· <?= e($r['member_no']) ?></span></td>
-                    <td data-label="Regu"><?= e((string) ($r['team_name'] ?? '-')) ?></td>
-                    <td data-label="Tunggakan" class="num"><span class="badge badge--ditolak"><?= e(money((int) $r['overdue'])) ?></span></td>
-                    <td data-label="Sisa pinjaman" class="num"><?= e(money((int) $r['outstanding'])) ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    </div>
-    <?php endif; ?>
-</section>
+<?php /* ---------- tunggakan pinjaman: Superadmin (seluruh koperasi) dan Ketua Regu (regunya) ---------- */ ?>
+<?php if (isset($overdue)): ?>
+    <?= \App\Core\View::include('partials/overdue-panel', ['overdue' => $overdue, 'global' => $isGlobal]) ?>
 <?php endif; ?>
 
 <?php /* ---------- transaksi terbaru ---------- */ ?>

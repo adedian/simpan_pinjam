@@ -2002,6 +2002,11 @@ $matrix = [
     ['/master/anggota/' . $ketuaPeriksa . '/ubah', 'ok', 'x',  'x',  'r'],
     ['/master/ketua-regu/1/ubah',               'ok', 'x',  'x',  'r'],
     ['/master/pengguna/1/ubah',                 'ok', 'x',  'x',  'r'],
+    ['/laporan/bagihasil',                      'ok', 'ok', 'ok', 'r'],
+    ['/laporan/bagihasil/' . $ketuaPeriksa,    'ok', 'ok', 'x',  'r'],   // anggota regu Alfa
+    ['/laporan/bagihasil/' . $anggotaBeta,     'ok', 'x',  'ok', 'r'],   // anggota regu Beta (= pengguna anggota4)
+    ['/laporan/bagihasil/unduh',                'ok', 'x',  'x',  'r'],
+    ['/transaksi/angsuran/tunggakan',           'ok', 'ok', 'ok', 'r'],
     ['/live/tick',                              'ok', 'ok', 'ok', 'r'],
 ];
 $roleNames = ['HEAD', 'KETUA_REGU', 'ANGGOTA', 'TAMU'];
@@ -2068,6 +2073,99 @@ check('pwa/skrip: pwa.js mendaftarkan service worker dari data-sw, tanpa eval/in
 $pwaSrc = file_get_contents(BASE_PATH . '/controllers/PwaController.php');
 check('pwa/controller: tidak memakai BaseController::view (yang mengambil pesan flash sesi) dan tidak menyentuh Auth atau Session', !str_contains($pwaSrc, 'extends BaseController') && !preg_match('/Auth::|Session::|pullFlash/', $pwaSrc));
 check('pwa/header: manifest dan halaman offline membawa header keamanan penuh (CSP, nosniff, DENY)', $hdrOk(array_merge($offAnon, ['headers' => $offAnon['headers']])) && ($man['headers']['x-content-type-options'] ?? '') === 'nosniff' && str_contains($man['headers']['content-security-policy'] ?? '', "object-src 'none'"));
+
+// ---- 14c. Revisi 2: Report Pembagian Bunga, Tunggakan Pinjaman, Ringkasan Keuangan Regu ----
+// Regu menurut keanggotaan SAAT INI (tes sebelumnya boleh mengganti nama atau ketua regu).
+$alfaTeam = $count("SELECT team_id FROM member_team_assignments WHERE member_id = ? AND valid_to IS NULL", [$mid(2)]);
+$betaTeam = $count("SELECT team_id FROM member_team_assignments WHERE member_id = ? AND valid_to IS NULL", [$mid(4)]);
+// Dua pinjaman berlaku dengan cicilan menunggak (bulan jatuh tempo lewat), nominal khas agar mudah dicari di halaman.
+$mkOverdue = static function (int $memberNo, int $teamId, int $amountDue, string $dueDate) use ($count): array {
+    $pdo = Database::pdo();
+    $pm = (int) $count('SELECT id FROM period_months WHERE month_date = ?', [$dueDate]);
+    $pm0 = (int) $count('SELECT id FROM period_months ORDER BY month_date LIMIT 1');
+    $member = (int) $count('SELECT id FROM members WHERE member_no = ?', [sprintf('AGT-%03d', $memberNo)]);
+    static $n = 900;
+    $n++;
+    $pdo->prepare('INSERT INTO transactions (trx_no, doc_no, type, member_id, team_id, period_month_id, trx_date, amount) VALUES (?,?,?,?,?,?,?,?)')->execute(["T-HTTP-{$n}", "PJM-HTTP-{$n}", 'PENCAIRAN_PINJAMAN', $member, $teamId, $pm0, '2026-03-02', $amountDue]);
+    $tid = (int) $pdo->lastInsertId();
+    $pdo->prepare('INSERT INTO loans (transaction_id, member_id, principal, tenor_months, rate_pct_month, total_interest, disbursed_on) VALUES (?,?,?,?,?,?,?)')->execute([$tid, $member, $amountDue, 1, '2.00', 0, '2026-03-02']);
+    $lid = (int) $pdo->lastInsertId();
+    $pdo->prepare('INSERT INTO loan_installments (loan_id, seq, due_month_id, amount_due) VALUES (?,?,?,?)')->execute([$lid, 1, $pm, $amountDue]);
+    $pdo->exec("UPDATE transactions SET status = 'MENUNGGU_VALIDASI' WHERE id = {$tid}");
+    $pdo->exec("UPDATE transactions SET status = 'DISETUJUI' WHERE id = {$tid}");
+    return ['no' => "PJM-HTTP-{$n}", 'trx' => $tid, 'member' => $member];
+};
+$odA = $mkOverdue(2, $alfaTeam, 111111, '2026-04-01');   // Anggota Alfa Dua, regu Alfa
+$odB = $mkOverdue(4, $betaTeam, 222222, '2026-05-01');   // Anggota Beta Dua, regu Beta
+
+// -- Tunggakan Pinjaman: halaman detail dan isolasi antar-regu (di backend)
+$tha = $sh->get('/transaksi/angsuran/tunggakan');
+$tsa = $sa->get('/transaksi/angsuran/tunggakan');
+$tsb = $sb->get('/transaksi/angsuran/tunggakan');
+$tsm = $sm->get('/transaksi/angsuran/tunggakan');
+check('tunggakan/halaman: Superadmin melihat tunggakan kedua regu (Rp 111.111 dan Rp 222.222), dengan nomor pinjaman, hari terlambat, status', $tha['status'] === 200 && $has($tha, $odA['no']) && $has($tha, $odB['no']) && $has($tha, '111.111') && $has($tha, '222.222') && $has($tha, ' hari') && $has($tha, 'Belum dibayar') && $has($tha, 'Anggota menunggak'));
+check('tunggakan/isolasi: Ketua Regu Alfa hanya melihat regunya; Rp 222.222 dan pinjaman Beta tidak ada di halaman', $tsa['status'] === 200 && $has($tsa, $odA['no']) && $has($tsa, '111.111') && !$has($tsa, $odB['no']) && !$has($tsa, '222.222') && !$has($tsa, 'AGT-004'));
+check('tunggakan/isolasi: Ketua Regu Beta hanya melihat regunya; Rp 111.111 dan pinjaman Alfa tidak ada', $tsb['status'] === 200 && $has($tsb, $odB['no']) && $has($tsb, '222.222') && !$has($tsb, $odA['no']) && !$has($tsb, '111.111') && !$has($tsb, 'AGT-002'));
+check('tunggakan/isolasi: Anggota hanya melihat tunggakannya sendiri (Beta Dua)', $has($tsm, '222.222') && !$has($tsm, '111.111') && !$has($tsm, $odA['no']));
+check('tunggakan/isolasi: parameter regu dan pencarian tidak bisa membuka regu lain (Alfa memaksa regu Beta atau mencari nomor pinjaman Beta)', !$has($sa->get('/transaksi/angsuran/tunggakan?regu=' . $betaTeam), '222.222') && !$has($sa->get('/transaksi/angsuran/tunggakan?q=' . urlencode($odB['no'])), '222.222') && $has($sa->last, 'Tidak ada tunggakan untuk saringan ini') && !$has($sa->get('/transaksi/angsuran/tunggakan?q=Beta'), 'AGT-004'));
+check('tunggakan/saringan: Superadmin menyaring per regu dan mencari nomor pinjaman; wildcard dan simbol aman', $has($sh->get('/transaksi/angsuran/tunggakan?regu=' . $betaTeam), '222.222') && !$has($sh->last, '111.111') && $has($sh->get('/transaksi/angsuran/tunggakan?q=' . urlencode($odA['no'])), '111.111') && !$has($sh->last, '222.222') && $sh->get('/transaksi/angsuran/tunggakan?q=%25&regu=abc')['status'] === 200 && !$has($sh->get('/transaksi/angsuran/tunggakan?q=%27%3Cscript%3E'), '<script>'));
+check('tunggakan/tautan: ke detail pinjaman dan ke anggota (cakupan tetap dijaga server pada tujuan)', $has($tsa, '/transaksi/' . $odA['trx']) && $has($tsa, '/anggota/' . $odA['member']) && $sa->get('/transaksi/' . $odB['trx'])['status'] === 404 && $sb->get('/anggota/' . $odA['member'])['status'] === 404);
+
+// -- Dashboard: panel tunggakan dan empat indikator keuangan regu
+$dsa = $sa->get('/');
+$dsb = $sb->get('/');
+$dsh = $sh->get('/');
+$finA = App\Services\TeamFinance::summary($alfaTeam);
+$finB = App\Services\TeamFinance::summary($betaTeam);
+check('dashboard/regu: Ketua Regu Alfa melihat panel Tunggakan Pinjaman berisi regunya saja (ringkasan, daftar, tautan)', $has($dsa, 'id="tunggakan"') && $has($dsa, 'Tunggakan Pinjaman') && $has($dsa, 'Anggota menunggak') && $has($dsa, 'Angsuran belum dibayar') && $has($dsa, 'Total nominal tunggakan') && $has($dsa, '111.111') && !$has($dsa, '222.222') && $has($dsa, '/transaksi/angsuran/tunggakan'));
+check('dashboard/regu: Ketua Regu Beta melihat tunggakan regunya saja', $has($dsb, '222.222') && !$has($dsb, '111.111'));
+check('dashboard/regu: empat indikator Saldo Total, Sisa Pinjaman, Sisa Kas, Total Bunga tampil dengan angka dari TeamFinance (Alfa)', $has($dsa, 'id="keuangan-regu"') && $has($dsa, 'Saldo Total') && $has($dsa, 'Sisa Pinjaman') && $has($dsa, 'Sisa Kas') && $has($dsa, 'Total Bunga')
+    && $has($dsa, $rp($finA['savings'])) && $has($dsa, $rp($finA['outstanding'])) && $has($dsa, $rp($finA['cash'])) && $has($dsa, $rp($finA['interest'])));
+check('dashboard/regu: angka keuangan regu Beta berbeda dari Alfa dan hanya miliknya (tidak ada kebocoran lintas regu)', $has($dsb, $rp($finB['savings'])) && $has($dsb, $rp($finB['outstanding'])) && $has($dsb, $rp($finB['interest'])) && ($finA['outstanding'] !== $finB['outstanding'] ? !$has($dsb, $rp($finA['outstanding'])) : true));
+check('dashboard/regu: konsisten dengan Laporan Per Ketua Regu (sumber sama): tabungan, sisa pinjaman, bunga, arus kas Regu Alfa', (function () use ($sh, $has, $finA, $rp): bool {
+    $r = $sh->get('/laporan/regu');
+    $num = static fn (int $n): string => ($n < 0 ? '-' : '') . number_format(abs($n), 0, ',', '.');
+    return $r['status'] === 200 && $has($r, 'Total bunga') && $has($r, 'Arus kas regu') && ($finA['interest'] === 0 || $has($r, $num($finA['interest']))) && ($finA['outstanding'] === 0 || $has($r, $num($finA['outstanding']))) && ($finA['cash'] === 0 || $has($r, $num($finA['cash'])));
+})());
+check('dashboard/superadmin: panel tunggakan seluruh koperasi dengan rincian per regu; Anggota tidak mendapat panel ini', $has($dsh, 'id="tunggakan"') && $has($dsh, '111.111') && $has($dsh, '222.222') && $has($dsh, 'Per regu:') && !$has($sm->get('/'), 'id="tunggakan"'));
+check('dashboard/live: panel tunggakan dan indikator keuangan berada di dalam wilayah pembaruan langsung (ikut diperbarui otomatis)', (function () use ($dsa): bool {
+    $a = strpos($dsa['body'], 'data-live-region');
+    $t = strpos($dsa['body'], 'id="tunggakan"');
+    $k = strpos($dsa['body'], 'id="keuangan-regu"');
+    return $a !== false && $t !== false && $k !== false && $a < $t && $a < $k;
+})());
+$pageBefore = $sa->get('/')['body'];
+Database::pdo()->exec("INSERT INTO audit_logs (user_id, username, roles, action, entity_type) VALUES (NULL, 'uji', '[]', 'LOGIN_SUCCESS', 'user')");
+$pageAfter = $sa->get('/');
+check('dashboard/live: konten tunggakan dirender dari data terkini setiap dibuka (bukan salinan tersimpan)', $has($pageAfter, '111.111') && $has($pageAfter, 'id="tunggakan"'));
+
+// -- Report Pembagian Bunga
+$bh  = $sh->get('/laporan/bagihasil');
+$bha = $sa->get('/laporan/bagihasil');
+$bhm = $sm->get('/laporan/bagihasil');
+check('bagihasil/halaman: Superadmin: judul, ringkasan, kontrol pembagian, kolom per anggota, tombol snapshot dan unduh', $bh['status'] === 200 && $has($bh, 'Report Pembagian Bunga') && $has($bh, 'Bagi hasil penabung') && $has($bh, 'Bagi hasil peminjam') && $has($bh, 'Cadangan') && $has($bh, 'Kontrol pembagian') && $has($bh, 'Perkiraan (dihitung langsung)') && $has($bh, 'Simpan sebagai snapshot') && $has($bh, '/laporan/bagihasil/unduh') && $has($bh, 'Ketua Regu'));
+check('bagihasil/menu: item "Pembagian Bunga" ada di menu Laporan untuk semua peran yang melihat laporan', $has($bh, 'href="/laporan/bagihasil"') && $has($bha, 'href="/laporan/bagihasil"') && $has($bhm, 'href="/laporan/bagihasil"'));
+check('bagihasil/cakupan: Ketua Regu Alfa hanya melihat anggota regunya; tanpa kontrol global dan tanpa tombol snapshot', $bha['status'] === 200 && $has($bha, 'AGT-002') && !$has($bha, 'AGT-004') && !$has($bha, 'Kontrol pembagian') && !$has($bha, 'Simpan sebagai snapshot'));
+check('bagihasil/cakupan: Anggota hanya melihat dirinya; Ketua Regu tidak bisa memaksa regu lain lewat parameter', $has($bhm, 'AGT-004') && !$has($bhm, 'AGT-002') && !$has($sa->get('/laporan/bagihasil?regu=' . $betaTeam), 'AGT-004'));
+$bd = $sh->get('/laporan/bagihasil/' . $mid(2));
+check('bagihasil/rincian: Superadmin melihat rincian per siklus anggota (porsi, bagian, aturan), dengan tautan kembali', $bd['status'] === 200 && $has($bd, 'Bagi hasil') && $has($bd, 'Porsi penabung') && $has($bd, 'Dasar pinjaman') && $has($bd, 'Kembali ke laporan'));
+check('bagihasil/rincian: IDOR: Ketua Regu Beta dan Anggota Beta tidak membuka rincian anggota Alfa (404); Ketua Alfa membuka anggotanya', $sb->get('/laporan/bagihasil/' . $mid(2))['status'] === 404 && $sm->get('/laporan/bagihasil/' . $mid(2))['status'] === 404 && $sa->get('/laporan/bagihasil/' . $mid(2))['status'] === 200 && $sm->get('/laporan/bagihasil/' . $mid(4))['status'] === 200 && $sh->get('/laporan/bagihasil/99999999')['status'] === 404);
+check('bagihasil/rincian: angka seluruh koperasi (kolom bunga bulan berikutnya) hanya untuk Superadmin, tidak untuk Ketua Regu', $has($sh->get('/laporan/bagihasil/' . $mid(2)), 'Bunga diterima bulan berikutnya') && !$has($sa->get('/laporan/bagihasil/' . $mid(2)), 'Bunga diterima bulan berikutnya'));
+check('bagihasil/saringan: periode, regu, dan pencarian; nilai ngawur aman (tanpa galat)', $sh->get('/laporan/bagihasil?periode=1&regu=' . $betaTeam)['status'] === 200 && $sh->get('/laporan/bagihasil?q=%25&snapshot=abc&periode=zz')['status'] === 200 && $sh->get('/laporan/bagihasil?snapshot=99999')['status'] === 200 && $has($sh->last, 'Perkiraan (dihitung langsung)'));
+$dl = $sh->get('/laporan/bagihasil/unduh');
+check('bagihasil/unduh: hanya Superadmin (report.export); berkas Excel sah dan tercatat di audit; Ketua Regu dan Anggota 403', $dl['status'] === 200 && str_contains($dl['headers']['content-type'] ?? '', 'spreadsheetml') && str_starts_with($dl['body'], 'PK') && $sa->get('/laporan/bagihasil/unduh')['status'] === 403 && $sm->get('/laporan/bagihasil/unduh')['status'] === 403 && $audits('REPORT_EXPORTED') >= 1);
+
+// -- Snapshot lewat web
+$snapPage = $sh->get('/laporan/bagihasil');
+$snapToken = preg_match('/name="_token" value="([^"]+)"/', $snapPage['body'], $tm) === 1 ? $tm[1] : '';
+check('snapshot/web: Ketua Regu dan Anggota tidak bisa menetapkan snapshot (403), tanpa baris tersimpan', $post($sa, '/laporan/bagihasil/snapshot', ['periode' => '1'])['status'] === 403 && $post($sm, '/laporan/bagihasil/snapshot', ['periode' => '1'])['status'] === 403 && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 0);
+$sp1 = $post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1', 'note' => 'Uji <b>web</b>']);
+$snapId = $count('SELECT MAX(id) FROM profit_share_snapshots');
+check('snapshot/web: Superadmin menetapkan; dialihkan ke snapshot, 1 snapshot tersimpan, tercatat di audit', $sp1['status'] === 302 && $snapId > 0 && str_contains($loc($sp1), 'snapshot=' . $snapId) && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 1 && $audits('PROFIT_SNAPSHOT_CREATED') === 1);
+$view = $sh->get($loc($sp1));
+check('snapshot/web: halaman snapshot berstatus ditetapkan; tombol simpan diganti penjelasan; angka sama dengan hitungan langsung; catatan aman dari XSS', $view['status'] === 200 && $has($view, 'Snapshot ditetapkan') && !$has($view, 'Simpan sebagai snapshot') && !$has($view, '<b>web</b>') && $has($sh->get('/laporan/bagihasil?periode=1'), 'sudah ada') && !$has($sh->last, 'Simpan sebagai snapshot'));
+check('snapshot/web: penetapan kedua untuk keadaan data yang sama ditolak dengan pesan; tetap 1 snapshot', $has($sh->get($loc($post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1']))), 'sudah ada') && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 1 && $count('SELECT COUNT(*) FROM profit_share_lines') === (int) $count('SELECT COUNT(*) FROM profit_share_lines WHERE snapshot_id = ' . $snapId));
+check('snapshot/web: Ketua Regu melihat snapshot hanya untuk anggota regunya; periode tak dikenal 404', $has($sa->get('/laporan/bagihasil?snapshot=' . $snapId), 'Snapshot ditetapkan') && $has($sa->last, 'AGT-002') && !$has($sa->last, 'AGT-004') && $post($sh, '/laporan/bagihasil/snapshot', ['periode' => '999'])['status'] === 404);
 
 // -- cakupan route: setiap route yang terdaftar harus pernah diminta oleh suite ini
 $routerAll = new App\Core\Router();

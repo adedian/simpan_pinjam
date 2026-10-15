@@ -53,6 +53,76 @@ final class ReportController extends BaseController
         return $this->table($request, 'regu');
     }
 
+    /** Report Pembagian Bunga per anggota. @param array<string,string> $params */
+    public function bagihasil(Request $request, array $params = []): Response
+    {
+        $user   = Auth::user();
+        $f      = ReportService::filters($request->query, $user);
+        $level  = ReportService::level($user);
+        $report = ReportService::build('bagihasil', $user, $f, 1);
+        $asOf   = $report['meta']['as_of'] ?? null;
+        $exists = false;
+        foreach (\App\Services\ProfitReport::snapshots($f['period']) as $s) {
+            $exists = $exists || ($asOf !== null && $s['as_of'] === $asOf);
+        }
+        return $this->view($request, 'laporan/table', [
+            'title'     => $report['title'],
+            'wide'      => true,
+            'report'    => $report,
+            'filters'   => $f,
+            'fields'    => $this->fields('bagihasil', $f, $level),
+            'canExport' => Gate::allows($user, 'report.export'),
+            'level'     => $level,
+            'printedBy' => (string) ($user['name'] ?? ''),
+            'printedAt' => date('d-m-Y H:i'),
+            'query'     => $this->activeQuery($request),
+            'basePath'  => '/laporan/bagihasil',
+            'snapshotForm' => Gate::allows($user, 'profit.snapshot') && ($report['meta']['source'] ?? '') === \App\Services\ProfitReport::SOURCE_LIVE && $asOf !== null
+                ? ['period' => $f['period'], 'as_of' => $asOf, 'exists' => $exists] : null,
+        ]);
+    }
+
+    /** Rincian bagi hasil satu anggota per siklus. Di luar cakupan = 404 yang sama dengan tidak ada. @param array<string,string> $params */
+    public function bagihasilMember(Request $request, array $params = []): Response
+    {
+        $user = Auth::user();
+        $id   = (int) $params['id'];
+        $f    = ReportService::filters($request->query, $user);
+        $d    = \App\Services\ProfitReport::memberDetail($user, $id, $f);
+        if ($d === null) {
+            if (\App\Models\Member::exists($id)) {
+                AuditLog::record($request, $user, 'ACCESS_DENIED_SCOPE', 'member', $id, null, null, ['path' => $request->path]);
+            }
+            $this->abort(404);
+        }
+        return $this->view($request, 'laporan/bagihasil-member', [
+            'title'     => 'Bagi hasil · ' . $d['member']['name'],
+            'detail'    => $d,
+            'back'      => '/laporan/bagihasil' . \App\Services\ProfitReport::queryFor($f),
+            'printedBy' => (string) ($user['name'] ?? ''),
+            'printedAt' => date('d-m-Y H:i'),
+        ]);
+    }
+
+    /** Simpan snapshot bagi hasil (hanya Superadmin; hanya-tambah). @param array<string,string> $params */
+    public function bagihasilSnapshot(Request $request, array $params = []): Response
+    {
+        $user   = Auth::user();
+        $period = (int) ($request->post['periode'] ?? 0);
+        $valid  = array_column(ReportService::periods(), 'id');
+        if (!in_array($period, $valid, true)) {
+            $this->abort(404);
+        }
+        try {
+            $id = \App\Services\ProfitReport::createSnapshot($request, $user, $period, $request->str('note'));
+        } catch (\App\Services\RuleViolation $e) {
+            \App\Core\Session::flash('danger', implode(' ', $e->errors));
+            return $this->redirect('/laporan/bagihasil?periode=' . $period);
+        }
+        \App\Core\Session::flash('success', 'Snapshot bagi hasil disimpan dan tidak akan berubah lagi.');
+        return $this->redirect('/laporan/bagihasil?periode=' . $period . '&snapshot=' . $id);
+    }
+
     /** Pilih anggota untuk kartu anggota. @param array<string,string> $params */
     public function members(Request $request, array $params = []): Response
     {
@@ -244,8 +314,15 @@ final class ReportController extends BaseController
             }
             $out[] = ['name' => 'regu', 'label' => 'Regu', 'type' => 'select', 'options' => $teams, 'value' => (string) $f['team']];
         }
-        if ($key === 'simpanan' || $key === 'angsuran' || $key === 'saldo' || $key === 'pinjaman' || $key === 'transaksi') {
+        if ($key === 'simpanan' || $key === 'angsuran' || $key === 'saldo' || $key === 'pinjaman' || $key === 'transaksi' || $key === 'bagihasil') {
             $out[] = ['name' => 'q', 'label' => 'Cari', 'type' => 'text', 'value' => $f['q'], 'placeholder' => $key === 'transaksi' ? 'Anggota atau nomor dokumen' : 'Nama atau nomor anggota'];
+        }
+        if ($key === 'bagihasil') {
+            $opts = ['0' => 'Perhitungan langsung (perkiraan)'];
+            foreach (\App\Services\ProfitReport::snapshots($f['period']) as $sn) {
+                $opts[$sn['id']] = 'Snapshot data ' . month_label($sn['as_of']) . ' (ditetapkan ' . date('d-m-Y', (int) strtotime($sn['created_at'])) . ')';
+            }
+            $out[] = ['name' => 'snapshot', 'label' => 'Sumber angka', 'type' => 'select', 'options' => $opts, 'value' => (string) $f['snap']];
         }
         if ($key === 'pinjaman') {
             $out[] = ['name' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => ['' => 'Semua', 'AKTIF' => 'Aktif', 'LUNAS' => 'Lunas'], 'value' => $f['status']];
@@ -260,7 +337,7 @@ final class ReportController extends BaseController
     private function activeQuery(Request $request): array
     {
         $out = [];
-        foreach (['periode', 'regu', 'q', 'dari', 'sampai', 'jenis', 'anggota'] as $k) {
+        foreach (['periode', 'regu', 'q', 'dari', 'sampai', 'jenis', 'anggota', 'snapshot'] as $k) {
             if ($request->queryStr($k) !== '') {
                 $out[$k] = $request->queryStr($k);
             }

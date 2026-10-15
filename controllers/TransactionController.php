@@ -161,6 +161,23 @@ final class TransactionController extends BaseController
         ]);
     }
 
+    /** Tunggakan pinjaman per cicilan (cakupan sesuai peran), dengan pencarian. @param array<string,string> $params */
+    public function overdue(Request $request, array $params = []): Response
+    {
+        $user    = Auth::user();
+        $level   = \App\Services\Scope::level($user, 'transaction');
+        $filters = ['q' => mb_substr(clean_text($request->query['q'] ?? ''), 0, 60), 'team' => $level === \App\Services\Scope::ALL ? max(0, (int) ($request->query['regu'] ?? 0)) : 0];
+        $items   = \App\Services\OverdueService::items($user, $filters);
+        return $this->view($request, 'transaksi/overdue', [
+            'title'    => 'Tunggakan Pinjaman',
+            'items'    => $items,
+            'summary'  => \App\Services\OverdueService::summary($items),
+            'filters'  => $filters,
+            'teams'    => $level === \App\Services\Scope::ALL ? \App\Services\ReportService::teams() : [],
+            'showTeam' => $level === \App\Services\Scope::ALL,
+        ]);
+    }
+
     /** @param array<string,string> $params */
     public function createPayment(Request $request, array $params = []): Response
     {

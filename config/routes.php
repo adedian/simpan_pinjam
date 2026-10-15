@@ -81,6 +81,7 @@ return static function (Router $r): void {
     $r->post('/transaksi/pinjaman/{id:\d+}', [TransactionController::class, 'updateLoan'], ['auth', 'can:transaction.create']);
     $r->get('/transaksi/angsuran', [TransactionController::class, 'payments'], ['auth', $viewTrx]);
     $r->get('/transaksi/angsuran/tagihan', [TransactionController::class, 'dues'], ['auth', $viewTrx]);
+    $r->get('/transaksi/angsuran/tunggakan', [TransactionController::class, 'overdue'], ['auth', $viewTrx]);
     $r->get('/transaksi/angsuran/baru', [TransactionController::class, 'createPayment'], ['auth', 'can:transaction.create']);
     $r->post('/transaksi/angsuran', [TransactionController::class, 'storePayment'], ['auth', 'can:transaction.create']);
     $r->get('/transaksi/angsuran/{id:\d+}/ubah', [TransactionController::class, 'editPayment'], ['auth', 'can:transaction.create']);
@@ -101,6 +102,10 @@ return static function (Router $r): void {
     $r->get('/laporan/angsuran', [ReportController::class, 'angsuran'], ['auth', $viewReport]);
     $r->get('/laporan/saldo', [ReportController::class, 'saldo'], ['auth', $viewReport]);
     $r->get('/laporan/transaksi', [ReportController::class, 'transaksi'], ['auth', $viewReport]);
+    // Report Pembagian Bunga per anggota (ProfitShare). Snapshot hanya-tambah, hanya Superadmin.
+    $r->get('/laporan/bagihasil', [ReportController::class, 'bagihasil'], ['auth', $viewReport]);
+    $r->get('/laporan/bagihasil/{id:\d+}', [ReportController::class, 'bagihasilMember'], ['auth', $viewReport]);
+    $r->post('/laporan/bagihasil/snapshot', [ReportController::class, 'bagihasilSnapshot'], ['auth', 'can:profit.snapshot']);
     $r->get('/laporan/regu', [ReportController::class, 'regu'], ['auth', 'can:report.view.global']);
     $r->get('/laporan/anggota', [ReportController::class, 'members'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/anggota/{id:\d+}', [ReportController::class, 'member'], ['auth', 'can:report.view.global|report.view.team']);

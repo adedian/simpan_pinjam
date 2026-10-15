@@ -561,6 +561,10 @@ textarea.input { resize: vertical; min-height: 84px; }
 /* ---------- Laporan (Phase 12) ---------- */
 .report__head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .report__stamp, .report__note { font-size: 12.5px; }
+.report__status { margin: 4px 0 12px; font-size: 14px; }
+.stats--report { margin: 14px 0 6px; }
+.stats--report .stat__value { font-size: 22px; }
+.card--inline { margin: 10px 0 14px; padding: 12px 14px; box-shadow: none; border: 1px solid var(--brand-200); }
 .report { padding: 22px 20px; }
 .table-wrap--report { max-height: 70vh; }
 /* Lebar kolom mengikuti isi: angka dan nomor tidak pernah patah, teks (nama, regu) dan judul kolom boleh turun baris.

@@ -20,7 +20,7 @@ abstract class BaseController
      */
     private const LIVE_VIEWS = [
         'home', 'member', 'master/members', 'master/teams', 'master/users',
-        'transaksi/savings', 'transaksi/loans', 'transaksi/payments', 'transaksi/dues', 'transaksi/history', 'transaksi/show',
+        'transaksi/savings', 'transaksi/loans', 'transaksi/payments', 'transaksi/dues', 'transaksi/overdue', 'transaksi/history', 'transaksi/show',
         'validasi/queue', 'validasi/history',
     ];
 
