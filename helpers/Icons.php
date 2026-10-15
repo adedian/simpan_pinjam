@@ -22,6 +22,7 @@ final class Icons
         'sliders'  => '<path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/>',
         'shield'   => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
         'menu'     => '<path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/>',
+        'arrow-left' => '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
         'x'        => '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
         'logout'   => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
         'eye'      => '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',

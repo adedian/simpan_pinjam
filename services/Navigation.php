@@ -50,6 +50,55 @@ final class Navigation
         return $groups;
     }
 
+    /**
+     * Tujuan tombol "Kembali" di bilah atas, atau null di beranda.
+     * 'parent' = true bila halaman ini anak (formulir, rincian): tombol menuju halaman induknya, bukan riwayat peramban,
+     * supaya setelah menyimpan formulir "Kembali" tidak membuka formulir itu lagi. Halaman menu utama memakai riwayat
+     * peramban; tautan ini hanya cadangan (tanpa JS atau dibuka langsung) dan mengarah ke beranda.
+     *
+     * @param array{roles?:array<int,string>}|null $user
+     * @return array{path:string,parent:bool}|null
+     */
+    public static function backTarget(?array $user, string $currentPath): ?array
+    {
+        $current = '/' . trim($currentPath, '/');
+        if ($current === '/') {
+            return null;
+        }
+
+        $menu = [];   // jalur item menu yang boleh dibuka pengguna ini
+        foreach ((array) Config::get('menu', []) as $group) {
+            foreach ($group['items'] as $item) {
+                if ($item['path'] !== '/' && self::anyAllowed($user, $item['can'])) {
+                    $menu[$item['path']] = true;
+                }
+            }
+        }
+        if (isset($menu[$current])) {
+            return ['path' => '/', 'parent' => false];
+        }
+
+        // Rute yang jalurnya bukan turunan jalur menu induknya.
+        $special = ['#^/anggota/\d+$#' => '/master/anggota', '#^/transaksi/\d+$#' => '/transaksi/riwayat'];
+        foreach ($special as $pattern => $target) {
+            if (preg_match($pattern, $current) === 1 && isset($menu[$target])) {
+                return ['path' => $target, 'parent' => true];
+            }
+        }
+
+        // Naik satu segmen demi satu sampai bertemu menu yang boleh dibuka; kalau tak ada, beranda.
+        $parts = explode('/', trim($current, '/'));
+        array_pop($parts);
+        while ($parts !== []) {
+            $candidate = '/' . implode('/', $parts);
+            if (isset($menu[$candidate])) {
+                return ['path' => $candidate, 'parent' => true];
+            }
+            array_pop($parts);
+        }
+        return ['path' => '/', 'parent' => true];
+    }
+
     /** @param array<int,string> $permissions */
     private static function anyAllowed(?array $user, array $permissions): bool
     {

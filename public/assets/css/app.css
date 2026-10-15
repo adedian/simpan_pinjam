@@ -121,6 +121,12 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 }
 .topbar__title { flex: 1; min-width: 0; font-size: 22px; font-weight: 750; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icon-btn.topbar__menu { display: none; }
+.topbar__back {
+    display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 44px; padding: 0 16px 0 12px;
+    background: #fff; color: var(--brand-700); border-radius: 999px; box-shadow: var(--shadow);
+    font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.topbar__back:hover { background: var(--brand-700); color: #fff; }
 
 /* Info pengguna berbentuk pil putih, seperti kolom isian di halaman masuk. */
 .userchip {
@@ -424,6 +430,8 @@ textarea.input { resize: vertical; min-height: 84px; }
     .cell-actions { text-align: left; white-space: normal; padding-top: 8px; }
     .cell-actions > *, .cell-actions form.inline { margin: 4px 6px 0 0; }
     .userchip__text { display: none; }
+    .topbar__back { padding: 0; width: 44px; justify-content: center; }
+    .topbar__back span { display: none; }
     .card { padding: 20px 16px; }
     .userchip { padding: 4px; }
     .stat__value { font-size: 23px; }
