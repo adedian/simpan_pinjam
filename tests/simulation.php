@@ -221,10 +221,10 @@ function fixture(): array
     $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu A', 1), ('Regu B', 5)");
     $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m1}'),(2,1,'{$m1}'),(3,1,'{$m1}'),(4,1,'{$m1}'),(5,2,'{$m1}'),(6,2,'{$m1}'),(7,2,'{$m1}'),(8,2,'{$m1}')");
     $ids = [];
-    foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['beta', ['KETUA_REGU'], 'AGT-005'], ['kepala2', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null]] as [$u, $roles, $no]) {
+    foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['beta', ['KETUA_REGU'], 'AGT-005'], ['kepala2', ['HEAD'], null], ['periksa', ['HEAD'], null]] as [$u, $roles, $no]) {
         $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
     }
-    $ids['periksa.m'] = UserService::create('periksa.m', 'Periksa M', ['PEMERIKSA'], null, 'Contoh-Uji-2026')['id'];
+    $ids['periksa.m'] = UserService::create('periksa.m', 'Periksa M', ['HEAD'], null, 'Contoh-Uji-2026')['id'];
     $pdo->exec("UPDATE users SET member_id = 8 WHERE username = 'periksa.m'");
     $mid = [];
     foreach ([$m1, $m0] as $d) {

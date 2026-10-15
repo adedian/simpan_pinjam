@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * Tes validasi transaksi (Phase 9): pemisahan tugas, transaksi Head hanya Pemeriksa, pemeriksaan kas atomik,
+ * Tes validasi transaksi (Phase 9): hanya Superadmin yang memvalidasi (semua transaksi, tanpa pemisahan pembuat-penyetuju), pemeriksaan kas atomik,
  * pemeriksaan keadaan terkini saat setuju, tolak, atomisitas, antrean dan riwayat.
  * MENGOSONGKAN database uji; tidak menyentuh data sungguhan.
  *   C:\xampp\php\php.exe tests\validation.php
@@ -140,18 +140,18 @@ $mid1 = (int) one('SELECT id FROM period_months WHERE month_date = ?', [$m1]);
 $mid0 = (int) one('SELECT id FROM period_months WHERE month_date = ?', [$m0]);
 $today = date('Y-m-d');
 
-foreach ([1 => 'Ketua Alfa (Head)', 2 => 'Anggota Alfa', 3 => 'Ketua Beta', 4 => 'Anggota Beta', 5 => 'Anggota Pemeriksa', 6 => 'Anggota Nonaktif'] as $n => $name) {
+foreach ([1 => 'Ketua Alfa (Head)', 2 => 'Anggota Alfa', 3 => 'Ketua Beta', 4 => 'Anggota Beta', 5 => 'Anggota Superadmin', 6 => 'Anggota Nonaktif'] as $n => $name) {
     $pdo->prepare('INSERT INTO members (member_no, name, active_from, status) VALUES (?, ?, ?, ?)')->execute([sprintf('AGT-%03d', $n), $name, $m1, 'AKTIF']);
 }
 $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa', 1), ('Regu Beta', 3)");
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m1}'),(2,1,'{$m1}'),(3,2,'{$m1}'),(4,2,'{$m1}'),(5,2,'{$m1}'),(6,2,'{$m1}')");
 
 $ids = [];
-foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota4', ['ANGGOTA'], 'AGT-004']] as [$u, $roles, $no]) {
+foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota4', ['ANGGOTA'], 'AGT-004']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
-$ids['periksa.m'] = UserService::create('periksa.m', 'Periksa Anggota', ['PEMERIKSA'], null, 'Contoh-Uji-2026')['id'];
-$pdo->exec("UPDATE users SET member_id = 5 WHERE username = 'periksa.m'");   // Pemeriksa yang juga anggota (member 5)
+$ids['periksa.m'] = UserService::create('periksa.m', 'Superadmin Anggota', ['HEAD'], null, 'Contoh-Uji-2026')['id'];
+$pdo->exec("UPDATE users SET member_id = 5 WHERE username = 'periksa.m'");   // Superadmin yang juga anggota (member 5)
 $purwati = User::findActive($ids['purwati']);
 $beta    = User::findActive($ids['ketua.beta']);
 $head    = User::findActive($ids['kepala2']);
@@ -181,16 +181,11 @@ function loanDraft(array $actor, int $member, string $principal, string $tenor, 
 // ======================= kewenangan (murni) =======================
 $t = fn (array $o = []) => $o + ['id' => 1, 'created_by' => 99, 'member_id' => 4, 'team_id' => 2];
 $u = fn (array $roles, ?int $member = null, int $id = 50) => ['id' => $id, 'roles' => $roles, 'member_id' => $member];
-check('assess: Head boleh memvalidasi transaksi biasa', ValidationService::assess($u(['HEAD']), $t(), false, 3)['eligible'] === true);
-check('assess: Pemeriksa boleh memvalidasi transaksi biasa dan transaksi Head', ValidationService::assess($u(['PEMERIKSA']), $t(), false, 3)['eligible'] === true && ValidationService::assess($u(['PEMERIKSA']), $t(), true, 3)['eligible'] === true);
-check('assess: Ketua Regu dan Anggota tidak berhak memvalidasi', ValidationService::assess($u(['KETUA_REGU']), $t(), false, null)['eligible'] === false && ValidationService::assess($u(['ANGGOTA'], 4), $t(), false, null)['eligible'] === false);
-check('assess: pembuat tidak boleh memvalidasi transaksinya sendiri', ValidationService::assess($u(['HEAD'], null, 99), $t(), false, null)['eligible'] === false && str_contains((string) ValidationService::assess($u(['HEAD'], null, 99), $t(), false, null)['reason'], 'pembuat'));
-check('assess: tidak boleh memvalidasi transaksi atas nama sendiri', ValidationService::assess($u(['PEMERIKSA'], 4), $t(), false, 3)['eligible'] === false && str_contains((string) ValidationService::assess($u(['PEMERIKSA'], 4), $t(), false, 3)['reason'], 'atas nama Anda'));
-check('assess: tidak boleh memvalidasi transaksi regu yang dipimpinnya', ValidationService::assess($u(['PEMERIKSA'], 3), $t(), false, 3)['eligible'] === false && str_contains((string) ValidationService::assess($u(['PEMERIKSA'], 3), $t(), false, 3)['reason'], 'regu yang Anda pimpin'));
-$headOnly = ValidationService::assess($u(['HEAD']), $t(), true, 3);
-check('assess: transaksi terkait Head ditolak untuk Head, dengan alasan Pemeriksa', $headOnly['eligible'] === false && $headOnly['head_related'] === true && str_contains((string) $headOnly['reason'], 'Pemeriksa'));
-check('assess: transaksi impor (tanpa pembuat) tidak dianggap dibuat siapa pun', ValidationService::assess($u(['HEAD']), $t(['created_by' => null]), false, null)['eligible'] === true);
-check('assess: tanpa peran sama sekali ditolak', ValidationService::assess($u([]), $t(), false, null)['eligible'] === false);
+check('assess: Superadmin boleh memvalidasi transaksi apa pun', ValidationService::assess($u(['HEAD']))['eligible'] === true);
+check('assess: Admin (ketua regu) dan Anggota tidak berhak memvalidasi', ValidationService::assess($u(['KETUA_REGU']))['eligible'] === false && ValidationService::assess($u(['ANGGOTA'], 4))['eligible'] === false);
+check('assess: peran Pemeriksa yang sudah dihapus dan pengguna tanpa peran ditolak', ValidationService::assess($u(['PEMERIKSA']))['eligible'] === false && ValidationService::assess($u([]))['eligible'] === false);
+check('assess: Superadmin boleh menyetujui buatannya sendiri, atas nama sendiri, dan regunya sendiri (tidak ada pemisahan pembuat-penyetuju)', ValidationService::assess($u(['HEAD', 'KETUA_REGU'], 3, 99))['eligible'] === true && ValidationService::assess($u(['HEAD'], 4, 50))['eligible'] === true);
+check('assess: alasan penolakan hanya soal hak akses', str_contains((string) ValidationService::assess($u(['KETUA_REGU']))['reason'], 'tidak berhak'));
 
 // ======================= kas awal: simpanan Beta disetujui Head =======================
 $sv1 = saving($beta, 4, '20.000.000');
@@ -209,30 +204,22 @@ check('setujui: yang sudah disetujui tidak bisa disetujui/ditolak lagi, dan pemb
 check('setujui: transaksi DRAFT atau tidak ada tidak bisa divalidasi', isset(violation(fn () => ValidationService::approve(req(), $head, saving($beta, 4, '1.000', false), '', null))['_form']) && isset(violation(fn () => ValidationService::approve(req(), $head, 99999, 'x', null))['_form']));
 check('setujui: catatan lebih dari 200 karakter ditolak', isset(violation(fn () => ValidationService::approve(req(), $head, saving($beta, 4, '2.000'), '', str_repeat('x', 201)))['note']));
 
-// ======================= transaksi terkait Head hanya Pemeriksa =======================
-$pw = saving($purwati, 2, '300.000');   // dibuat Head (Purwati), regu Head, anggota Alfa
-check('Head: transaksi buatan Head (regu Head) tidak bisa divalidasi Head lain', isset(violation(fn () => ValidationService::approve(req(), $head, $pw, ver($pw), null))['_form']) && str_contains((string) violation(fn () => ValidationService::approve(req(), $head, $pw, ver($pw), null))['_form'], 'Pemeriksa') && trx($pw)['status'] === 'MENUNGGU_VALIDASI');
-check('Head: Purwati tidak bisa memvalidasi transaksinya sendiri walau Head', isset(violation(fn () => ValidationService::approve(req(), $purwati, $pw, ver($pw), null))['_form']));
-check('Head: penolakan oleh Head lain juga ditolak (aturan sama untuk tolak)', isset(violation(fn () => ValidationService::reject(req(), $head, $pw, ver($pw), 'x'))['_form']));
-check('Head: penilaian untuk tampilan menandai head_related dan alasan', ValidationService::assessFor($head, trx($pw))['eligible'] === false && ValidationService::assessFor($head, trx($pw))['head_related'] === true && ValidationService::assessFor($periksa, trx($pw))['eligible'] === true);
-$byMember = rawPending('SIMPANAN', 1, 2, $beta['id'], 100000);    // atas nama anggota tertaut Head (member 1), dibuat orang lain
-$byTeam   = rawPending('SIMPANAN', 2, 1, $beta['id'], 100000);    // regu yang dipimpin anggota tertaut Head (team 1), dibuat orang lain
-$plain    = rawPending('SIMPANAN', 4, 2, $beta['id'], 100000);    // tidak ada kaitan Head
-check('Head: atas nama anggota tertaut Head = hanya Pemeriksa', ValidationService::assessFor($head, trx($byMember))['head_related'] === true && ValidationService::assessFor($head, trx($byMember))['eligible'] === false);
-check('Head: regu yang dipimpin Head = hanya Pemeriksa', ValidationService::assessFor($head, trx($byTeam))['head_related'] === true && ValidationService::assessFor($head, trx($byTeam))['eligible'] === false);
-check('Head: transaksi tanpa kaitan Head bisa divalidasi Head', ValidationService::assessFor($head, trx($plain))['head_related'] === false && ValidationService::assessFor($head, trx($plain))['eligible'] === true);
-ValidationService::approve(req(), $periksa, $pw, ver($pw), null);
+// ======================= Superadmin menyetujui semuanya, termasuk transaksi terkait Purwati =======================
+$pw = saving($purwati, 2, '300.000');   // dibuat Purwati (Superadmin merangkap Admin), regu Purwati, anggota Alfa
+check('Superadmin: transaksi buatan Purwati boleh divalidasi Superadmin lain', ValidationService::assessFor($head, trx($pw))['eligible'] === true && ValidationService::assessFor($periksa, trx($pw))['eligible'] === true);
+check('Superadmin: Purwati boleh memvalidasi transaksi buatannya sendiri (keputusan pemilik koperasi: tanpa Pemeriksa)', ValidationService::assessFor($purwati, trx($pw))['eligible'] === true);
+$byMember = rawPending('SIMPANAN', 1, 2, $beta['id'], 100000);    // atas nama anggota tertaut Purwati (member 1), dibuat orang lain
+$byTeam   = rawPending('SIMPANAN', 2, 1, $beta['id'], 100000);    // regu yang dipimpin Purwati (team 1), dibuat orang lain
+$plain    = rawPending('SIMPANAN', 4, 2, $beta['id'], 100000);    // tanpa kaitan Purwati
+check('Superadmin: atas nama Purwati, regu Purwati, dan transaksi biasa semuanya bisa divalidasi, penilaian tanpa penanda khusus', ValidationService::assessFor($head, trx($byMember))['eligible'] === true && ValidationService::assessFor($head, trx($byTeam))['eligible'] === true && ValidationService::assessFor($head, trx($plain))['eligible'] === true && array_keys(ValidationService::assessFor($head, trx($plain))) === ['eligible', 'reason']);
+ValidationService::approve(req(), $purwati, $pw, ver($pw), null);
 ValidationService::approve(req(), $periksa, $byMember, ver($byMember), null);
-ValidationService::approve(req(), $periksa, $byTeam, ver($byTeam), null);
-check('Pemeriksa: boleh menyetujui ketiganya (dibuat Head, atas nama Head, regu Head)', trx($pw)['status'] === 'DISETUJUI' && trx($byMember)['status'] === 'DISETUJUI' && trx($byTeam)['status'] === 'DISETUJUI');
-$ownPm = rawPending('SIMPANAN', 5, 2, $beta['id'], 50000);   // atas nama Pemeriksa-anggota (member 5)
-check('Pemeriksa yang juga anggota: tidak boleh memvalidasi transaksi atas nama sendiri, tetapi Pemeriksa lain boleh', isset(violation(fn () => ValidationService::approve(req(), $periksaM, $ownPm, ver($ownPm), null))['_form']) && violation(fn () => ValidationService::approve(req(), $periksa, $ownPm, ver($ownPm), null)) === null);
-check('Pemeriksa: ada akun Pemeriksa aktif; nonaktif semua -> tidak ada', ValidationService::hasActiveChecker() === true && (function () use ($pdo): bool {
-    $pdo->exec("UPDATE users SET is_active = 0 WHERE username IN ('periksa','periksa.m')");
-    $none = ValidationService::hasActiveChecker() === false;
-    $pdo->exec("UPDATE users SET is_active = 1 WHERE username IN ('periksa','periksa.m')");
-    return $none;
-})());
+ValidationService::approve(req(), $head, $byTeam, ver($byTeam), null);
+check('Superadmin: menyetujui ketiganya (buatan sendiri, atas nama Purwati, regu Purwati); audit mencatat pelakunya', trx($pw)['status'] === 'DISETUJUI' && trx($byMember)['status'] === 'DISETUJUI' && trx($byTeam)['status'] === 'DISETUJUI' && (int) one("SELECT COUNT(*) FROM audit_logs WHERE action = 'TRX_APPROVED' AND entity_id IN (?,?,?)", [$pw, $byMember, $byTeam]) === 3);
+$ownPm = rawPending('SIMPANAN', 5, 2, $beta['id'], 50000);   // atas nama Superadmin-anggota (member 5)
+check('Superadmin yang juga anggota: boleh menyetujui transaksi atas namanya sendiri', violation(fn () => ValidationService::approve(req(), $periksaM, $ownPm, ver($ownPm), null)) === null && trx($ownPm)['status'] === 'DISETUJUI');
+check('Superadmin: penolakan oleh Superadmin lain atas transaksi buatan Purwati juga boleh (aturan sama untuk tolak)', (function () use ($purwati, $head): bool { $x = saving($purwati, 2, '1.000'); return violation(fn () => ValidationService::reject(req(), $head, $x, ver($x), 'uji tolak')) === null && trx($x)['status'] === 'DITOLAK'; })());
+check('Admin (ketua regu) dan Anggota tetap TIDAK bisa menyetujui, walau transaksi di regunya', (function () use ($beta, $anggota4, $pdo): bool { $x = rawPending('SIMPANAN', 4, 2, $beta['id'], 1000); return isset(violation(fn () => ValidationService::approve(req(), $beta, $x, ver($x), null))['_form']) && isset(violation(fn () => ValidationService::approve(req(), $anggota4, $x, ver($x), null))['_form']) && trx($x)['status'] === 'MENUNGGU_VALIDASI'; })());
 
 // ======================= tolak =======================
 $rj = saving($beta, 4, '777.000');
@@ -392,16 +379,15 @@ $qIds = array_map(fn ($r) => (int) $r['id'], $q['rows']);
 check('antrean: hanya yang MENUNGGU_VALIDASI, terlama dulu', $qIds !== [] && array_unique(array_map(fn ($i) => trx($i)['status'], $qIds)) === ['MENUNGGU_VALIDASI'] && $qIds === array_values(array_unique($qIds)) && (int) $q['pager']['total'] === (int) one("SELECT COUNT(*) FROM transactions WHERE status = 'MENUNGGU_VALIDASI'"));
 $rowPw = array_values(array_filter($q['rows'], fn ($r) => (int) $r['id'] === $pwPending))[0];
 $rowPlain = array_values(array_filter($q['rows'], fn ($r) => (int) $r['id'] === $plain))[0];
-check('antrean: transaksi terkait Head ditandai dan Head tidak bisa; yang biasa bisa', $rowPw['head_related'] == 1 && $rowPw['verdict']['eligible'] === false && $rowPlain['verdict']['eligible'] === true);
-check('antrean: Pemeriksa bisa memvalidasi semuanya, termasuk transaksi terkait Head', array_values(array_unique(array_map(fn ($r) => $r['verdict']['eligible'], Validation::queue($periksa, [], 1)['rows']))) === [true]);
-check('antrean: Pemeriksa yang juga anggota tidak bisa pada transaksi atas namanya sendiri', (function () use ($periksaM, $pdo): bool {
+check('antrean: Superadmin bisa menyetujui semua baris, termasuk yang dibuat Purwati dan atas nama sendiri; tanpa penanda khusus', array_values(array_unique(array_map(fn ($r) => $r['verdict']['eligible'], Validation::queue($head, [], 1)['rows']))) === [true] && !array_key_exists('head_related', $rowPw));
+check('antrean: Superadmin lain (juga anggota) pun bisa pada transaksi atas namanya sendiri', (function () use ($periksaM): bool {
     $own = rawPending('SIMPANAN', 5, 2, 2, 1000);
     $r = array_values(array_filter(Validation::queue($periksaM, [], 1)['rows'], fn ($x) => (int) $x['id'] === $own))[0];
-    return $r['verdict']['eligible'] === false;
+    return $r['verdict']['eligible'] === true;
 })());
-check('antrean: pembuat melihat alasan tidak bisa pada transaksinya sendiri', (function () use ($purwati, $pwPending): bool {
+check('antrean: Purwati melihat transaksi buatannya sendiri sebagai bisa disetujui', (function () use ($purwati, $pwPending): bool {
     $r = array_values(array_filter(Validation::queue($purwati, [], 1)['rows'], fn ($x) => (int) $x['id'] === $pwPending))[0];
-    return $r['verdict']['eligible'] === false;
+    return $r['verdict']['eligible'] === true;
 })());
 check('antrean: filter jenis dan pencarian (nomor dokumen, nama anggota) dan wildcard harfiah', Validation::queue($head, ['type' => 'PENCAIRAN_PINJAMAN'], 1)['pager']['total'] === 0 && Validation::queue($head, ['type' => 'SIMPANAN'], 1)['pager']['total'] >= 2
     && Validation::queue($head, ['q' => trx($pwPending)['doc_no']], 1)['pager']['total'] === 1 && Validation::queue($head, ['q' => 'Anggota Alfa'], 1)['pager']['total'] >= 1 && Validation::queue($head, ['q' => '%'], 1)['pager']['total'] === 0 && Validation::queue($head, ['q' => "' OR '1'='1"], 1)['pager']['total'] === 0);

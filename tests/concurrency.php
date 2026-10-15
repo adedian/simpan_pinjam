@@ -98,12 +98,12 @@ for ($n = 1; $n <= 8; $n++) {
 $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu A', 1), ('Regu B', 5)");
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m1}'),(2,1,'{$m1}'),(3,1,'{$m1}'),(4,1,'{$m1}'),(5,2,'{$m1}'),(6,2,'{$m1}'),(7,2,'{$m1}'),(8,2,'{$m1}')");
 $ids = [];
-foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['beta', ['KETUA_REGU'], 'AGT-005'], ['periksa2', ['PEMERIKSA'], null], ['periksa', ['PEMERIKSA'], null]] as [$u, $roles, $no]) {
+foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['beta', ['KETUA_REGU'], 'AGT-005'], ['periksa2', ['HEAD'], null], ['periksa', ['HEAD'], null]] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
 $purwati = User::findActive($ids['purwati']);
 $beta    = User::findActive($ids['beta']);
-$kepala2 = User::findActive($ids['periksa']);   // Pemeriksa: transaksi regu A dibuat Head (Purwati), jadi hanya Pemeriksa yang boleh memvalidasi
+$kepala2 = User::findActive($ids['periksa']);   // Superadmin kedua (Superadmin menyetujui semua transaksi, termasuk regu Purwati)
 $today   = date('Y-m-d');
 $leader  = [1 => $purwati, 2 => $beta];
 

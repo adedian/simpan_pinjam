@@ -18,7 +18,7 @@ use App\Services\Scope;
 final class MemberController extends BaseController
 {
     /**
-     * Daftar anggota dalam cakupan pengguna (Head/Pemeriksa: semua, Ketua Regu: regunya).
+     * Daftar anggota dalam cakupan pengguna (Superadmin: semua, Admin/ketua regu: regunya).
      * @param array<string,string> $params
      */
     public function index(Request $request, array $params = []): Response

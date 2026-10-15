@@ -9,7 +9,7 @@ use App\Services\Scope;
 
 /**
  * Pembacaan transaksi. SEMUA query dibatasi cakupan data pengguna (Scope) di SQL, bukan di tampilan:
- * Head/Pemeriksa melihat semua, Ketua Regu melihat transaksi anggota regunya (ditambah transaksi yang
+ * Superadmin melihat semua, Admin/ketua regu melihat transaksi anggota regunya (ditambah transaksi yang
  * ia buat sendiri bila anggotanya sudah pindah), Anggota hanya miliknya.
  */
 final class Transaction

@@ -17,16 +17,13 @@ $count    = static fn (string $label, int $value, string $hint = ''): string =>
     <h2 class="hero__title">Halo, <?= e($user['name'] ?? '') ?></h2>
     <p class="hero__text">
         <?= e($roleLabel) ?><?= $period !== null ? ' · ' . e($period) : '' ?> · <?= e($month) ?>.
-        <?php if ($level === 'none'): ?>Akun Anda belum tertaut ke data anggota, jadi belum ada angka yang bisa ditampilkan. Hubungi Head koperasi.<?php else: ?>Semua angka dihitung dari transaksi yang sudah disetujui.<?php endif; ?>
+        <?php if ($level === 'none'): ?>Akun Anda belum tertaut ke data anggota, jadi belum ada angka yang bisa ditampilkan. Hubungi Superadmin koperasi.<?php else: ?>Semua angka dihitung dari transaksi yang sudah disetujui.<?php endif; ?>
     </p>
 </section>
 
 <?php /* ---------- perlu perhatian ---------- */ ?>
 <?php if (!empty($queue) && $queue['n'] > 0): ?>
     <div class="alert alert--warning" role="note"><strong><?= (int) $queue['n'] ?> transaksi</strong> menunggu validasi (<?= e(money((int) $queue['sum'])) ?>). <a href="<?= e(url('/validasi')) ?>">Buka antrean validasi</a></div>
-<?php endif; ?>
-<?php if (!empty($noChecker)): ?>
-    <div class="alert alert--warning" role="note">Belum ada akun <strong>Pemeriksa</strong> yang aktif, jadi transaksi regu Head dan koreksinya belum bisa divalidasi. <a href="<?= e(url('/master/pengguna')) ?>">Buat di Data Pengguna</a></div>
 <?php endif; ?>
 <?php if (!empty($issues) || ($isGlobal && $summary['selisih'] !== 0)): ?>
     <div class="alert alert--danger" role="alert"><strong>Ada masalah integritas data</strong><?= !empty($issues) ? ' (' . (int) $issues . ' temuan)' : '' ?><?= $isGlobal && $summary['selisih'] !== 0 ? ', selisih pembukuan ' . e(money($summary['selisih'])) : '' ?>. Jangan menyetujui transaksi baru sebelum diperiksa: jalankan <code>php database/tools/check_integrity.php</code>.</div>
@@ -40,7 +37,7 @@ $count    = static fn (string $label, int $value, string $hint = ''): string =>
     </div>
 <?php endif; ?>
 
-<?php /* ---------- global: Head dan Pemeriksa ---------- */ ?>
+<?php /* ---------- global: Superadmin ---------- */ ?>
 <?php if ($isGlobal): ?>
 <section class="section" id="ringkasan">
     <h2 class="section__title">Ringkasan koperasi</h2>

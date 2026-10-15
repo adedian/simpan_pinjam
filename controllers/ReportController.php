@@ -13,7 +13,7 @@ use App\Services\ReportService;
 
 /**
  * Laporan. Hanya membaca. Cakupan data ditegakkan di ReportService (SQL); izin di route.
- * Unduhan Excel hanya untuk pemilik report.export (Head, Pemeriksa) dan SELALU tercatat di audit log.
+ * Unduhan Excel hanya untuk pemilik report.export (Superadmin) dan SELALU tercatat di audit log.
  */
 final class ReportController extends BaseController
 {

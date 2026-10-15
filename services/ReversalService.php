@@ -14,8 +14,8 @@ use App\Helpers\Money;
  * yang menghapus pengaruh transaksi asal dari saldo setelah DISETUJUI lewat alur validasi yang sama (Phase 9).
  *
  * Aturan:
- *  - Hanya Ketua Regu yang mengajukan (alasan wajib), untuk transaksi regunya. Pembalik langsung menunggu validasi;
- *    pembuat tidak boleh memvalidasinya sendiri dan transaksi terkait Head hanya divalidasi Pemeriksa.
+ *  - Hanya Ketua Regu yang mengajukan (alasan wajib), untuk transaksi regunya. Pembalik langsung menunggu validasi
+ *    Superadmin.
  *  - Hanya transaksi DISETUJUI yang bukan pembalik, dan hanya SATU pembalik hidup per transaksi (pembalik yang
  *    ditolak/dibatalkan boleh diganti). Pembalik selalu penuh: koreksi sebagian = balik lalu catat ulang.
  *  - Bulan pembalik = bulan transaksi asal (rekap bulanan langsung bersih), tanggalnya hari pengajuan. Periode

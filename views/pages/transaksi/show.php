@@ -128,12 +128,6 @@ $statusText = static fn (string $s): string => strip_tags(status_badge($s));
 <?php if ($validation !== null): $vd = $validation['verdict']; ?>
 <section class="card" id="validasi">
     <h2 class="card__title">Validasi</h2>
-    <?php if ($vd['head_related']): ?>
-        <div class="alert alert--warning" role="note">Transaksi ini milik Head, regu Head, atau dibuat Head: <strong>hanya Pemeriksa</strong> yang boleh memvalidasi.</div>
-    <?php endif; ?>
-    <?php if ($validation['noChecker']): ?>
-        <div class="alert alert--danger" role="alert">Belum ada akun Pemeriksa yang aktif, jadi transaksi ini tidak bisa divalidasi siapa pun. Head perlu membuat akun Pemeriksa di Data Pengguna.</div>
-    <?php endif; ?>
     <?php if ($isReversal && $validation['impact'] !== null): $im = $validation['impact']; $cashAfter = $validation['cash'] + $im['cash_delta']; ?>
         <div class="alert alert--warning" role="note">Ini <strong>transaksi pembalik</strong> untuk <a href="<?= e(url('/transaksi/' . (int) $trx['reverses_id'])) ?>"><?= e($trx['reverses_doc_no']) ?></a>. Alasan koreksi: <?= e((string) ($trx['description'] ?? '-')) ?></div>
         <dl class="dl">

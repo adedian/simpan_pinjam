@@ -15,7 +15,7 @@ use App\Services\ValidationService;
 
 /**
  * Validasi transaksi. Semua route dilindungi `can:transaction.validate`; kewenangan per transaksi
- * (bukan pembuat, bukan atas nama sendiri, transaksi Head hanya Pemeriksa) ditegakkan di ValidationService.
+ * (hanya Superadmin) ditegakkan di ValidationService.
  */
 final class ValidationController extends BaseController
 {
@@ -33,7 +33,6 @@ final class ValidationController extends BaseController
             'byType'     => $result['byType'],
             'filters'    => $filters,
             'types'      => Transaction::TYPE_LABELS,
-            'noChecker'  => !ValidationService::hasActiveChecker(),
             'cash'       => ValidationService::cash(),
         ]);
     }

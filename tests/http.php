@@ -511,7 +511,7 @@ check('master/pengguna: baris akun orang lain punya tombol reset dan nonaktif', 
 check('master/pengguna: daftar tidak membocorkan hash', !$has($ul, '$2y$'));
 $hd->get('/master/pengguna/baru');
 $bothRoles = $hd->post('/master/pengguna', ['username' => 'dobel', 'name' => 'Dobel', 'roles' => ['HEAD', 'PEMERIKSA'], 'member_no' => '']);
-check('master/pengguna: Head+Pemeriksa ditolak dengan alasan', $bothRoles['status'] === 302 && $has($hd->get('/master/pengguna/baru'), 'tidak boleh dipegang orang yang sama') && $count("SELECT COUNT(*) FROM users WHERE username = 'dobel'") === 0);
+check('master/pengguna: peran Pemeriksa yang sudah dihapus ditolak (peran tidak dikenal)', $bothRoles['status'] === 302 && $has($hd->get('/master/pengguna/baru'), 'Peran tidak dikenal') && $count("SELECT COUNT(*) FROM users WHERE username = 'dobel'") === 0);
 $hd->get('/master/pengguna/baru');
 $hd->post('/master/pengguna', ['username' => 'Bad Name!', 'name' => '', 'roles' => []]);
 $pg = $hd->get('/master/pengguna/baru');
@@ -1008,7 +1008,7 @@ foreach ([['/transaksi/angsuran', $sa], ['/transaksi/angsuran/tagihan', $sa], ['
 check('angsuran/umum: tanpa <script>, event handler, atau style inline (CSP)', !preg_match('/<script(?![^>]*\bsrc=)|\son(click|submit|change|load)=|\sstyle="/i', $pages3));
 
 // ---- 12j. validasi (Phase 9) ----
-UserService::create('periksa', 'Pemeriksa Uji', ['PEMERIKSA'], null, PASS);
+UserService::create('periksa', 'Superadmin Dua', ['HEAD'], null, PASS);
 Database::pdo()->exec("UPDATE users SET must_change_password = 0 WHERE username = 'periksa'");
 // anggota "Head": anggota baru di regu Alfa yang tertaut ke akun Head lain (kepala3), agar transaksinya terkait Head
 Database::pdo()->exec("INSERT INTO members (member_no, name, active_from) VALUES ('AGT-090', 'Anggota Tertaut Head', '2026-03-01')");
@@ -1034,22 +1034,22 @@ check('validasi/fixture: tiga simpanan menunggu validasi', $str('SELECT status F
 check('validasi/akses: tamu dialihkan ke login', (new Browser())->get('/validasi')['status'] === 302 && (new Browser())->get('/validasi/riwayat')['status'] === 302);
 check('validasi/akses: Ketua Regu 403 di antrean, riwayat, dan semua aksi', $sa->get('/validasi')['status'] === 403 && $sa->get('/validasi/riwayat')['status'] === 403 && $post($sa, '/validasi/' . $v2 . '/setujui', ['_version' => 'x'])['status'] === 403 && $post($sa, '/validasi/' . $v2 . '/tolak', ['_version' => 'x', 'note' => 'x'])['status'] === 403);
 check('validasi/akses: Anggota 403', $sm->get('/validasi')['status'] === 403 && $post($sm, '/validasi/' . $v2 . '/setujui', ['_version' => 'x'])['status'] === 403);
-check('validasi/akses: Head dan Pemeriksa membuka antrean dan riwayat', $sh->get('/validasi')['status'] === 200 && $sp->get('/validasi')['status'] === 200 && $sh->get('/validasi/riwayat')['status'] === 200 && $sp->get('/validasi/riwayat')['status'] === 200);
-check('validasi/akses: menu Validasi tampil untuk Head dan Pemeriksa, tidak untuk Ketua Regu', $has($sh->get('/'), 'href="/validasi"') && $has($sp->get('/'), 'href="/validasi"') && !$has($sa->get('/'), 'href="/validasi"'));
+check('validasi/akses: semua Superadmin membuka antrean dan riwayat', $sh->get('/validasi')['status'] === 200 && $sp->get('/validasi')['status'] === 200 && $sh->get('/validasi/riwayat')['status'] === 200 && $sp->get('/validasi/riwayat')['status'] === 200);
+check('validasi/akses: menu Validasi tampil untuk Superadmin, tidak untuk Admin (ketua regu)', $has($sh->get('/'), 'href="/validasi"') && $has($sp->get('/'), 'href="/validasi"') && !$has($sa->get('/'), 'href="/validasi"'));
 check('validasi/csrf: POST tanpa token = 419; aksi via GET tidak ada', $sp->post('/validasi/' . $v2 . '/setujui', ['_version' => 'x'], false)['status'] === 419 && in_array($sp->get('/validasi/' . $v2 . '/setujui')['status'], [404, 405], true) && in_array($sp->get('/validasi/' . $v2 . '/tolak')['status'], [404, 405], true));
 check('validasi/akses: id yang tidak ada = 404', $post($sp, '/validasi/999999/setujui', ['_version' => 'x'])['status'] === 404);
 
 // antrean
 $qh = $sh->get('/validasi');
 check('validasi/antrean: memuat transaksi yang menunggu, bukan draft', $has($qh, $str('SELECT doc_no FROM transactions WHERE id = ?', [$v1])) && $has($qh, $str('SELECT doc_no FROM transactions WHERE id = ?', [$v2])) && !$has($qh, $str('SELECT doc_no FROM transactions WHERE id = ?', [$vDraft])) && $has($qh, 'Kas tersedia sekarang'));
-check('validasi/antrean: transaksi terkait Head ditandai "Hanya Pemeriksa" dan Head melihat tidak bisa', $has($qh, 'Hanya Pemeriksa') && $has($qh, 'Tidak bisa') && $has($qh, 'Bisa divalidasi'));
-check('validasi/antrean: Pemeriksa bisa memvalidasi yang terkait Head', substr_count($sp->get('/validasi')['body'], 'Bisa divalidasi') >= 3 && !$has($sp->last, '>Tidak bisa<'));
+check('validasi/antrean: tidak ada lagi penanda "Hanya Pemeriksa" atau "Tidak bisa": Superadmin bisa memvalidasi semua baris, termasuk yang atas nama anggota tertaut Head', !$has($qh, 'Hanya Pemeriksa') && !$has($qh, 'Tidak bisa') && $has($qh, 'Bisa divalidasi') && !$has($qh, 'Pemeriksa'));
+check('validasi/antrean: Superadmin kedua juga bisa memvalidasi semuanya', substr_count($sp->get('/validasi')['body'], 'Bisa divalidasi') >= 3 && !$has($sp->last, '>Tidak bisa<'));
 check('validasi/antrean: filter jenis, pencarian, simbol aman', $sh->get('/validasi?jenis=SIMPANAN&q=Alfa')['status'] === 200 && $has($sh->get('/validasi?jenis=ANGSURAN'), 'Tidak ada transaksi yang menunggu validasi') && $has($sh->get('/validasi?q=%25'), 'Tidak ada transaksi yang menunggu validasi') && $sh->get('/validasi?jenis=x&page=-4&q=%27')['status'] === 200);
-check('validasi/antrean: tanpa akun Pemeriksa, Head diberi peringatan (diuji dengan menonaktifkan sementara)', (function () use ($sh, $has): bool {
+check('validasi/antrean: tidak ada peringatan soal akun Pemeriksa, walau Superadmin lain dinonaktifkan (Pemeriksa tidak diperlukan)', (function () use ($sh, $has): bool {
     Database::pdo()->exec("UPDATE users SET is_active = 0 WHERE username = 'periksa'");
-    $warn = $has($sh->get('/validasi'), 'Belum ada akun') && $has($sh->get('/transaksi/' . (int) Database::pdo()->query("SELECT MAX(id) FROM transactions WHERE type = 'SIMPANAN' AND status = 'MENUNGGU_VALIDASI'")->fetchColumn()), 'Belum ada akun Pemeriksa');
+    $ok = !$has($sh->get('/validasi'), 'Belum ada akun') && !$has($sh->get('/transaksi/' . (int) Database::pdo()->query("SELECT MAX(id) FROM transactions WHERE type = 'SIMPANAN' AND status = 'MENUNGGU_VALIDASI'")->fetchColumn()), 'Pemeriksa') && !$has($sh->get('/'), 'Belum ada akun');
     Database::pdo()->exec("UPDATE users SET is_active = 1 WHERE username = 'periksa'");
-    return $warn;
+    return $ok;
 })());
 
 // panel di detail
@@ -1057,16 +1057,14 @@ $dh = $sh->get('/transaksi/' . $v1);
 check('validasi/detail: Head melihat tombol Setujui dan Tolak untuk transaksi biasa', $has($dh, 'id="validasi"') && $has($dh, '/validasi/' . $v1 . '/setujui') && $has($dh, '/validasi/' . $v1 . '/tolak') && $has($dh, 'Alasan penolakan'));
 check('validasi/detail: Ketua Regu pembuat tidak melihat panel validasi', !$has($sa->get('/transaksi/' . $v1), 'id="validasi"') && !$has($sa->last, '/validasi/'));
 $d3h = $sh->get('/transaksi/' . $v3);
-check('validasi/detail: transaksi terkait Head: Head melihat penjelasan, tanpa tombol', $has($d3h, 'hanya Pemeriksa') && $has($d3h, 'Anda tidak bisa memvalidasi') && !$has($d3h, '/validasi/' . $v3 . '/setujui'));
-check('validasi/detail: Pemeriksa melihat tombol untuk transaksi terkait Head', $has($sp->get('/transaksi/' . $v3), '/validasi/' . $v3 . '/setujui'));
+check('validasi/detail: transaksi atas nama anggota tertaut Head: Superadmin melihat tombol Setujui, tanpa penjelasan pembatasan', !$has($d3h, 'hanya Pemeriksa') && !$has($d3h, 'Anda tidak bisa memvalidasi') && $has($d3h, '/validasi/' . $v3 . '/setujui'));
+check('validasi/detail: Superadmin kedua juga melihat tombol untuk transaksi itu', $has($sp->get('/transaksi/' . $v3), '/validasi/' . $v3 . '/setujui'));
 
-// setuju oleh Head (transaksi biasa) + kewenangan Head ditegakkan server
+// setuju oleh Superadmin (transaksi biasa)
 $kas0 = $count('SELECT kas_tersedia FROM v_global_summary');
-$headTry = $post($sh, '/validasi/' . $v3 . '/setujui', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$v3])]);
-check('validasi/setuju: Head memaksa POST untuk transaksi terkait Head ditolak server, status tetap', $headTry['status'] === 302 && $loc($headTry) === '/transaksi/' . $v3 && $has($sh->get('/transaksi/' . $v3), 'hanya boleh divalidasi Pemeriksa') && $str('SELECT status FROM transactions WHERE id = ?', [$v3]) === 'MENUNGGU_VALIDASI');
 check('validasi/setuju: versi basi ditolak', $has($sh->get($loc($post($sh, '/validasi/' . $v1 . '/setujui', ['_version' => '2000-01-01 00:00:00']))), 'baru saja berubah') && $str('SELECT status FROM transactions WHERE id = ?', [$v1]) === 'MENUNGGU_VALIDASI');
 $ok = $post($sh, '/validasi/' . $v1 . '/setujui', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$v1]), 'note' => 'OK sesuai buku']);
-check('validasi/setuju: Head menyetujui transaksi biasa; dialihkan ke antrean dengan pemberitahuan', $ok['status'] === 302 && $loc($ok) === '/validasi' && $has($sh->get('/validasi'), 'disetujui dan kini dihitung dalam saldo'));
+check('validasi/setuju: Superadmin menyetujui transaksi biasa; dialihkan ke antrean dengan pemberitahuan', $ok['status'] === 302 && $loc($ok) === '/validasi' && $has($sh->get('/validasi'), 'disetujui dan kini dihitung dalam saldo'));
 check('validasi/setuju: status DISETUJUI, kas naik 12.345, saldo anggota bertambah, selisih 0', $str('SELECT status FROM transactions WHERE id = ?', [$v1]) === 'DISETUJUI' && $count('SELECT kas_tersedia FROM v_global_summary') === $kas0 + 12345 && $count('SELECT selisih FROM v_global_summary') === 0);
 check('validasi/setuju: validator, catatan, dan audit TRX_APPROVED tercatat', $count('SELECT COUNT(*) FROM transaction_validations v JOIN users u ON u.id = v.actor_user_id WHERE v.transaction_id = ? AND v.to_status = ? AND u.username = ? AND v.note = ?', [$v1, 'DISETUJUI', 'kepala', 'OK sesuai buku']) === 1 && $audits('TRX_APPROVED') === 1);
 check('validasi/setuju: sekali lagi (kirim ulang) ditolak, tidak menggandakan', $has($sh->get($loc($post($sh, '/validasi/' . $v1 . '/setujui', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$v1])]))), 'sudah disetujui') && $count('SELECT COUNT(*) FROM transaction_validations WHERE transaction_id = ? AND to_status = ?', [$v1, 'DISETUJUI']) === 1);
@@ -1075,11 +1073,7 @@ check('validasi/setuju: detail setelah disetujui tanpa panel, riwayat menyebut v
 check('validasi/setuju: pembuat melihat transaksinya disetujui dan tak bisa lagi dibatalkan', $has($sa->get('/transaksi/' . $v1), 'Disetujui') && !$has($sa->last, 'Batalkan transaksi'));
 
 $h3 = $post($sh3, '/validasi/' . $v3 . '/setujui', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$v3])]);
-check('validasi/setuju: Head yang menjadi pemilik anggota itu pun ditolak ("atas nama Anda sendiri"), status tetap', $has($sh3->get($loc($h3)), 'atas nama Anda sendiri') && $str('SELECT status FROM transactions WHERE id = ?', [$v3]) === 'MENUNGGU_VALIDASI');
-
-// Pemeriksa menyetujui transaksi terkait Head
-$pm = $post($sp, '/validasi/' . $v3 . '/setujui', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$v3])]);
-check('validasi/setuju: Pemeriksa menyetujui transaksi terkait Head', $pm['status'] === 302 && $str('SELECT status FROM transactions WHERE id = ?', [$v3]) === 'DISETUJUI');
+check('validasi/setuju: Superadmin yang menjadi pemilik anggota itu boleh menyetujui transaksi atas namanya sendiri (tanpa pemisahan; tanpa Pemeriksa)', $h3['status'] === 302 && $str('SELECT status FROM transactions WHERE id = ?', [$v3]) === 'DISETUJUI' && !$has($sh3->get('/validasi'), 'atas nama Anda sendiri'));
 
 // tolak
 $vv = $str('SELECT updated_at FROM transactions WHERE id = ?', [$v2]);
@@ -1116,7 +1110,7 @@ check('validasi/pencairan: pinjaman disetujui muncul di daftar Pinjaman dengan s
 
 // riwayat
 $rh = $sh->get('/validasi/riwayat');
-check('validasi/riwayat: memuat keputusan (setuju dan tolak), validator, dan catatan', $has($rh, 'Disetujui') && $has($rh, 'Ditolak') && $has($rh, 'Kepala Koperasi') && $has($rh, 'Pemeriksa Uji') && $has($rh, 'Bukti setoran tidak ada') && $has($rh, 'OK sesuai buku'));
+check('validasi/riwayat: memuat keputusan (setuju dan tolak), validator, dan catatan', $has($rh, 'Disetujui') && $has($rh, 'Ditolak') && $has($rh, 'Kepala Koperasi') && $has($rh, 'Superadmin Dua') && $has($rh, 'Bukti setoran tidak ada') && $has($rh, 'OK sesuai buku'));
 check('validasi/riwayat: filter keputusan, jenis, cari; wildcard dan nilai ngawur aman', $has($sh->get('/validasi/riwayat?keputusan=DITOLAK'), 'Bukti setoran tidak ada') && !$has($sh->last, 'OK sesuai buku') && $sh->get('/validasi/riwayat?jenis=PENCAIRAN_PINJAMAN&q=Alfa')['status'] === 200 && $has($sh->get('/validasi/riwayat?q=%25'), 'Belum ada keputusan validasi') && $sh->get('/validasi/riwayat?keputusan=x&jenis=x&page=-2')['status'] === 200);
 
 // kebersihan halaman baru
@@ -1144,7 +1138,7 @@ check('koreksi/akses: GET ke alamat koreksi tidak ada (hanya POST)', in_array($s
 // tampilan di transaksi yang sudah disetujui
 $d1 = $sa->get('/transaksi/' . $v1);
 check('koreksi/tampil: Ketua Regu pemilik melihat kartu Koreksi dengan formulir alasan', $has($d1, 'id="koreksi"') && $has($d1, '/transaksi/' . $v1 . '/koreksi') && $has($d1, 'Alasan koreksi') && $has($d1, 'transaksi pembalik'));
-check('koreksi/tampil: Head, Pemeriksa, dan Anggota tidak melihat formulir koreksi', !$has($sh->get('/transaksi/' . $v1), '/koreksi') && !$has($sp->get('/transaksi/' . $v1), '/koreksi') && !$has($sm->get('/transaksi/' . $v1), '/koreksi'));
+check('koreksi/tampil: Superadmin (dua akun) dan Anggota tidak melihat formulir koreksi', !$has($sh->get('/transaksi/' . $v1), '/koreksi') && !$has($sp->get('/transaksi/' . $v1), '/koreksi') && !$has($sm->get('/transaksi/' . $v1), '/koreksi'));
 check('koreksi/tampil: transaksi yang belum disetujui (draft/menunggu/ditolak) tidak menawarkan koreksi', !$has($sb->get('/transaksi/' . $v2), '/koreksi'));
 
 // ajukan: alasan wajib
@@ -1177,18 +1171,18 @@ check('koreksi/setuju: transaksi asal menyatakan sudah dibalik (tetap tersimpan)
 check('koreksi/setuju: transaksi asal di daftar simpanan tetap ada; pembalik tampil bertanda Pembalik', $has($sa->get('/transaksi/riwayat'), $str('SELECT doc_no FROM transactions WHERE id = ?', [$v1])) && $has($sa->last, 'Pembalik'));
 check('koreksi/setuju: audit TRX_APPROVED untuk pembalik; pembalik tidak bisa dibalik lagi', $audits('TRX_APPROVED') >= 3 && $has($sa->get($loc($post($sa, '/transaksi/' . $rv1 . '/koreksi', ['note' => 'x']))), 'tidak bisa dibalik'));
 
-// terkait Head: hanya Pemeriksa; ditolak lalu diajukan ulang
+// atas nama anggota tertaut Head: Superadmin menyetujui; ditolak lalu diajukan ulang
 $post($sa, '/transaksi/' . $v3 . '/koreksi', ['note' => 'Anggota salah']);
 $rv3 = $revOf($v3);
 $dh3 = $sh->get('/transaksi/' . $rv3);
-check('koreksi/head: pembalik transaksi atas nama anggota tertaut Head: Head tanpa tombol, Pemeriksa dengan tombol', $rv3 > 0 && $has($dh3, 'hanya Pemeriksa') && !$has($dh3, '/validasi/' . $rv3 . '/setujui') && $has($sp->get('/transaksi/' . $rv3), '/validasi/' . $rv3 . '/setujui'));
+check('koreksi/head: pembalik transaksi atas nama anggota tertaut Head: semua Superadmin melihat tombol Setujui, tanpa pembatasan', $rv3 > 0 && !$has($dh3, 'hanya Pemeriksa') && $has($dh3, '/validasi/' . $rv3 . '/setujui') && $has($sp->get('/transaksi/' . $rv3), '/validasi/' . $rv3 . '/setujui'));
 $post($sp, '/validasi/' . $rv3 . '/tolak', ['_version' => $verOf($rv3), 'note' => 'Belum perlu dikoreksi']);
 check('koreksi/tolak: pembalik DITOLAK; transaksi asal tetap berlaku', $str('SELECT status FROM transactions WHERE id = ?', [$rv3]) === 'DITOLAK' && $str('SELECT status FROM transactions WHERE id = ?', [$v3]) === 'DISETUJUI' && $revOf($v3) === 0);
 $d3a = $sa->get('/transaksi/' . $v3);
 check('koreksi/tolak: asal menampilkan percobaan yang ditolak beserta alasannya dan menawarkan formulir lagi', $has($d3a, 'Ditolak') && $has($d3a, 'Anggota salah') && $has($d3a, 'Ajukan koreksi (pembalik)'));
 $post($sa, '/transaksi/' . $v3 . '/koreksi', ['note' => 'Ajukan ulang']);
 $rv3b = $revOf($v3);
-check('koreksi/tolak: bisa diajukan ulang dan kali ini disetujui Pemeriksa', $rv3b > 0 && $rv3b !== $rv3);
+check('koreksi/tolak: bisa diajukan ulang dan kali ini disetujui Superadmin', $rv3b > 0 && $rv3b !== $rv3);
 $post($sp, '/validasi/' . $rv3b . '/setujui', ['_version' => $verOf($rv3b)]);
 check('koreksi/tolak: pembalik kedua disetujui; selisih 0, integritas bersih', $str('SELECT status FROM transactions WHERE id = ?', [$rv3b]) === 'DISETUJUI' && $count('SELECT selisih FROM v_global_summary') === 0 && $count('SELECT COUNT(*) FROM v_integrity_issues') === 0);
 
@@ -1262,7 +1256,7 @@ $okHead = true;
 foreach (array_merge($repPages, ['/laporan/regu', '/laporan/anggota', '/laporan/anggota/' . $mid(2)]) as $path) {
     $okHead = $okHead && $sh->get($path)['status'] === 200 && $sp->get($path)['status'] === 200;
 }
-check('laporan/akses: Head dan Pemeriksa membuka semua laporan', $okHead);
+check('laporan/akses: kedua Superadmin membuka semua laporan', $okHead);
 $okKr = true;
 foreach (array_merge($repPages, ['/laporan/anggota', '/laporan/anggota/' . $mid(2)]) as $path) {
     $okKr = $okKr && $sa->get($path)['status'] === 200;
@@ -1323,7 +1317,7 @@ foreach ($repKeys as $k) {
     $r = $sp->get('/laporan/' . $k . '/unduh');
     $allXlsx = $allXlsx && $r['status'] === 200 && str_starts_with($r['body'], 'PK') && xlsx_read($r['body'])['ok'];
 }
-check('laporan/unduh: Pemeriksa mengunduh keenam laporan sebagai Excel sah; kunci laporan tidak dikenal 404; anggota tidak ada / saringan kosong 404', $allXlsx && $sh->get('/laporan/rahasia/unduh')['status'] === 404 && $sh->get('/laporan/anggota/unduh?anggota=99999999')['status'] === 404 && $sh->get('/laporan/anggota/unduh?q=zzzz-tidak-ada')['status'] === 404);
+check('laporan/unduh: Superadmin kedua mengunduh keenam laporan sebagai Excel sah; kunci laporan tidak dikenal 404; anggota tidak ada / saringan kosong 404', $allXlsx && $sh->get('/laporan/rahasia/unduh')['status'] === 404 && $sh->get('/laporan/anggota/unduh?anggota=99999999')['status'] === 404 && $sh->get('/laporan/anggota/unduh?q=zzzz-tidak-ada')['status'] === 404);
 $xlK = $sh->get('/laporan/anggota/unduh?anggota=' . $mid(2));
 $xlKr = xlsx_read($xlK['body']);
 check('laporan/unduh: satu anggota = formulir template (lembar Rekap Pinjaman dan Tabungan Hari Raya); nama berkas memuat nomor anggota', $xlK['status'] === 200 && str_contains($xlK['headers']['content-disposition'] ?? '', 'formulir-AGT-002-') && $xlKr['ok'] && array_keys($xlKr['sheets']) === ['Rekap Pinjaman', 'Tabungan Hari Raya']
@@ -1372,11 +1366,11 @@ check('laporan/umum: laporan tidak mengubah data (integritas bersih, selisih 0)'
 // ---- 12j5. audit log (Phase 13) ----
 check('audit/akses: tamu dialihkan ke login', (new Browser())->get('/sistem/audit')['status'] === 302 && (new Browser())->get('/sistem/audit/1')['status'] === 302 && (new Browser())->get('/sistem/audit/unduh')['status'] === 302);
 $auditId = $count("SELECT MAX(id) FROM audit_logs WHERE action = 'TRX_APPROVED'");
-check('audit/akses: Head dan Pemeriksa membuka daftar, rincian, dan unduhan', $sh->get('/sistem/audit')['status'] === 200 && $sp->get('/sistem/audit')['status'] === 200 && $sh->get('/sistem/audit/' . $auditId)['status'] === 200 && $sp->get('/sistem/audit/' . $auditId)['status'] === 200 && $sp->get('/sistem/audit/unduh')['status'] === 200);
+check('audit/akses: kedua Superadmin membuka daftar, rincian, dan unduhan', $sh->get('/sistem/audit')['status'] === 200 && $sp->get('/sistem/audit')['status'] === 200 && $sh->get('/sistem/audit/' . $auditId)['status'] === 200 && $sp->get('/sistem/audit/' . $auditId)['status'] === 200 && $sp->get('/sistem/audit/unduh')['status'] === 200);
 $denied = $audits('ACCESS_DENIED');
 check('audit/akses: Ketua Regu dan Anggota 403 di daftar, rincian, dan unduhan; penolakannya tercatat', $sa->get('/sistem/audit')['status'] === 403 && $sa->get('/sistem/audit/' . $auditId)['status'] === 403 && $sa->get('/sistem/audit/unduh')['status'] === 403 && $sm->get('/sistem/audit')['status'] === 403 && $sm->get('/sistem/audit/unduh')['status'] === 403 && $audits('ACCESS_DENIED') >= $denied + 5);
 check('audit/akses: layar hanya GET (POST tidak ada); rincian yang tidak ada 404', in_array($post($sh, '/sistem/audit', [])['status'], [404, 405], true) && $sh->get('/sistem/audit/99999999')['status'] === 404 && $sh->get('/sistem/audit/abc')['status'] === 404);
-check('audit/menu: Head dan Pemeriksa melihat Audit Log aktif (tanpa penanda belum dibangun); Ketua Regu dan Anggota tidak', $has($sh->get('/'), 'href="/sistem/audit"') && !$has($sh->last, 'P13') && $has($sp->get('/'), 'href="/sistem/audit"') && !$has($sa->get('/'), 'href="/sistem/audit"') && !$has($sm->get('/'), 'href="/sistem/audit"'));
+check('audit/menu: Superadmin melihat Audit Log aktif (tanpa penanda belum dibangun); Ketua Regu dan Anggota tidak', $has($sh->get('/'), 'href="/sistem/audit"') && !$has($sh->last, 'P13') && $has($sp->get('/'), 'href="/sistem/audit"') && !$has($sa->get('/'), 'href="/sistem/audit"') && !$has($sm->get('/'), 'href="/sistem/audit"'));
 
 $aList = $sh->get('/sistem/audit');
 check('audit/daftar: judul, kartu ringkasan, label Indonesia, kode aksi, pengguna, tautan rincian, tombol unduh', $has($aList, 'Audit Log') && $has($aList, 'Seluruh catatan') && $has($aList, 'Gagal masuk (24 jam)') && $has($aList, 'Transaksi disetujui') && $has($aList, 'TRX_APPROVED') && $has($aList, 'kepala') && $has($aList, '/sistem/audit/' . $auditId) && $has($aList, 'Unduh Excel'));
@@ -1435,7 +1429,7 @@ foreach ([$sh, $sa, $sb, $sm, $sp] as $warm) {
 $t0 = $tick($sh);
 $t0data = (array) json_decode($t0['body'], true);
 check('live/tick: pengguna login mendapat penanda "v" sama dengan penanda audit terbaru, plus "b" (angka menu) saja', $t0['status'] === 200 && ($t0data['v'] ?? null) === $auditMax() && array_keys($t0data) === ['v', 'b']);
-check('live/tick: Anggota dan Ketua Regu mendapat {"v":angka,"b":{}} tanpa data lain; Pemeriksa pun boleh', $tick($sm)['body'] === '{"v":' . $auditMax() . ',"b":{}}' && $tick($sa)['body'] === '{"v":' . $auditMax() . ',"b":{}}' && $tick($sp)['status'] === 200);
+check('live/tick: Anggota dan Ketua Regu mendapat {"v":angka,"b":{}} tanpa data lain; Superadmin kedua pun boleh', $tick($sm)['body'] === '{"v":' . $auditMax() . ',"b":{}}' && $tick($sa)['body'] === '{"v":' . $auditMax() . ',"b":{}}' && $tick($sp)['status'] === 200);
 check('live/tick: tidak di-cache', str_contains(strtolower($t0['headers']['cache-control'] ?? ''), 'no-store'));
 
 // perubahan oleh pengguna lain menaikkan penanda dan muncul di halaman pengguna lain
@@ -1523,26 +1517,26 @@ $eligibleIn  = static fn (array $r): int => (int) preg_match_all('/badge--disetu
 $menuBadge   = static fn (array $r): ?int => preg_match('/data-badge="validasi"[^>]*>\s*<bdi data-badge-n>(\d+)</', $r['body'], $m) === 1 ? (int) $m[1] : null;
 
 check('badge/akses: Anggota dan Ketua Regu tidak mendapat penanda validasi (denyut kosong, menu tanpa penanda)', $badgeOf($sm) === null && $badgeOf($sa) === null && !$has($sa->get('/'), 'data-badge=') && !$has($sm->get('/'), 'data-badge='));
-check('badge/akses: Head dan Pemeriksa mendapat angka bulat', is_int($badgeOf($sh)) && is_int($badgeOf($sp)) && is_int($badgeOf($sh3)));
+check('badge/akses: semua Superadmin mendapat angka bulat', is_int($badgeOf($sh)) && is_int($badgeOf($sp)) && is_int($badgeOf($sh3)));
 $qSql = "SELECT COUNT(*) FROM transactions WHERE status = 'MENUNGGU_VALIDASI' AND deleted_at IS NULL";
-check('badge/angka: sama dengan jumlah baris "Bisa divalidasi" di antrean masing-masing (Head, Head tertaut anggota, Pemeriksa)', $count($qSql) <= 20 && $badgeOf($sh) === $eligibleIn($sh->get('/validasi')) && $badgeOf($sh3) === $eligibleIn($sh3->get('/validasi')) && $badgeOf($sp) === $eligibleIn($sp->get('/validasi')));
+check('badge/angka: sama dengan jumlah baris "Bisa divalidasi" di antrean masing-masing (Superadmin, Superadmin tertaut anggota, Superadmin kedua)', $count($qSql) <= 20 && $badgeOf($sh) === $eligibleIn($sh->get('/validasi')) && $badgeOf($sh3) === $eligibleIn($sh3->get('/validasi')) && $badgeOf($sp) === $eligibleIn($sp->get('/validasi')));
 check('badge/menu: angka di menu halaman biasa sama dengan angka denyut (terisi sejak render awal, tanpa menunggu skrip)', $menuBadge($sh->get('/')) === $badgeOf($sh) && $menuBadge($sp->get('/profil')) === $badgeOf($sp));
 
-// transaksi biasa menambah untuk semua validator; transaksi terkait Head hanya menambah Pemeriksa
+// setiap transaksi baru menambah untuk SEMUA Superadmin (tanpa pemisahan pembuat-penyetuju)
 [$bh0, $bh30, $bp0] = [$badgeOf($sh), $badgeOf($sh3), $badgeOf($sp)];
 $plain = $mkSaving($sa, $mid(2), '14.141');
 [$bh1, $bh31, $bp1] = [$badgeOf($sh), $badgeOf($sh3), $badgeOf($sp)];
-check('badge/naik: transaksi biasa baru menambah 1 untuk Head, Head tertaut anggota, dan Pemeriksa', $bh1 === $bh0 + 1 && $bh31 === $bh30 + 1 && $bp1 === $bp0 + 1);
+check('badge/naik: transaksi biasa baru menambah 1 untuk semua Superadmin', $bh1 === $bh0 + 1 && $bh31 === $bh30 + 1 && $bp1 === $bp0 + 1);
 $ofHead = $mkSaving($sa, $headMember, '15.151');
 [$bh2, $bh32, $bp2] = [$badgeOf($sh), $badgeOf($sh3), $badgeOf($sp)];
-check('badge/aturan: transaksi atas nama anggota tertaut Head hanya menambah Pemeriksa (Head tidak boleh; kepala3 atas nama sendiri)', $bh2 === $bh1 && $bh32 === $bh31 && $bp2 === $bp1 + 1);
+check('badge/aturan: transaksi atas nama anggota tertaut Head juga menambah 1 untuk semua Superadmin (termasuk kepala3 atas nama sendiri)', $bh2 === $bh1 + 1 && $bh32 === $bh31 + 1 && $bp2 === $bp1 + 1);
 check('badge/aturan: angka tetap sama dengan jumlah "Bisa divalidasi" di antrean setelah dua transaksi baru', $count($qSql) <= 20 && $bh2 === $eligibleIn($sh->get('/validasi')) && $bp2 === $eligibleIn($sp->get('/validasi')));
 
 // diputuskan (disetujui atau ditolak) = turun; draft dan pembatalan tidak dihitung
 $post($sp, '/validasi/' . $ofHead . '/setujui', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$ofHead])]);
-check('badge/turun: transaksi yang disetujui keluar dari angka Pemeriksa; angka Head tak berubah', $badgeOf($sp) === $bp2 - 1 && $badgeOf($sh) === $bh2);
+check('badge/turun: transaksi yang disetujui keluar dari angka semua Superadmin', $badgeOf($sp) === $bp2 - 1 && $badgeOf($sh) === $bh2 - 1);
 $post($sh, '/validasi/' . $plain . '/tolak', ['_version' => $str('SELECT updated_at FROM transactions WHERE id = ?', [$plain]), 'note' => 'uji penanda']);
-check('badge/turun: transaksi yang ditolak keluar dari angka semua validator', $badgeOf($sh) === $bh2 - 1 && $badgeOf($sh3) === $bh32 - 1 && $badgeOf($sp) === $bp2 - 2);
+check('badge/turun: transaksi yang ditolak keluar dari angka semua Superadmin', $badgeOf($sh) === $bh2 - 2 && $badgeOf($sh3) === $bh32 - 2 && $badgeOf($sp) === $bp2 - 2);
 
 // permintaan latar belakang membawa penanda tapi tidak menghabiskan pesan sekali-tampil, dan angka tidak bocor lewat halaman lain
 check('badge/halaman: penanda tampil di menu semua halaman aplikasi (juga formulir) dan mengarah ke antrean', $has($sh->get('/transaksi/simpanan'), 'data-badge="validasi"') && $has($sh->get('/profil'), 'data-badge="validasi"') && $has($sh->get('/'), 'href="/validasi"'));
@@ -1557,7 +1551,7 @@ check('badge/halaman: denyut dibaca dari <body> sehingga jalan juga di halaman t
 // ---- 12m. halaman galat dalam kerangka aplikasi (Phase 15) ----
 $framed = static fn (array $r): bool => str_contains($r['body'], 'class="sidebar"') && str_contains($r['body'], 'error-card') && str_contains($r['body'], 'data-back');
 $e403 = $sa->get('/validasi');
-check('galat/403: pengguna login tetap di kerangka aplikasi (menu, bilah atas), dengan petunjuk dan tombol Kembali/Dashboard', $e403['status'] === 403 && $framed($e403) && $has($e403, 'Anda tidak memiliki akses') && $has($e403, 'hubungi Head koperasi') && $has($e403, 'Ke Dashboard') && $has($e403, 'topbar'));
+check('galat/403: pengguna login tetap di kerangka aplikasi (menu, bilah atas), dengan petunjuk dan tombol Kembali/Dashboard', $e403['status'] === 403 && $framed($e403) && $has($e403, 'Anda tidak memiliki akses') && $has($e403, 'hubungi Superadmin koperasi') && $has($e403, 'Ke Dashboard') && $has($e403, 'topbar'));
 check('galat/403: menu hanya memuat item sesuai peran (Ketua Regu tidak melihat Validasi/Audit) dan nama di bilah atas', !$has($e403, 'href="/validasi"') && !$has($e403, 'href="/sistem/audit"') && $has($e403, 'Ketua Alfa'));
 $e404 = $sa->get('/tidak-ada/sama-sekali');
 check('galat/404: kerangka aplikasi, petunjuk cakupan data, tanpa jejak tumpukan', $e404['status'] === 404 && $framed($e404) && $has($e404, 'tidak ditemukan') && $has($e404, 'cakupan data') && !$has($e404, '<pre'));
@@ -1956,61 +1950,61 @@ check('keamanan/bocor: tak ada hash kata sandi, token CSRF di URL, atau kredensi
 
 // ---- 14. Matriks peran dan cakupan route (Phase 17) ----
 // Matriks ditulis dari ATURAN di prompt master §5 (bukan disalin dari config/permissions.php), jadi bila izin berubah tanpa
-// sengaja, tes ini gagal. Kode: ok = 200, x = ditolak (403/404), r = dialihkan ke /login. Kolom: HEAD, PEMERIKSA, KETUA REGU, ANGGOTA, TAMU.
-$roleBrowsers = ['HEAD' => $sh, 'PEMERIKSA' => $sp, 'KETUA_REGU' => $sa, 'ANGGOTA' => $sm, 'TAMU' => new Browser()];
+// sengaja, tes ini gagal. Kode: ok = 200, x = ditolak (403/404), r = dialihkan ke /login. Kolom: HEAD (Superadmin), KETUA REGU (Admin), ANGGOTA (hanya lihat), TAMU.
+$roleBrowsers = ['HEAD' => $sh, 'KETUA_REGU' => $sa, 'ANGGOTA' => $sm, 'TAMU' => new Browser()];
 $ketuaPeriksa = $mid(2);   // anggota regu Alfa (Ketua Alfa = pengguna alfa)
 $anggotaBeta = $mid(4);    // anggota regu Beta = pengguna anggota4
 $matrix = [
-    //  jalur                                   HEAD  PEM   KR    ANG   TAMU
-    ['/',                                       'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/profil',                                 'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/profil/password',                        'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/master/ketua-regu',                      'ok', 'x',  'x',  'x',  'r'],
-    ['/master/ketua-regu/baru',                 'ok', 'x',  'x',  'x',  'r'],
-    ['/master/anggota',                         'ok', 'ok', 'ok', 'x',  'r'],
-    ['/master/anggota/baru',                    'ok', 'x',  'x',  'x',  'r'],
-    ['/master/pengguna',                        'ok', 'x',  'x',  'x',  'r'],
-    ['/master/pengguna/baru',                   'ok', 'x',  'x',  'x',  'r'],
-    ['/sistem/pengaturan',                      'ok', 'x',  'x',  'x',  'r'],
-    ['/sistem/audit',                           'ok', 'ok', 'x',  'x',  'r'],
-    ['/sistem/audit/unduh',                     'ok', 'ok', 'x',  'x',  'r'],
-    ['/validasi',                               'ok', 'ok', 'x',  'x',  'r'],
-    ['/validasi/riwayat',                       'ok', 'ok', 'x',  'x',  'r'],
-    ['/transaksi/simpanan',                     'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/transaksi/pinjaman',                     'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/transaksi/pinjaman/simulasi',            'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/transaksi/angsuran',                     'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/transaksi/angsuran/tagihan',             'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/transaksi/riwayat',                      'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/transaksi/simpanan/baru',                'x',  'x',  'ok', 'x',  'r'],
-    ['/transaksi/pinjaman/baru',                'x',  'x',  'ok', 'x',  'r'],
-    ['/transaksi/angsuran/baru',                'x',  'x',  'ok', 'x',  'r'],
-    ['/laporan/simpanan',                       'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/laporan/pinjaman',                       'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/laporan/angsuran',                       'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/laporan/saldo',                          'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/laporan/transaksi',                      'ok', 'ok', 'ok', 'ok', 'r'],
-    ['/laporan/regu',                           'ok', 'ok', 'x',  'x',  'r'],
-    ['/laporan/anggota',                        'ok', 'ok', 'ok', 'x',  'r'],
-    ['/laporan/simpanan/unduh',                 'ok', 'ok', 'x',  'x',  'r'],
-    ['/laporan/anggota/unduh',                  'ok', 'ok', 'x',  'x',  'r'],
-    ['/laporan/transaksi/unduh',                'ok', 'ok', 'x',  'x',  'r'],
-    ['/anggota/' . $ketuaPeriksa,               'ok', 'ok', 'ok', 'x',  'r'],   // anggota regu Alfa
-    ['/anggota/' . $anggotaBeta,                'ok', 'ok', 'x',  'ok', 'r'],   // anggota regu Beta (= pengguna anggota4)
-    ['/laporan/anggota/' . $ketuaPeriksa,       'ok', 'ok', 'ok', 'x',  'r'],
-    ['/laporan/anggota/' . $anggotaBeta,        'ok', 'ok', 'x',  'x',  'r'],
-    ['/laporan/anggota/' . $ketuaPeriksa . '/pinjaman', 'ok', 'ok', 'ok', 'x', 'r'],
-    ['/laporan/anggota/' . $ketuaPeriksa . '/tabungan', 'ok', 'ok', 'ok', 'x', 'r'],
-    ['/laporan/anggota/' . $anggotaBeta . '/tabungan',  'ok', 'ok', 'x',  'x', 'r'],
-    ['/laporan/anggota/cetak/pinjaman',         'ok', 'ok', 'ok', 'x',  'r'],
-    ['/laporan/anggota/cetak/tabungan',         'ok', 'ok', 'ok', 'x',  'r'],
-    ['/transaksi/' . $newId,                    'ok', 'ok', 'ok', 'x',  'r'],   // transaksi anggota regu Alfa
-    ['/master/anggota/' . $ketuaPeriksa . '/ubah', 'ok', 'x', 'x',  'x',  'r'],
-    ['/master/ketua-regu/1/ubah',               'ok', 'x',  'x',  'x',  'r'],
-    ['/master/pengguna/1/ubah',                 'ok', 'x',  'x',  'x',  'r'],
-    ['/live/tick',                              'ok', 'ok', 'ok', 'ok', 'r'],
+    //  jalur                                   HEAD  KR    ANG   TAMU
+    ['/',                                       'ok', 'ok', 'ok', 'r'],
+    ['/profil',                                 'ok', 'ok', 'ok', 'r'],
+    ['/profil/password',                        'ok', 'ok', 'ok', 'r'],
+    ['/master/ketua-regu',                      'ok', 'x',  'x',  'r'],
+    ['/master/ketua-regu/baru',                 'ok', 'x',  'x',  'r'],
+    ['/master/anggota',                         'ok', 'ok', 'x',  'r'],
+    ['/master/anggota/baru',                    'ok', 'x',  'x',  'r'],
+    ['/master/pengguna',                        'ok', 'x',  'x',  'r'],
+    ['/master/pengguna/baru',                   'ok', 'x',  'x',  'r'],
+    ['/sistem/pengaturan',                      'ok', 'x',  'x',  'r'],
+    ['/sistem/audit',                           'ok', 'x',  'x',  'r'],
+    ['/sistem/audit/unduh',                     'ok', 'x',  'x',  'r'],
+    ['/validasi',                               'ok', 'x',  'x',  'r'],
+    ['/validasi/riwayat',                       'ok', 'x',  'x',  'r'],
+    ['/transaksi/simpanan',                     'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/pinjaman',                     'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/pinjaman/simulasi',            'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/angsuran',                     'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/angsuran/tagihan',             'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/riwayat',                      'ok', 'ok', 'ok', 'r'],
+    ['/transaksi/simpanan/baru',                'x',  'ok', 'x',  'r'],
+    ['/transaksi/pinjaman/baru',                'x',  'ok', 'x',  'r'],
+    ['/transaksi/angsuran/baru',                'x',  'ok', 'x',  'r'],
+    ['/laporan/simpanan',                       'ok', 'ok', 'ok', 'r'],
+    ['/laporan/pinjaman',                       'ok', 'ok', 'ok', 'r'],
+    ['/laporan/angsuran',                       'ok', 'ok', 'ok', 'r'],
+    ['/laporan/saldo',                          'ok', 'ok', 'ok', 'r'],
+    ['/laporan/transaksi',                      'ok', 'ok', 'ok', 'r'],
+    ['/laporan/regu',                           'ok', 'x',  'x',  'r'],
+    ['/laporan/anggota',                        'ok', 'ok', 'x',  'r'],
+    ['/laporan/simpanan/unduh',                 'ok', 'x',  'x',  'r'],
+    ['/laporan/anggota/unduh',                  'ok', 'x',  'x',  'r'],
+    ['/laporan/transaksi/unduh',                'ok', 'x',  'x',  'r'],
+    ['/anggota/' . $ketuaPeriksa,               'ok', 'ok', 'x',  'r'],   // anggota regu Alfa
+    ['/anggota/' . $anggotaBeta,                'ok', 'x',  'ok', 'r'],   // anggota regu Beta (= pengguna anggota4)
+    ['/laporan/anggota/' . $ketuaPeriksa,       'ok', 'ok', 'x',  'r'],
+    ['/laporan/anggota/' . $anggotaBeta,        'ok', 'x',  'x',  'r'],
+    ['/laporan/anggota/' . $ketuaPeriksa . '/pinjaman', 'ok', 'ok', 'x', 'r'],
+    ['/laporan/anggota/' . $ketuaPeriksa . '/tabungan', 'ok', 'ok', 'x', 'r'],
+    ['/laporan/anggota/' . $anggotaBeta . '/tabungan',  'ok', 'x',  'x', 'r'],
+    ['/laporan/anggota/cetak/pinjaman',         'ok', 'ok', 'x',  'r'],
+    ['/laporan/anggota/cetak/tabungan',         'ok', 'ok', 'x',  'r'],
+    ['/transaksi/' . $newId,                    'ok', 'ok', 'x',  'r'],   // transaksi anggota regu Alfa
+    ['/master/anggota/' . $ketuaPeriksa . '/ubah', 'ok', 'x',  'x',  'r'],
+    ['/master/ketua-regu/1/ubah',               'ok', 'x',  'x',  'r'],
+    ['/master/pengguna/1/ubah',                 'ok', 'x',  'x',  'r'],
+    ['/live/tick',                              'ok', 'ok', 'ok', 'r'],
 ];
-$roleNames = ['HEAD', 'PEMERIKSA', 'KETUA_REGU', 'ANGGOTA', 'TAMU'];
+$roleNames = ['HEAD', 'KETUA_REGU', 'ANGGOTA', 'TAMU'];
 $matrixBad = [];
 $cells = 0;
 foreach ($matrix as $row) {
@@ -2029,7 +2023,7 @@ foreach ($matrix as $row) {
         }
     }
 }
-check("matriks peran: {$cells} sel (" . count($matrix) . ' halaman x 5 peran) sesuai aturan prompt master §5' . ($matrixBad ? ' [' . implode('; ', array_slice($matrixBad, 0, 6)) . ']' : ''), $matrixBad === []);
+check("matriks peran: {$cells} sel (" . count($matrix) . ' halaman x 4 peran) sesuai keputusan pemilik: Superadmin, Admin, Anggota hanya-lihat' . ($matrixBad ? ' [' . implode('; ', array_slice($matrixBad, 0, 6)) . ']' : ''), $matrixBad === []);
 
 check('styleguide: hanya hidup di lingkungan lokal (200 di APP_ENV=local uji ini; produksi dijaga controller dan preflight)', $sh->get('/styleguide')['status'] === 200 && $sh->get('/styleguide?peran=KETUA_REGU')['status'] === 200 && $sh->get('/styleguide?peran=<script>')['status'] === 200);
 

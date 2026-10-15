@@ -12,10 +12,8 @@ use App\Helpers\Money;
  * Validasi transaksi (Setujui / Tolak). Satu-satunya jalan transaksi menjadi DISETUJUI di aplikasi, dan hanya
  * DISETUJUI yang masuk saldo. Semuanya terjadi dalam satu transaksi database bersama riwayat status dan audit.
  *
- * Pemisahan tugas:
- *  - pembuat tidak boleh memvalidasi transaksinya sendiri;
- *  - tidak boleh memvalidasi transaksi atas nama sendiri, atau transaksi regu yang ia pimpin;
- *  - transaksi milik Head, regu yang dipimpin Head, atau dibuat Head HANYA boleh divalidasi PEMERIKSA (Q3).
+ * Hanya Superadmin (izin transaction.validate) yang menyetujui atau menolak, dan ia boleh menyetujui semua transaksi,
+ * termasuk yang ia catat sendiri sebagai Admin. Tidak ada akun Pemeriksa dan tidak ada pemisahan pembuat-penyetuju.
  *
  * Penyetujuan memeriksa ulang keadaan terkini (tidak percaya pada apa yang benar saat diajukan):
  *  - pencairan dan pengeluaran kas: kas tersedia cukup, diperiksa SECARA ATOMIK (kunci global kas) sehingga dua
@@ -27,65 +25,30 @@ use App\Helpers\Money;
 final class ValidationService
 {
     /**
-     * Potongan SQL (alias transaksi `t`): transaksi terkait Head = dibuat oleh Head, atas nama anggota yang
-     * tertaut ke akun Head, atau milik regu yang dipimpin anggota yang tertaut ke akun Head.
-     */
-    public const HEAD_RELATED_SQL = "EXISTS (
-        SELECT 1 FROM user_roles ur JOIN roles r ON r.id = ur.role_id AND r.code = 'HEAD'
-        WHERE ur.user_id = t.created_by
-           OR ur.user_id IN (SELECT u.id FROM users u WHERE u.deleted_at IS NULL AND u.member_id IS NOT NULL
-                              AND (u.member_id = t.member_id OR u.member_id = (SELECT tl.leader_member_id FROM team_leaders tl WHERE tl.id = t.team_id))))";
-
-    /**
      * Apakah pengguna ini boleh memvalidasi transaksi ini? (Tidak mengubah apa pun.)
+     * Hanya pemilik izin transaction.validate (Superadmin/HEAD). Tidak ada pemisahan pembuat dan penyetuju:
+     * Superadmin menyetujui SEMUA transaksi, termasuk yang ia catat sendiri sebagai Admin (keputusan pemilik koperasi).
      *
      * @param array{id?:int,roles?:array<int,string>,member_id?:?int} $user
-     * @param array<string,mixed> $trx baris transaksi: created_by, member_id, team_id (+ leader_member_id opsional)
-     * @return array{eligible:bool,reason:?string,head_related:bool}
+     * @return array{eligible:bool,reason:?string}
      */
-    public static function assess(array $user, array $trx, bool $headRelated, ?int $teamLeaderMemberId): array
+    public static function assess(array $user): array
     {
-        $deny = static fn (string $why): array => ['eligible' => false, 'reason' => $why, 'head_related' => $headRelated];
-
         if (!Gate::allows($user, 'transaction.validate')) {
-            return $deny('Akun Anda tidak berhak memvalidasi transaksi.');
+            return ['eligible' => false, 'reason' => 'Akun Anda tidak berhak memvalidasi transaksi.'];
         }
-        if ($trx['created_by'] !== null && (int) $trx['created_by'] === (int) ($user['id'] ?? 0)) {
-            return $deny('Anda pembuat transaksi ini. Validasi harus dilakukan orang lain.');
-        }
-        $myMember = $user['member_id'] ?? null;
-        if ($myMember !== null && $trx['member_id'] !== null && (int) $trx['member_id'] === (int) $myMember) {
-            return $deny('Transaksi ini atas nama Anda sendiri. Validasi harus dilakukan orang lain.');
-        }
-        if ($myMember !== null && $teamLeaderMemberId !== null && (int) $myMember === $teamLeaderMemberId) {
-            return $deny('Transaksi ini milik regu yang Anda pimpin. Validasi harus dilakukan orang lain.');
-        }
-        if ($headRelated && !in_array('PEMERIKSA', (array) ($user['roles'] ?? []), true)) {
-            return $deny('Transaksi milik Head, regu Head, atau dibuat Head hanya boleh divalidasi Pemeriksa.');
-        }
-        return ['eligible' => true, 'reason' => null, 'head_related' => $headRelated];
+        return ['eligible' => true, 'reason' => null];
     }
 
     /**
-     * Penilaian untuk tampilan (membaca dari database).
+     * Penilaian untuk tampilan.
      * @param array{id?:int,roles?:array<int,string>,member_id?:?int} $user
-     * @param array<string,mixed> $trx baris transaksi dengan kolom id, created_by, member_id, team_id
-     * @return array{eligible:bool,reason:?string,head_related:bool}
+     * @param array<string,mixed> $trx
+     * @return array{eligible:bool,reason:?string}
      */
     public static function assessFor(array $user, array $trx): array
     {
-        $row = Database::select('SELECT ' . self::HEAD_RELATED_SQL . ' AS head_related, (SELECT tl.leader_member_id FROM team_leaders tl WHERE tl.id = t.team_id) AS leader_member_id FROM transactions t WHERE t.id = ?', [(int) $trx['id']])[0] ?? null;
-        if ($row === null) {
-            return ['eligible' => false, 'reason' => 'Transaksi tidak ditemukan.', 'head_related' => false];
-        }
-        return self::assess($user, $trx, (bool) $row['head_related'], $row['leader_member_id'] === null ? null : (int) $row['leader_member_id']);
-    }
-
-    /** Ada minimal satu akun Pemeriksa aktif? (Tanpa itu transaksi terkait Head tidak bisa divalidasi.) */
-    public static function hasActiveChecker(): bool
-    {
-        return Database::select("SELECT 1 FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id AND r.code = 'PEMERIKSA'
-                                  WHERE u.is_active = 1 AND u.deleted_at IS NULL LIMIT 1") !== [];
+        return self::assess($user);
     }
 
     /** Kas tersedia saat ini (hanya transaksi DISETUJUI). */
@@ -167,10 +130,7 @@ final class ValidationService
             throw RuleViolation::field('_form', 'Transaksi ini baru saja berubah. Muat ulang halaman, periksa lagi, lalu putuskan.');
         }
 
-        $stmt = $pdo->prepare('SELECT ' . self::HEAD_RELATED_SQL . ' AS head_related, (SELECT tl.leader_member_id FROM team_leaders tl WHERE tl.id = t.team_id) AS leader_member_id FROM transactions t WHERE t.id = ?');
-        $stmt->execute([$id]);
-        $meta = $stmt->fetch();
-        $verdict = self::assess($actor, $trx, (bool) $meta['head_related'], $meta['leader_member_id'] === null ? null : (int) $meta['leader_member_id']);
+        $verdict = self::assess($actor);
         if (!$verdict['eligible']) {
             throw RuleViolation::field('_form', (string) $verdict['reason']);
         }

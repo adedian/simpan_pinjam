@@ -16,7 +16,7 @@ final class ErrorController extends BaseController
 {
     /** Petunjuk tindakan per status; hanya teks umum (tidak membocorkan ada/tidaknya data). */
     private const HINTS = [
-        403 => 'Peran Anda tidak punya izin untuk halaman atau tindakan ini. Bila seharusnya bisa, hubungi Head koperasi.',
+        403 => 'Peran Anda tidak punya izin untuk halaman atau tindakan ini. Bila seharusnya bisa, hubungi Superadmin koperasi.',
         404 => 'Alamatnya mungkin salah, datanya sudah tidak ada, atau berada di luar cakupan data Anda.',
         405 => 'Tindakan ini tidak tersedia lewat cara yang dipakai. Kembali, lalu gunakan tombol di halamannya.',
         419 => 'Formulir sudah terlalu lama terbuka atau sesi berganti. Kembali, muat ulang halamannya, lalu isi lagi.',

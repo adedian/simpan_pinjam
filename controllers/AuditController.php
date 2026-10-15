@@ -12,7 +12,7 @@ use App\Services\Auth;
 use App\Services\ReportService;
 
 /**
- * Layar Audit Log (Phase 13): hanya membaca jejak yang tidak bisa diubah. Izin audit.view (Head, Pemeriksa);
+ * Layar Audit Log (Phase 13): hanya membaca jejak yang tidak bisa diubah. Izin audit.view (Superadmin);
  * unduhan Excel juga butuh report.export dan dirinya sendiri tercatat (AUDIT_EXPORTED).
  */
 final class AuditController extends BaseController

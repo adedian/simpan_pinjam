@@ -29,12 +29,11 @@ milik koperasi dan tidak ikut repositori.
 ## Peran
 | Peran | Ringkas |
 |---|---|
-| Head | Mengelola master data, pengguna, pengaturan; melihat semua; laporan dan audit |
-| Pemeriksa | Memvalidasi transaksi (termasuk milik Head/regunya); laporan dan audit |
-| Ketua Regu | Mencatat simpanan, pinjaman, angsuran, dan koreksi untuk regunya |
-| Anggota | Hanya melihat data dan laporan dirinya |
+| Superadmin (kode `HEAD`) | Mengelola master data, pengguna, pengaturan; menyetujui atau menolak SEMUA transaksi; melihat semua; laporan dan audit |
+| Admin (kode `KETUA_REGU`) | Mencatat simpanan, pinjaman, angsuran, dan koreksi untuk regunya |
+| Anggota | Hanya melihat data dan laporan dirinya (tidak bisa mengubah apa pun) |
 
-Pencatat tidak boleh memvalidasi transaksinya sendiri. Matriks izin: `config/permissions.php`.
+Tidak ada peran Pemeriksa: Superadmin menyetujui semua transaksi, termasuk yang ia catat sendiri sebagai Admin. Matriks izin: `config/permissions.php`.
 
 ## Formulir cetak
 Dari **Laporan Per Anggota** (kartu anggota, atau tombol "Cetak semua formulir" untuk satu regu/semua anggota):
@@ -43,7 +42,7 @@ tabungan adalah *perkiraan* yang angkanya sama persis dengan Excel koperasi (`se
 dianggap dibayar sesuai jadwal; penyesuaian bendahara dicatat lewat `php database/tools/plan_adjust.php`); belum
 dikurangi sisa pinjaman. Nyalakan "Background graphics" di kotak cetak peramban agar warna kepala tabel ikut.
 
-**Unduhan** (Head dan Pemeriksa) berformat **Excel (.xlsx)**, bukan CSV: formulir per anggota atau semua anggota
+**Unduhan** (Superadmin) berformat **Excel (.xlsx)**, bukan CSV: formulir per anggota atau semua anggota
 (satu lembar per jenis formulir, tata letak dan warna seperti template), serta enam laporan rekap dan audit log dengan
 gaya yang sama. Angka tersimpan sebagai angka dan teks tidak pernah dibaca sebagai rumus. Penulisnya `services/Xlsx.php`
 (hanya butuh ekstensi `zip` PHP, sudah aktif di XAMPP).

@@ -97,18 +97,18 @@ foreach ([$m1, $m0] as $d) {
 }
 $mid0  = (int) one('SELECT id FROM period_months WHERE month_date = ?', [$m0]);
 $today = date('Y-m-d');
-foreach ([1 => 'Ketua Alfa (Head)', 2 => 'Anggota Alfa', 3 => 'Ketua Beta', 4 => 'Anggota Beta', 5 => 'Anggota Pemeriksa'] as $n => $name) {
+foreach ([1 => 'Ketua Alfa (Head)', 2 => 'Anggota Alfa', 3 => 'Ketua Beta', 4 => 'Anggota Beta', 5 => 'Anggota Superadmin'] as $n => $name) {
     $pdo->prepare('INSERT INTO members (member_no, name, active_from, status) VALUES (?, ?, ?, ?)')->execute([sprintf('AGT-%03d', $n), $name, $m1, 'AKTIF']);
 }
 $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa', 1), ('Regu Beta', 3)");
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m1}'),(2,1,'{$m1}'),(3,2,'{$m1}'),(4,2,'{$m1}'),(5,2,'{$m1}')");
 
 $ids = [];
-foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota4', ['ANGGOTA'], 'AGT-004']] as [$u, $roles, $no]) {
+foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota4', ['ANGGOTA'], 'AGT-004']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
-$ids['periksa.m'] = UserService::create('periksa.m', 'Periksa Anggota', ['PEMERIKSA'], null, 'Contoh-Uji-2026')['id'];
-$pdo->exec("UPDATE users SET member_id = 5 WHERE username = 'periksa.m'");   // Pemeriksa yang juga anggota (member 5)
+$ids['periksa.m'] = UserService::create('periksa.m', 'Superadmin Anggota', ['HEAD'], null, 'Contoh-Uji-2026')['id'];
+$pdo->exec("UPDATE users SET member_id = 5 WHERE username = 'periksa.m'");   // Superadmin yang juga anggota (member 5)
 $purwati  = User::findActive($ids['purwati']);
 $beta     = User::findActive($ids['ketua.beta']);
 $head     = User::findActive($ids['kepala2']);
@@ -121,45 +121,45 @@ $badge = static fn (array $u): ?int => LiveFeed::badges($u)['validasi'] ?? null;
 
 // ======================= izin =======================
 check('izin: pengguna tanpa izin validasi (Ketua Regu, Anggota) dan tanpa sesi tidak mendapat penanda apa pun', LiveFeed::badges($beta) === [] && LiveFeed::badges($anggota4) === [] && LiveFeed::badges(null) === []);
-check('izin: antrean kosong = 0 (bukan tanpa penanda) untuk Head dan Pemeriksa', LiveFeed::badges($head) === ['validasi' => 0] && LiveFeed::badges($periksa) === ['validasi' => 0] && LiveFeed::badges($purwati) === ['validasi' => 0]);
+check('izin: antrean kosong = 0 (bukan tanpa penanda) untuk semua Superadmin', LiveFeed::badges($head) === ['validasi' => 0] && LiveFeed::badges($periksa) === ['validasi' => 0] && LiveFeed::badges($purwati) === ['validasi' => 0]);
 
 // ======================= penghitungan menurut kewenangan =======================
 $byPurwati = saving($purwati, 2, '10.000');   // dibuat Head, regu Head: terkait Head
-check('hitung: transaksi buatan Head — pembuat tidak menghitungnya, Head lain tidak boleh (terkait Head), Pemeriksa boleh',
-    $badge($purwati) === 0 && $badge($head) === 0 && $badge($periksa) === 1 && $badge($periksaM) === 1);
+check('hitung: transaksi buatan Purwati dihitung untuk SEMUA Superadmin, termasuk Purwati sendiri (tanpa pemisahan pembuat-penyetuju)',
+    $badge($purwati) === 1 && $badge($head) === 1 && $badge($periksa) === 1 && $badge($periksaM) === 1);
 
 $byBeta = saving($beta, 4, '20.000');          // biasa (regu Beta)
-check('hitung: transaksi biasa menambah untuk semua validator (pembuat Ketua Beta bukan validator)',
-    $badge($purwati) === 1 && $badge($head) === 1 && $badge($periksa) === 2 && $badge($periksaM) === 2);
+check('hitung: transaksi biasa menambah untuk semua Superadmin (pembuat Admin Beta bukan Superadmin)',
+    $badge($purwati) === 2 && $badge($head) === 2 && $badge($periksa) === 2 && $badge($periksaM) === 2);
 
 $forPeriksaM = saving($beta, 5, '30.000');     // atas nama anggota yang tertaut ke Pemeriksa periksa.m
-check('hitung: atas nama anggota yang tertaut ke validator tidak dihitung untuk validator itu saja',
-    $badge($periksaM) === 2 && $badge($periksa) === 3 && $badge($purwati) === 2 && $badge($head) === 2);
+check('hitung: atas nama anggota yang tertaut ke seorang Superadmin tetap dihitung untuk Superadmin itu juga',
+    $badge($periksaM) === 3 && $badge($periksa) === 3 && $badge($purwati) === 3 && $badge($head) === 3);
 
 $draft = saving($beta, 4, '40.000', false);    // hanya draft
-check('hitung: draft tidak dihitung', $badge($head) === 2 && $badge($periksa) === 3);
+check('hitung: draft tidak dihitung', $badge($head) === 3 && $badge($periksa) === 3);
 
 $forPurwati = saving($beta, 3, '50.000');      // atas nama Ketua Beta: biasa, bukan terkait Head, bukan atas nama Purwati
 $byBeta2    = rawPending(2, 1, (int) $beta['id'], 60000);   // anggota regu Alfa (dipimpin Purwati): Purwati tak boleh (regu yang dipimpin) dan terkait Head
-check('hitung: regu yang dipimpin validator tidak dihitung untuk validator itu; terkait Head hanya Pemeriksa',
-    $badge($purwati) === 3 && $badge($head) === 3 && $badge($periksa) === 5 && $badge($periksaM) === 4);
+check('hitung: transaksi regu yang dipimpin Purwati juga dihitung untuk semua Superadmin',
+    $badge($purwati) === 5 && $badge($head) === 5 && $badge($periksa) === 5 && $badge($periksaM) === 5);
 
 // ======================= sama dengan layar antrean =======================
 $same = true;
 foreach ($validators as $user) {
     $same = $same && $badge($user) === queueEligible($user);
 }
-check('konsisten: angka tiap validator sama dengan jumlah baris "Bisa divalidasi" di antrean', $same);
+check('konsisten: angka tiap Superadmin sama dengan jumlah baris "Bisa divalidasi" di antrean', $same);
 
 // ======================= keluar dari antrean =======================
 ValidationService::approve(req(), $periksa, $byBeta, (string) one('SELECT updated_at FROM transactions WHERE id = ?', [$byBeta]), null);
-check('turun: transaksi yang disetujui keluar dari angka semua validator', $badge($purwati) === 2 && $badge($head) === 2 && $badge($periksa) === 4 && $badge($periksaM) === 3);
+check('turun: transaksi yang disetujui keluar dari angka semua Superadmin', $badge($purwati) === 4 && $badge($head) === 4 && $badge($periksa) === 4 && $badge($periksaM) === 4);
 ValidationService::reject(req(), $periksa, $byBeta2, (string) one('SELECT updated_at FROM transactions WHERE id = ?', [$byBeta2]), 'tes');
 $stillSame = true;
 foreach ($validators as $user) {
     $stillSame = $stillSame && $badge($user) === queueEligible($user);
 }
-check('turun: ditolak keluar dari angka; angka tetap sama dengan antrean setelah keputusan', $stillSame && $badge($periksa) === 3);
+check('turun: ditolak keluar dari angka; angka tetap sama dengan antrean setelah keputusan', $stillSame && $badge($periksa) === 3 && $badge($purwati) === 3);
 $pdo->exec("UPDATE transactions SET status = 'DIBATALKAN' WHERE id = {$forPurwati}");
 check('turun: dibatalkan pembuat juga keluar dari angka', $badge($head) === queueEligible($head) && $badge($periksa) === 2);
 

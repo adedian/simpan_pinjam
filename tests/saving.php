@@ -108,7 +108,7 @@ $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m2}'),(2,1,'{$m2}'),(3,2,'{$m2}'),(4,2,'{$m2}'),(5,1,'{$m0}'),(6,1,'{$m2}')");
 
 $ids = [];
-foreach ([['ketua.alfa', ['KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota2', ['ANGGOTA'], 'AGT-002']] as [$u, $roles, $no]) {
+foreach ([['ketua.alfa', ['KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota2', ['ANGGOTA'], 'AGT-002']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
 $alfa  = User::findActive($ids['ketua.alfa']);
@@ -187,7 +187,7 @@ check('aturan: bulan tidak ada ditolak', isset($try(['period_month_id' => 9999])
 check('aturan: tanggal di masa depan ditolak', isset($try(['trx_date' => date('Y-m-d', strtotime('+1 day'))])['trx_date']));
 check('aturan: tanggal sebelum awal bulan siklus ditolak', isset($try(['trx_date' => date('Y-m-d', strtotime('-1 day', strtotime($m0)))])['trx_date']));
 check('aturan: bulan lalu dengan tanggal bulan lalu diterima', violation(fn () => make($alfa, ['period_month_id' => $mo1, 'trx_date' => $m1, 'amount' => '60000'])) === null);
-check('aturan: Pemeriksa, Head, Anggota tidak boleh mencatat', isset($try([], $pemeriksa)['_form']) && isset($try([], $head)['_form']) && isset($try([], $anggota2)['_form']));
+check('aturan: dua Superadmin dan Anggota tidak boleh mencatat', isset($try([], $pemeriksa)['_form']) && isset($try([], $head)['_form']) && isset($try([], $anggota2)['_form']));
 check('aturan: akun tanpa regu aktif ditolak', isset($try([], ['id' => $alfa['id'], 'username' => 'x', 'roles' => ['KETUA_REGU'], 'team_id' => null])['_form']));
 check('aturan: ketua regu Beta tidak bisa mencatat untuk anggota Alfa', isset($try(['member_id' => 2], $beta)['member_id']));
 check('aturan: pelanggaran tidak menghabiskan nomor urut (nomor terakhir = jumlah transaksi, tanpa celah)', (int) one("SELECT last_value FROM number_sequences WHERE seq_key = ?", ['SMP-' . date('Y')]) === (int) one("SELECT COUNT(*) FROM transactions WHERE type = 'SIMPANAN'") && (int) one("SELECT last_value FROM number_sequences WHERE seq_key = ?", ['SMP-' . date('Y')]) > $seqBefore);
@@ -283,7 +283,7 @@ check('saldo: draft/menunggu/dibatalkan tidak terhitung', (int) one('SELECT sald
 $betaTrx = make($beta, ['member_id' => 4, 'amount' => '40.000']);
 $allIds = fn (array $user, array $f = []) => array_map('intval', array_column(Transaction::search($user, $f, 1)['rows'], 'id'));
 check('cakupan: Head melihat semua', count($allIds($head)) === (int) one('SELECT COUNT(*) FROM transactions'));
-check('cakupan: Pemeriksa melihat semua', count($allIds($pemeriksa)) === (int) one('SELECT COUNT(*) FROM transactions'));
+check('cakupan: Superadmin kedua melihat semua', count($allIds($pemeriksa)) === (int) one('SELECT COUNT(*) FROM transactions'));
 check('cakupan: ketua Alfa hanya melihat regunya', !in_array($betaTrx, $allIds($alfa), true) && in_array($id1, $allIds($alfa), true));
 check('cakupan: ketua Beta hanya melihat regunya', $allIds($beta) === [$betaTrx]);
 check('cakupan: Anggota hanya melihat miliknya (anggota 2)', $allIds($anggota2) === array_values(array_filter($allIds($head), fn ($i) => (int) trx($i)['member_id'] === 2)) && !in_array($betaTrx, $allIds($anggota2), true));

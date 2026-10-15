@@ -208,12 +208,12 @@ check('regu/daftar: statistik anggota, tabungan, dan sisa pinjaman', (function (
 })());
 
 // ======================= PENGGUNA =======================
-check('pengguna: Head + Pemeriksa dilarang', str_contains(violation(fn () => UserService::create('dobel', 'X', ['HEAD', 'PEMERIKSA']))['_form'] ?? '', 'tidak boleh dipegang orang yang sama'));
+check('pengguna: peran PEMERIKSA sudah dihapus: ditolak sebagai peran tidak dikenal', str_contains(violation(fn () => UserService::create('dobel', 'X', ['PEMERIKSA']))['_form'] ?? '', 'Peran tidak dikenal') && str_contains(violation(fn () => UserService::create('dobel', 'X', ['HEAD', 'PEMERIKSA']))['_form'] ?? '', 'Peran tidak dikenal'));
 check('pengguna: Anggota tanpa tautan ditolak', isset(violation(fn () => UserService::create('tanpa1', 'X', ['ANGGOTA']))['_form']));
 check('pengguna: Ketua Regu tanpa tautan ditolak', isset(violation(fn () => UserService::create('tanpa2', 'X', ['KETUA_REGU']))['_form']));
 check('pengguna: Ketua Regu tertaut ke anggota biasa ditolak', str_contains(violation(fn () => UserService::create('tanpa3', 'X', ['KETUA_REGU'], 'AGT-002'))['_form'] ?? '', 'belum menjadi ketua regu'));
 check('pengguna: tidak ada baris tertinggal dari penolakan', (int) one("SELECT COUNT(*) FROM users WHERE username LIKE 'tanpa%' OR username = 'dobel'") === 0);
-$pem = UserService::create('pemeriksa1', 'Pemeriksa Satu', ['PEMERIKSA'], null, 'Contoh-Uji-2026');
+$pem = UserService::create('pengguna1', 'Pengguna Satu', ['ANGGOTA'], 'AGT-003', 'Contoh-Uji-2026');
 $ang = UserService::create('anggota2', 'Anggota Alfa', ['ANGGOTA'], 'AGT-002', 'Contoh-Uji-2026');
 check('pengguna: pilihan anggota hanya yang belum punya akun', !in_array('AGT-001', array_column(User::memberOptions(null), 'member_no'), true) && in_array('AGT-004', array_column(User::memberOptions(null), 'member_no'), true));
 check('pengguna: pilihan anggota menyertakan yang sedang diedit', in_array('AGT-002', array_column(User::memberOptions(2), 'member_no'), true));
@@ -223,27 +223,27 @@ check('pengguna/ubah: peran sendiri tidak boleh diubah', str_contains(violation(
 check('pengguna/ubah: Head terakhir tidak bisa dicopot oleh siapa pun', (function () use ($actor, $head, $uv, $pdo): bool {
     // actor pura-pura admin lain (id berbeda) mencoba mencopot satu-satunya Head
     $other = ['id' => 9999, 'username' => 'x', 'roles' => ['HEAD']];
-    $v = violation(fn () => UserService::update(req(), $other, $head['id'], 'Kepala', ['PEMERIKSA'], null, $uv($head['id'])));
-    return $v !== null && str_contains($v['_form'], 'minimal satu Head');
+    $v = violation(fn () => UserService::update(req(), $other, $head['id'], 'Kepala', ['ANGGOTA'], 'AGT-004', $uv($head['id'])));
+    return $v !== null && str_contains($v['_form'], 'minimal satu Superadmin');
 })());
 check('pengguna/ubah: versi basi ditolak', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'Baru', ['ANGGOTA'], 'AGT-002', '2000-01-01 00:00:00'))['_form'] ?? '', 'pengguna lain'));
-UserService::update(req(), $actor, $ang['id'], 'Anggota Alfa Dua', ['ANGGOTA', 'PEMERIKSA'], 'AGT-002', $uv($ang['id']));
-check('pengguna/ubah: nama dan peran berubah + audit sebelum/sesudah', in_array('PEMERIKSA', User::findForAdmin($ang['id'])['roles'], true) && lastAudit('USER_UPDATED')['before']['name'] === 'Anggota Alfa' && lastAudit('USER_UPDATED')['after']['name'] === 'Anggota Alfa Dua');
-check('pengguna/ubah: Head dan Pemeriksa tetap dilarang saat ubah', isset(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'X', ['HEAD', 'PEMERIKSA'], 'AGT-002', $uv($ang['id'])))['_form']));
+UserService::update(req(), $actor, $ang['id'], 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']));
+check('pengguna/ubah: nama berubah + audit sebelum/sesudah', User::findForAdmin($ang['id'])['roles'] === ['ANGGOTA'] && lastAudit('USER_UPDATED')['before']['name'] === 'Anggota Alfa' && lastAudit('USER_UPDATED')['after']['name'] === 'Anggota Alfa Dua');
+check('pengguna/ubah: peran PEMERIKSA yang sudah dihapus ditolak saat ubah', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'X', ['ANGGOTA', 'PEMERIKSA'], 'AGT-002', $uv($ang['id'])))['_form'] ?? '', 'Peran tidak dikenal'));
 $head2 = UserService::create('kepala2', 'Kepala Dua', ['HEAD'], null, 'Contoh-Uji-2026');
-check('pengguna/ubah: Head boleh dicopot bila masih ada Head lain', violation(fn () => UserService::update(req(), $actor, $head2['id'], 'Kepala Dua', ['PEMERIKSA'], null, $uv($head2['id']))) === null);
+check('pengguna/ubah: Head boleh dicopot bila masih ada Head lain', violation(fn () => UserService::update(req(), $actor, $head2['id'], 'Kepala Dua', ['ANGGOTA'], 'AGT-005', $uv($head2['id']))) === null);
 
 check('pengguna/status: akun sendiri tidak boleh dinonaktifkan', str_contains(violation(fn () => UserService::setActive(req(), $actor, $head['id'], false, $uv($head['id'])))['_form'] ?? '', 'sendiri'));
 UserService::setActive(req(), $actor, $pem['id'], false, $uv($pem['id']));
 check('pengguna/status: dinonaktifkan + audit', (int) one('SELECT is_active FROM users WHERE id = ?', [$pem['id']]) === 0 && audits('USER_DEACTIVATED') === 1);
-check('pengguna/status: akun nonaktif tidak bisa login', Auth::attempt(req(), 'pemeriksa1', 'Contoh-Uji-2026')['ok'] === false);
+check('pengguna/status: akun nonaktif tidak bisa login', Auth::attempt(req(), 'pengguna1', 'Contoh-Uji-2026')['ok'] === false);
 UserService::setActive(req(), $actor, $pem['id'], true, $uv($pem['id']));
 check('pengguna/status: diaktifkan kembali', (int) one('SELECT is_active FROM users WHERE id = ?', [$pem['id']]) === 1 && audits('USER_ACTIVATED') === 1);
 check('pengguna/status: Head terakhir tidak bisa dinonaktifkan', (function () use ($head, $head2, $actor, $uv, $pdo): bool {
     // kepala2 sudah bukan Head; kepala adalah satu-satunya Head aktif
     $other = ['id' => 9999, 'username' => 'x', 'roles' => ['HEAD']];
     $v = violation(fn () => UserService::setActive(req(), $other, $head['id'], false, $uv($head['id'])));
-    return $v !== null && str_contains($v['_form'], 'minimal satu Head');
+    return $v !== null && str_contains($v['_form'], 'minimal satu Superadmin');
 })());
 
 check('pengguna/reset: akun sendiri ditolak', isset(violation(fn () => UserService::resetPassword(req(), $actor, $head['id'], $uv($head['id'])))['_form']));
@@ -252,11 +252,11 @@ Auth::reset();
 check('pengguna/reset: sesi aktif sebelum reset', Auth::user() !== null);
 $oldHash = (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']]);
 $temp = UserService::resetPassword(req(), $actor, $pem['id'], $uv($pem['id']));
-check('pengguna/reset: kata sandi sementara memenuhi kebijakan', PasswordPolicy::check($temp, 'pemeriksa1') === []);
+check('pengguna/reset: kata sandi sementara memenuhi kebijakan', PasswordPolicy::check($temp, 'pengguna1') === []);
 check('pengguna/reset: hash berubah, wajib ganti, kunci/gagal bersih', (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']]) !== $oldHash && (int) one('SELECT must_change_password FROM users WHERE id = ?', [$pem['id']]) === 1 && password_verify($temp, (string) one('SELECT password_hash FROM users WHERE id = ?', [$pem['id']])));
 Auth::reset();
 check('pengguna/reset: SESI LAMA akun itu langsung tidak sah', Auth::user() === null);
-check('pengguna/reset: kata sandi lama tidak berlaku, yang baru berlaku', Auth::attempt(req(), 'pemeriksa1', 'Contoh-Uji-2026')['ok'] === false && Auth::attempt(req(), 'pemeriksa1', $temp)['ok'] === true);
+check('pengguna/reset: kata sandi lama tidak berlaku, yang baru berlaku', Auth::attempt(req(), 'pengguna1', 'Contoh-Uji-2026')['ok'] === false && Auth::attempt(req(), 'pengguna1', $temp)['ok'] === true);
 check('pengguna/reset: kata sandi TIDAK tercatat di audit', !str_contains((string) one("SELECT GROUP_CONCAT(COALESCE(after_data,'')) FROM audit_logs"), $temp) && audits('USER_PASSWORD_RESET') === 1);
 $pdo->exec("UPDATE users SET locked_until = NOW() + INTERVAL 10 MINUTE, failed_logins = 3 WHERE id = {$ang['id']}");
 UserService::unlock(req(), $actor, $ang['id']);

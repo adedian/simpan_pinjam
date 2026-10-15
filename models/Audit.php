@@ -8,7 +8,7 @@ use App\Services\Pagination;
 
 /**
  * Pembacaan jejak audit (Phase 13). HANYA membaca: tabel audit_logs append-only (trigger + hak akses akun aplikasi).
- * Hanya untuk pemilik izin audit.view (Head, Pemeriksa); izin dijaga di route. Isi sebelum/sesudah disaring dari
+ * Hanya untuk pemilik izin audit.view (Superadmin); izin dijaga di route. Isi sebelum/sesudah disaring dari
  * nilai rahasia sebelum ditampilkan atau diunduh (pertahanan berlapis; penulis audit memang tidak mencatat rahasia).
  */
 final class Audit

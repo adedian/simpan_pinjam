@@ -83,7 +83,7 @@ foreach ([1 => 'Ketua Alfa', 2 => 'Anggota Alfa', 3 => 'Ketua Beta', 4 => 'Anggo
 $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa', 1), ('Regu Beta', 3)");
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m2}'),(2,1,'{$m2}'),(3,2,'{$m2}'),(4,2,'{$m2}'),(5,2,'{$m2}')");
 $ids = [];
-foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota4', ['ANGGOTA'], 'AGT-004'], ['anggota5', ['ANGGOTA'], 'AGT-005']] as [$u, $roles, $no]) {
+foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota4', ['ANGGOTA'], 'AGT-004'], ['anggota5', ['ANGGOTA'], 'AGT-005']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
 $purwati = User::findActive($ids['purwati']);
@@ -108,7 +108,7 @@ function ok(array $validator, int $id): int
     return $id;
 }
 
-// Beta: anggota 4 menabung 300.000 (m2), 200.000 (m1); anggota 5 menabung 100.000 (m0). Alfa: anggota 2 menabung 500.000 (m1, oleh Purwati; disetujui Pemeriksa)
+// Beta: anggota 4 menabung 300.000 (m2), 200.000 (m1); anggota 5 menabung 100.000 (m0). Alfa: anggota 2 menabung 500.000 (m1, oleh Purwati; disetujui Superadmin)
 ok($head, saving($beta, 4, '300.000', $mid[$m2], $m2));
 $s4b = ok($head, saving($beta, 4, '200.000', $mid[$m1], $m1, 'SUKARELA'));
 ok($head, saving($beta, 5, '100.000', $mid[$m0], $m0));

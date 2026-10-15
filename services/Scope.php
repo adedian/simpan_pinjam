@@ -9,7 +9,7 @@ use App\Core\Gate;
  * Cakupan DATA (milik siapa) per pengguna. Dipakai oleh SEMUA query yang mengembalikan data anggota
  * atau transaksi, supaya pembatasan tidak bergantung pada tampilan:
  *
- *   all  : seluruh koperasi          (izin *.view.all  : Head, Pemeriksa)
+ *   all  : seluruh koperasi          (izin *.view.all  : Superadmin)
  *   team : anggota regu yang dipimpin (izin *.view.team : Ketua Regu)
  *   self : hanya diri sendiri         (izin *.view.self : Anggota)
  *   none : tidak ada

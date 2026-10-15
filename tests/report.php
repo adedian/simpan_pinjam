@@ -87,7 +87,7 @@ foreach ([1 => 'Ketua Alfa', 2 => 'Anggota Alfa', 3 => 'Ketua Beta', 4 => 'Anggo
 $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa', 1), ('Regu Beta', 3)");
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$old}'),(2,1,'{$old}'),(3,2,'{$old}'),(4,2,'{$old}'),(5,2,'{$old}')");
 $ids = [];
-foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota4', ['ANGGOTA'], 'AGT-004'], ['yatim', ['ANGGOTA'], 'AGT-005']] as [$u, $roles, $no]) {
+foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota4', ['ANGGOTA'], 'AGT-004'], ['yatim', ['ANGGOTA'], 'AGT-005']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
 $pdo->exec("UPDATE users SET member_id = NULL WHERE username = 'yatim'");   // Anggota yatim: tautan hilang (tak bisa dibuat lewat layanan)
@@ -164,7 +164,7 @@ ok($head, InstallmentService::create(req(), $beta, $d, true));
 ok($head, InstallmentService::create(req(), $beta, $d, true));   // melunasi pinjaman anggota 5 (200.000 + bunga 2% x 1 = 204.000)
 
 // ======================= cakupan =======================
-check('cakupan: Head dan Pemeriksa global; Ketua Regu regu; Anggota diri sendiri; Anggota tanpa tautan tidak ada', ReportService::level($head) === 'all' && ReportService::level($periksa) === 'all' && ReportService::level($purwati) === 'all'
+check('cakupan: Superadmin global; Ketua Regu regu; Anggota diri sendiri; Anggota tanpa tautan tidak ada', ReportService::level($head) === 'all' && ReportService::level($periksa) === 'all' && ReportService::level($purwati) === 'all'
     && ReportService::level($beta) === 'team' && ReportService::level($ang4) === 'self' && ReportService::level($yatim) === 'none' && ReportService::level(null) === 'none');
 check('cakupan: jumlah anggota yang terlihat per peran (5 / 3 / 1 / 0)', count(ReportService::members($head, f())) === 5 && count(ReportService::members($beta, f([], $beta))) === 3 && count(ReportService::members($ang4, f([], $ang4))) === 1 && ReportService::members($yatim, f([], $yatim)) === []);
 

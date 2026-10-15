@@ -138,7 +138,7 @@ $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m2}'),(2,1,'{$m2}'),(3,2,'{$m2}'),(4,2,'{$m2}'),(5,1,'{$m2}'),(6,1,'{$m2}')");
 
 $ids = [];
-foreach ([['ketua.alfa', ['KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota2', ['ANGGOTA'], 'AGT-002']] as [$u, $roles, $no]) {
+foreach ([['ketua.alfa', ['KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota2', ['ANGGOTA'], 'AGT-002']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
 $alfa = User::findActive($ids['ketua.alfa']);
@@ -192,7 +192,7 @@ check('buat: draft belum punya riwayat validasi', (int) one('SELECT COUNT(*) FRO
 $try = fn (array $over, ?array $actor = null) => violation(fn () => make($actor ?? $alfa, $over));
 check('aturan: anggota regu lain ditolak, tanpa menyebut nama', isset($try(['member_id' => 4])['member_id']) && !str_contains($try(['member_id' => 4])['member_id'], 'Beta'));
 check('aturan: anggota nonaktif ditolak', isset($try(['member_id' => 6])['member_id']));
-check('aturan: Pemeriksa, Head, Anggota tidak boleh mencatat', isset($try([], $pemeriksa)['_form']) && isset($try([], $head)['_form']) && isset($try([], $anggota2)['_form']));
+check('aturan: dua Superadmin dan Anggota tidak boleh mencatat', isset($try([], $pemeriksa)['_form']) && isset($try([], $head)['_form']) && isset($try([], $anggota2)['_form']));
 check('aturan: akun tanpa regu aktif ditolak', isset($try([], ['id' => $alfa['id'], 'username' => 'x', 'roles' => ['KETUA_REGU'], 'team_id' => null])['_form']));
 check('aturan: plafon (15.000.000) ditegakkan, tepat di plafon diterima', isset($try(['principal' => '15.000.001'])['principal']) && violation(fn () => make($alfa, ['principal' => '15.000.000', 'tenor' => '1'])) === null);
 check('aturan: tenor di atas maksimum (5) ditolak, di batas diterima', isset($try(['tenor' => '6'])['tenor']) && violation(fn () => make($alfa, ['principal' => '1.000.000', 'tenor' => '2', 'member_id' => 5])) === null);

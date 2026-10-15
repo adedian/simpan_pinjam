@@ -35,7 +35,7 @@ $checked = (array) ($values['roles'] ?? []);
             <?php endforeach; ?>
             <small class="field__hint">
                 <?php if ($isSelf): ?>Anda tidak bisa mengubah peran akun Anda sendiri.<?php else: ?>
-                    Head dan Pemeriksa tidak boleh dipegang orang yang sama. Ketua Regu harus ditautkan ke anggota yang memimpin regu. Anggota harus ditautkan ke data anggota.<?php endif; ?>
+                    Superadmin menyetujui transaksi dan mengelola data. Admin (ketua regu) mencatat transaksi regunya dan harus ditautkan ke anggota yang memimpin regu. Anggota hanya bisa melihat data dirinya dan harus ditautkan ke data anggota.<?php endif; ?>
             </small>
             <?php if (!empty($errors['roles'])): ?><small class="field__error"><?= e($errors['roles']) ?></small><?php endif; ?>
         </fieldset>

@@ -8,6 +8,7 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/core/bootstrap.php';
 
+use App\Core\Config;
 use App\Core\Csrf;
 use App\Core\Env;
 use App\Core\Gate;
@@ -114,15 +115,17 @@ check('router: titik di pola tidak jadi wildcard', throwsStatus(fn () => $router
 $head     = ['roles' => ['HEAD']];
 $ketua    = ['roles' => ['KETUA_REGU']];
 $anggota  = ['roles' => ['ANGGOTA']];
-$periksa  = ['roles' => ['PEMERIKSA']];
+$bekas    = ['roles' => ['PEMERIKSA']];   // peran lama yang sudah dihapus: tidak boleh memberi izin apa pun
 $purwati  = ['roles' => ['HEAD', 'KETUA_REGU']];
 check('gate: head validasi', Gate::allows($head, 'transaction.validate'));
 check('gate: ketua regu TIDAK validasi', !Gate::allows($ketua, 'transaction.validate'));
 check('gate: anggota TIDAK input transaksi', !Gate::allows($anggota, 'transaction.create'));
 check('gate: ketua regu input transaksi', Gate::allows($ketua, 'transaction.create'));
 check('gate: head tidak input langsung', !Gate::allows($head, 'transaction.create'));
-check('gate: pemeriksa validasi', Gate::allows($periksa, 'transaction.validate'));
-check('gate: pemeriksa TIDAK kelola pengaturan', !Gate::allows($periksa, 'settings.manage'));
+check('gate: peran PEMERIKSA sudah dihapus: tidak punya izin apa pun (validasi, audit, ekspor, pengaturan)', !Gate::allows($bekas, 'transaction.validate') && !Gate::allows($bekas, 'audit.view') && !Gate::allows($bekas, 'report.export') && !Gate::allows($bekas, 'settings.manage') && !Gate::allows($bekas, 'dashboard.view'));
+check('gate: hanya tiga peran bagi pengguna: Superadmin (HEAD), Admin (KETUA_REGU), Anggota; tanpa Pemeriksa', array_keys((array) Config::get('permissions.labels')) === ['HEAD', 'KETUA_REGU', 'ANGGOTA'] && array_keys((array) Config::get('permissions.roles')) === ['HEAD', 'KETUA_REGU', 'ANGGOTA'] && Config::get('permissions.labels.HEAD') === 'Superadmin' && Config::get('permissions.labels.KETUA_REGU') === 'Admin');
+check('gate: Anggota hanya melihat (izin .self dan tanpa izin tulis, validasi, kelola, ekspor)', Gate::allows($anggota, 'transaction.view.self') && Gate::allows($anggota, 'member.view.self') && Gate::allows($anggota, 'report.view.self')
+    && !Gate::allows($anggota, 'transaction.create') && !Gate::allows($anggota, 'transaction.validate') && !Gate::allows($anggota, 'member.manage') && !Gate::allows($anggota, 'user.manage') && !Gate::allows($anggota, 'settings.manage') && !Gate::allows($anggota, 'report.export') && !Gate::allows($anggota, 'transaction.view.all') && !Gate::allows($anggota, 'transaction.view.team'));
 check('gate: peran ganda digabung', Gate::allows($purwati, 'transaction.validate') && Gate::allows($purwati, 'transaction.create'));
 check('gate: tamu ditolak', !Gate::allows(null, 'dashboard.view'));
 check('gate: izin tak dikenal ditolak', !Gate::allows($head, 'izin.ngawur'));
@@ -144,8 +147,8 @@ check('nav: ketua regu TIDAK melihat Menunggu Validasi', !in_array('Menunggu Val
 check('nav: ketua regu TIDAK melihat Audit Log', !in_array('Audit Log', $labels($ketua), true));
 check('nav: anggota TIDAK melihat Data Anggota', !in_array('Data Anggota', $labels($anggota), true));
 check('nav: anggota melihat Riwayat Transaksi', in_array('Riwayat Transaksi', $labels($anggota), true));
-check('nav: pemeriksa melihat Audit Log', in_array('Audit Log', $labels($periksa), true));
-check('nav: pemeriksa TIDAK melihat Pengaturan', !in_array('Pengaturan', $labels($periksa), true));
+check('nav: head melihat Audit Log dan Pengaturan', in_array('Audit Log', $labels($head), true) && in_array('Pengaturan', $labels($head), true));
+check('nav: peran PEMERIKSA yang sudah dihapus tidak melihat menu apa pun selain tidak ada', $labels($bekas) === []);
 check('nav: tamu tidak melihat apa pun', $labels(null) === []);
 
 // ---- CSRF ----
@@ -251,7 +254,7 @@ check('sandi: pembangkit memenuhi kebijakan 200x', (function (): bool {
 
 // ---- Cakupan data (Scope), logika tanpa database ----
 check('scope: head = all', Scope::level(['roles' => ['HEAD']]) === 'all');
-check('scope: pemeriksa = all', Scope::level(['roles' => ['PEMERIKSA']]) === 'all');
+check('scope: peran PEMERIKSA yang sudah dihapus tidak melihat data apa pun', Scope::level(['roles' => ['PEMERIKSA']]) !== 'all');
 check('scope: ketua regu = team', Scope::level(['roles' => ['KETUA_REGU'], 'team_id' => 3, 'member_id' => 9]) === 'team');
 check('scope: ketua regu tanpa regu turun ke self', Scope::level(['roles' => ['KETUA_REGU'], 'team_id' => null, 'member_id' => 9]) === 'self');
 check('scope: anggota = self', Scope::level(['roles' => ['ANGGOTA'], 'member_id' => 9]) === 'self');
@@ -322,7 +325,7 @@ foreach ($trxRoutes as $route) {
         $readOk = $readOk && $can === ['can:transaction.view.all|transaction.view.team|transaction.view.self'];
     }
 }
-check('struktur: ' . count($trxRoutes) . ' route transaksi; tulis/ubah HANYA can:transaction.create (Head/Pemeriksa/Anggota tidak bisa)', count($trxRoutes) === 22 && $writeOk);
+check('struktur: ' . count($trxRoutes) . ' route transaksi; tulis/ubah HANYA can:transaction.create (Superadmin/Anggota tidak bisa)', count($trxRoutes) === 22 && $writeOk);
 check('struktur: route baca transaksi memakai izin lihat (all|team|self), tanpa izin tulis', $readOk);
 check('route: /transaksi/riwayat tidak tertelan oleh /transaksi/{id}', $guard->match('GET', '/transaksi/riwayat')['handler'][1] === 'history' && $guard->match('GET', '/transaksi/12')['params']['id'] === '12');
 check('route: /transaksi/pinjaman/simulasi dan /baru tidak tertelan rute lain', $guard->match('GET', '/transaksi/pinjaman/simulasi')['handler'][1] === 'loanSimulation' && $guard->match('GET', '/transaksi/pinjaman/baru')['handler'][1] === 'createLoan' && $guard->match('POST', '/transaksi/pinjaman/7')['handler'][1] === 'updateLoan');
@@ -356,7 +359,7 @@ check('route: /transaksi/angsuran/tagihan dan /baru tidak tertelan rute lain', $
 $valRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_contains($r['regex'], '/validasi')));
 check('struktur: 4 route validasi, SEMUA hanya can:transaction.validate (Ketua Regu dan Anggota tidak bisa)', count($valRoutes) === 4 && count(array_filter($valRoutes, static fn (array $r): bool => array_values(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:'))) === ['can:transaction.validate'])) === 4);
 check('struktur: aksi setujui dan tolak hanya POST', count(array_filter($valRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 2 && count(array_filter($valRoutes, static fn (array $r): bool => $r['method'] === 'POST' && (str_contains($r['regex'], 'setujui') || str_contains($r['regex'], 'tolak')))) === 2);
-check('izin: hanya Head dan Pemeriksa yang punya transaction.validate; pembuat transaksi (Ketua Regu) tidak', Gate::allows(['roles' => ['HEAD']], 'transaction.validate') && Gate::allows(['roles' => ['PEMERIKSA']], 'transaction.validate') && !Gate::allows(['roles' => ['KETUA_REGU']], 'transaction.validate') && !Gate::allows(['roles' => ['ANGGOTA']], 'transaction.validate') && !Gate::allows(['roles' => ['PEMERIKSA']], 'transaction.create') && !Gate::allows(['roles' => ['HEAD']], 'transaction.create'));
+check('izin: hanya Superadmin (HEAD) yang punya transaction.validate; Admin (ketua regu), Anggota, dan peran Pemeriksa lama tidak; Superadmin murni tidak mencatat', Gate::allows(['roles' => ['HEAD']], 'transaction.validate') && !Gate::allows(['roles' => ['KETUA_REGU']], 'transaction.validate') && !Gate::allows(['roles' => ['ANGGOTA']], 'transaction.validate') && !Gate::allows(['roles' => ['PEMERIKSA']], 'transaction.validate') && !Gate::allows(['roles' => ['HEAD']], 'transaction.create'));
 // ---- Laporan (Phase 12): hanya baca; unduhan hanya report.export ----
 $repRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/laporan')));
 $canOf = static fn (array $r): array => array_values(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:')));
@@ -376,13 +379,13 @@ check('struktur: unduhan HANYA can:report.export; laporan per regu HANYA global;
     }
     return true;
 })());
-check('izin: report.export hanya Head dan Pemeriksa; Ketua Regu dan Anggota tidak', Gate::allows(['roles' => ['HEAD']], 'report.export') && Gate::allows(['roles' => ['PEMERIKSA']], 'report.export') && !Gate::allows(['roles' => ['KETUA_REGU']], 'report.export') && !Gate::allows(['roles' => ['ANGGOTA']], 'report.export'));
+check('izin: report.export hanya Superadmin; Admin dan Anggota tidak', Gate::allows(['roles' => ['HEAD']], 'report.export') && !Gate::allows(['roles' => ['KETUA_REGU']], 'report.export') && !Gate::allows(['roles' => ['ANGGOTA']], 'report.export'));
 check('route: /laporan/anggota/unduh tidak tertelan /laporan/anggota/{id} dan sebaliknya', $guard->match('GET', '/laporan/anggota/unduh')['handler'][1] === 'download' && $guard->match('GET', '/laporan/anggota/12')['handler'][1] === 'member' && $guard->match('GET', '/laporan/simpanan/unduh')['params']['key'] === 'simpanan');
 check('route: formulir cetak tidak bentrok dengan kartu anggota, unduhan, dan satu sama lain', $guard->match('GET', '/laporan/anggota/12/pinjaman')['handler'][1] === 'sheet' && $guard->match('GET', '/laporan/anggota/12/tabungan')['params']['kind'] === 'tabungan' && $guard->match('GET', '/laporan/anggota/cetak/pinjaman')['handler'][1] === 'sheets' && $guard->match('GET', '/laporan/anggota/12')['handler'][1] === 'member' && throwsStatus(fn () => $guard->match('GET', '/laporan/anggota/12/lain'), 404) && throwsStatus(fn () => $guard->match('GET', '/laporan/anggota/cetak/lain'), 404) && throwsStatus(fn () => $guard->match('POST', '/laporan/anggota/12/pinjaman'), 405));
 // ---- Audit log (Phase 13): hanya baca, hanya audit.view ----
 $auditRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/sistem/audit')));
 check('struktur: 3 route audit, semuanya GET, dengan auth dan HANYA can:audit.view', count($auditRoutes) === 3 && count(array_filter($auditRoutes, static fn (array $r): bool => $r['method'] === 'GET' && in_array('auth', $r['middleware'], true) && array_values(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:'))) === ['can:audit.view'])) === 3);
-check('izin: audit.view hanya Head dan Pemeriksa; Ketua Regu dan Anggota tidak', Gate::allows(['roles' => ['HEAD']], 'audit.view') && Gate::allows(['roles' => ['PEMERIKSA']], 'audit.view') && !Gate::allows(['roles' => ['KETUA_REGU']], 'audit.view') && !Gate::allows(['roles' => ['ANGGOTA']], 'audit.view'));
+check('izin: audit.view hanya Superadmin; Admin dan Anggota tidak', Gate::allows(['roles' => ['HEAD']], 'audit.view') && !Gate::allows(['roles' => ['KETUA_REGU']], 'audit.view') && !Gate::allows(['roles' => ['ANGGOTA']], 'audit.view'));
 check('route: /sistem/audit/unduh tidak tertelan /sistem/audit/{id}', $guard->match('GET', '/sistem/audit/unduh')['handler'][1] === 'download' && $guard->match('GET', '/sistem/audit/15')['handler'][1] === 'show' && $guard->match('GET', '/sistem/audit/15')['params']['id'] === '15');
 check('route: /transaksi/abc bukan angka -> 404', (function () use ($guard): bool {
     try {

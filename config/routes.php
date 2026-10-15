@@ -38,7 +38,7 @@ return static function (Router $r): void {
     $r->get('/profil/password', [ProfileController::class, 'showPassword'], ['auth']);
     $r->post('/profil/password', [ProfileController::class, 'updatePassword'], ['auth']);
 
-    // Master data: anggota. Daftar/detail dibatasi cakupan data; ubah-data hanya untuk pengelola (Head).
+    // Master data: anggota. Daftar/detail dibatasi cakupan data; ubah-data hanya untuk pengelola (Superadmin).
     $r->get('/master/anggota', [MemberController::class, 'index'], ['auth', 'can:member.view.all|member.view.team']);
     $r->get('/master/anggota/baru', [MemberController::class, 'create'], ['auth', 'can:member.manage']);
     $r->post('/master/anggota', [MemberController::class, 'store'], ['auth', 'can:member.manage']);
@@ -88,7 +88,7 @@ return static function (Router $r): void {
     $r->get('/transaksi/riwayat', [TransactionController::class, 'history'], ['auth', $viewTrx]);
     $r->get('/transaksi/{id:\d+}', [TransactionController::class, 'show'], ['auth', $viewTrx]);
 
-    // Validasi transaksi (Head dan Pemeriksa). Kewenangan per transaksi ditegakkan lagi di ValidationService.
+    // Validasi transaksi (Superadmin). Kewenangan per transaksi ditegakkan lagi di ValidationService.
     $r->get('/validasi', [ValidationController::class, 'queue'], ['auth', 'can:transaction.validate']);
     $r->get('/validasi/riwayat', [ValidationController::class, 'history'], ['auth', 'can:transaction.validate']);
     $r->post('/validasi/{id:\d+}/setujui', [ValidationController::class, 'approve'], ['auth', 'can:transaction.validate']);
@@ -109,7 +109,7 @@ return static function (Router $r): void {
     $r->get('/laporan/anggota/cetak/{kind:pinjaman|tabungan}', [ReportController::class, 'sheets'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/{key:[a-z]+}/unduh', [ReportController::class, 'download'], ['auth', 'can:report.export']);
 
-    // Audit log (Head dan Pemeriksa). Hanya baca; unduhan butuh report.export juga (dicek di controller) dan tercatat.
+    // Audit log (Superadmin). Hanya baca; unduhan butuh report.export juga (dicek di controller) dan tercatat.
     $r->get('/sistem/audit', [AuditController::class, 'index'], ['auth', 'can:audit.view']);
     $r->get('/sistem/audit/unduh', [AuditController::class, 'download'], ['auth', 'can:audit.view']);
     $r->get('/sistem/audit/{id:\d+}', [AuditController::class, 'show'], ['auth', 'can:audit.view']);

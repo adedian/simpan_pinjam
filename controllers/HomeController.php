@@ -15,7 +15,7 @@ use App\Services\ValidationService;
 
 /**
  * Dashboard per peran. Cakupan data mengikuti peran, dan ditegakkan di query (Scope), bukan di tampilan:
- *   Head / Pemeriksa : seluruh koperasi (+ antrean validasi, integritas);
+ *   Superadmin       : seluruh koperasi (+ antrean validasi, integritas);
  *   Ketua Regu       : regu yang dipimpin (+ pekerjaan sendiri);
  *   Anggota          : dirinya sendiri.
  * Purwati (Head + Ketua Regu) mendapat tampilan global ditambah bagian "Regu Saya".
@@ -54,9 +54,6 @@ final class HomeController extends BaseController
             }
             if (Gate::allows($user, 'audit.view')) {
                 $d['issues'] = Dashboard::integrityIssues();
-            }
-            if (Gate::allows($user, 'user.manage')) {
-                $d['noChecker'] = !ValidationService::hasActiveChecker();
             }
         }
 

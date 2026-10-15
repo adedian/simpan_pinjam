@@ -160,7 +160,7 @@ $pdo->exec("INSERT INTO team_leaders (name, leader_member_id) VALUES ('Regu Alfa
 $pdo->exec("INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (1,1,'{$m1}'),(2,1,'{$m1}'),(3,2,'{$m1}'),(4,2,'{$m1}'),(5,2,'{$m1}'),(6,2,'{$m1}')");
 
 $ids = [];
-foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['PEMERIKSA'], null], ['anggota4', ['ANGGOTA'], 'AGT-004']] as [$u, $roles, $no]) {
+foreach ([['purwati', ['HEAD', 'KETUA_REGU'], 'AGT-001'], ['ketua.beta', ['KETUA_REGU'], 'AGT-003'], ['kepala2', ['HEAD'], null], ['periksa', ['HEAD'], null], ['anggota4', ['ANGGOTA'], 'AGT-004']] as [$u, $roles, $no]) {
     $ids[$u] = UserService::create($u, ucfirst($u), $roles, $no, 'Contoh-Uji-2026')['id'];
 }
 $purwati  = User::findActive($ids['purwati']);
@@ -279,16 +279,15 @@ check('jejak: semua percobaan tercatat (ditolak, dibatalkan, menunggu) dan satu 
 $offer = ReversalService::offer($beta, Transaction::findScoped($beta, $s2));
 check('tawaran: transaksi dengan pembalik hidup tidak menawarkan formulir, tetapi menunjuk pembaliknya', $offer['can'] === false && $offer['blocked'] === null && (int) $offer['live']['id'] === $q3);
 ValidationService::approve(req(), $periksa, $q3, ver($q3), null);
-check('setujui oleh Pemeriksa: asal Rp 2.000.000 dibalik; selisih 0', savingsOf(4) === $sav1 - 1000000 && (int) global_()['selisih'] === 0 && issues() === 0);
+check('setujui oleh Superadmin: asal Rp 2.000.000 dibalik; selisih 0', savingsOf(4) === $sav1 - 1000000 && (int) global_()['selisih'] === 0 && issues() === 0);
 
-// ======================= terkait Head: hanya Pemeriksa =======================
+// ======================= pembalik buatan Purwati: Superadmin menyetujui (tanpa Pemeriksa) =======================
 $pw = approved($periksa, saving($purwati, 2, '400.000'));
 $pr = ReversalService::request(req(), $purwati, $pw, 'Salah catat');
 $verdict = ValidationService::assessFor($head, trx($pr));
-check('Head: pembalik buatan Purwati (Head + Ketua Regu) hanya bisa divalidasi Pemeriksa', $verdict['eligible'] === false && $verdict['head_related'] === true
-    && isset(violation(fn () => ValidationService::approve(req(), $head, $pr, ver($pr), null))['_form']) && isset(violation(fn () => ValidationService::approve(req(), $purwati, $pr, ver($pr), null))['_form']) && trx($pr)['status'] === 'MENUNGGU_VALIDASI');
-ValidationService::approve(req(), $periksa, $pr, ver($pr), null);
-check('Pemeriksa: menyetujui pembalik Head; tabungan anggota Alfa kembali 0', trx($pr)['status'] === 'DISETUJUI' && savingsOf(2) === 0);
+check('Superadmin: pembalik buatan Purwati (Superadmin + Admin) boleh divalidasi Superadmin mana pun, termasuk Purwati sendiri', $verdict['eligible'] === true && ValidationService::assessFor($purwati, trx($pr))['eligible'] === true && trx($pr)['status'] === 'MENUNGGU_VALIDASI');
+ValidationService::approve(req(), $purwati, $pr, ver($pr), null);
+check('Superadmin: Purwati menyetujui pembalik buatannya sendiri; tabungan anggota Alfa kembali 0', trx($pr)['status'] === 'DISETUJUI' && savingsOf(2) === 0 && (int) global_()['selisih'] === 0 && issues() === 0);
 
 // ======================= keadaan berubah antara diajukan dan disetujui; saldo tabungan =======================
 $sv5 = approved($head, saving($beta, 5, '100.000'));

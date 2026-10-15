@@ -118,7 +118,7 @@ $ketuaB  = UserService::create('ketua.b', 'Ketua B', ['KETUA_REGU'], 'AGT-004');
 $ketuaA  = UserService::create('ketua.a', 'Ketua A', ['ANGGOTA'], 'AGT-002'); // anggota biasa; peran ketua regu ditambahkan lewat SQL (simulasi data lama / regu dinonaktifkan)
 $pdo->exec("INSERT INTO user_roles (user_id, role_id) SELECT u.id, r.id FROM users u, roles r WHERE u.username='ketua.a' AND r.code='KETUA_REGU'");
 $angg    = UserService::create('anggota5', 'Anggota B2', ['ANGGOTA'], 'AGT-005');
-$periksa = UserService::create('periksa', 'Pemeriksa', ['PEMERIKSA']);
+$periksa = UserService::create('periksa', 'Superadmin Dua', ['HEAD']);
 
 // ---------------- login ----------------
 freshSession();
@@ -232,10 +232,10 @@ $pdo->exec("UPDATE users SET is_active = 1 WHERE username='periksa'");
 freshSession();
 Auth::attempt(req('10.0.5.2'), 'ketua.a', $ketuaA['password']);
 check('sesi: peran awal memuat KETUA_REGU', in_array('KETUA_REGU', Auth::user()['roles'], true));
-$pdo->exec("INSERT INTO user_roles (user_id, role_id) SELECT u.id, r.id FROM users u, roles r WHERE u.username='ketua.a' AND r.code='PEMERIKSA'");
+$pdo->exec("INSERT INTO user_roles (user_id, role_id) SELECT u.id, r.id FROM users u, roles r WHERE u.username='ketua.a' AND r.code='HEAD'");
 Auth::reset();
-check('sesi: perubahan peran berlaku seketika', in_array('PEMERIKSA', Auth::user()['roles'], true));
-$pdo->exec("DELETE FROM user_roles WHERE user_id = (SELECT id FROM users WHERE username='ketua.a') AND role_id = (SELECT id FROM roles WHERE code='PEMERIKSA')");
+check('sesi: perubahan peran berlaku seketika', in_array('HEAD', Auth::user()['roles'], true));
+$pdo->exec("DELETE FROM user_roles WHERE user_id = (SELECT id FROM users WHERE username='ketua.a') AND role_id = (SELECT id FROM roles WHERE code='HEAD')");
 
 // ---------------- ganti kata sandi ----------------
 freshSession();
@@ -281,7 +281,7 @@ $ketuaU = $withScope(['KETUA_REGU'], 1, $teamA);
 $ketuaBU = $withScope(['KETUA_REGU'], 4, $teamB);
 $anggU  = $withScope(['ANGGOTA'], 5, null);
 check('cakupan SQL: head melihat 6 anggota', $countVisible($headU) === 6);
-check('cakupan SQL: pemeriksa melihat 6 anggota', $countVisible($withScope(['PEMERIKSA'], null, null)) === 6);
+check('cakupan SQL: superadmin kedua melihat 6 anggota', $countVisible($withScope(['HEAD'], null, null)) === 6);
 check('cakupan SQL: ketua regu A melihat 3 anggota regunya', $countVisible($ketuaU) === 3);
 check('cakupan SQL: ketua regu B melihat 2 anggota regunya', $countVisible($ketuaBU) === 2);
 check('cakupan SQL: anggota hanya melihat dirinya (1)', $countVisible($anggU) === 1);

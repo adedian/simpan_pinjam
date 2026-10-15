@@ -171,9 +171,7 @@ final class Preflight
             $this->expect((int) $g['selisih'] === 0 && $issues === 0, 'Integritas keuangan', 'Selisih invarian ' . (int) $g['selisih'] . ', masalah integritas ' . $issues . '. Jalankan php database/tools/check_integrity.php.', 'invarian nol, tanpa masalah');
 
             $head = (int) $admPdo->query("SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE r.code = 'HEAD' AND u.is_active = 1 AND u.deleted_at IS NULL")->fetchColumn();
-            $this->expect($head > 0, 'Akun Head aktif', 'Tidak ada akun Head aktif.');
-            $chk = (int) $admPdo->query("SELECT COUNT(*) FROM users u JOIN user_roles ur ON ur.user_id = u.id JOIN roles r ON r.id = ur.role_id WHERE r.code = 'PEMERIKSA' AND u.is_active = 1 AND u.deleted_at IS NULL")->fetchColumn();
-            $this->expect($chk > 0, 'Akun Pemeriksa aktif', 'Belum ada akun Pemeriksa: transaksi milik/terkait Head tidak bisa divalidasi siapa pun. Buat di Data Pengguna.', (string) $chk, self::WARN);
+            $this->expect($head > 0, 'Akun Superadmin aktif', 'Tidak ada akun Superadmin aktif.');
             $stale = (int) $admPdo->query('SELECT COUNT(*) FROM users WHERE must_change_password = 1 AND is_active = 1 AND deleted_at IS NULL AND created_at < NOW() - INTERVAL 14 DAY')->fetchColumn();
             $this->expect($stale === 0, 'Kata sandi sementara basi', "{$stale} akun masih memakai kata sandi sementara lebih dari 14 hari. Reset atau nonaktifkan.", 'tidak ada', self::WARN);
         } catch (\Throwable $e) {

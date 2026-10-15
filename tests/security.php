@@ -53,14 +53,12 @@ $sqlReviewed = [
     'models/Dashboard.php' => ['$cond', '$scope', '$limit'],
     'models/Member.php' => ['$where', '$whereSql', '$from', '$pager'],
     'models/Transaction.php' => ['$scope', '$from', '$baseWhere', '$whereSql', '$pager', '$sql', '$alias'],   // $alias konstanta pemanggil dan divalidasi lagi oleh Scope; $sql keluaran Scope
-    'models/Validation.php' => ['$from', '$whereSql', '$pager', 'ValidationService'],
+    'models/Validation.php' => ['$from', '$whereSql', '$pager'],
     'services/ExcelImporter.php' => ['$table'],           // daftar tabel konstan, hanya CLI
-    'services/LiveFeed.php' => ['ValidationService', 'self'],   // konstanta kelas
     'services/LoanService.php' => ['$tenor'],             // (int) $data['tenor']
     'services/ReportService.php' => ['$column', '$mIn', '$pIn', '$in', '$from', '$w', '$scope', 'implode', '$mScope'],   // kolom divalidasi regex; IN() dari intval
     'services/MemberSheet.php' => ['$scope', '$in'],      // $scope dari ReportService::memberCondition (potongan tetap + parameter ?); $in = deretan "?,?" dari jumlah id
     'services/Scope.php' => ['$memberColumn'],           // divalidasi regex ^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$
-    'services/ValidationService.php' => ['self'],         // konstanta kelas HEAD_RELATED_SQL
 ];
 
 $kw = '/\b(SELECT|INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|FROM\s+\w+|WHERE\s|ORDER\s+BY|LIMIT\s|JOIN\s|(AND|OR)\s+[\w.(]+\s*(=|<|>|IN\b|LIKE\b)|\b[a-z_]+\.[a-z_]+\s*(=|<>|!=|<=|>=|<|>|LIKE\b|IN\s*\())/i';   // juga potongan WHERE seperti "t.status = '$x'"

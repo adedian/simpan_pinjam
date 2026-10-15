@@ -118,7 +118,6 @@ final class TransactionController extends BaseController
         return [
             'verdict'   => $verdict,
             'cash'      => $reversal || in_array($trx['type'], ['PENCAIRAN_PINJAMAN', 'PENARIKAN', 'BIAYA'], true) ? ValidationService::cash() : null,
-            'noChecker' => $verdict['head_related'] && !ValidationService::hasActiveChecker(),
             'impact'    => $impact,
         ];
     }

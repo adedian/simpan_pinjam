@@ -45,7 +45,7 @@
                     <button type="submit" class="btn-pill">Masuk</button>
                 </form>
 
-                <p class="auth__note"><?= icon('lock', 15) ?> Akun dibuat oleh Head. Lupa kata sandi? Hubungi Head untuk dibuatkan yang baru.</p>
+                <p class="auth__note"><?= icon('lock', 15) ?> Akun dibuat oleh Superadmin. Lupa kata sandi? Hubungi Superadmin untuk dibuatkan yang baru.</p>
             </div>
         </section>
 

@@ -44,15 +44,13 @@ final class Validation
 
         $rows = Database::select(
             "SELECT t.id, t.doc_no, t.type, t.amount, t.trx_date, t.member_id, t.team_id, t.created_by, t.reverses_id, t.status_changed_at,
-                    m.member_no, m.name AS member_name, cu.name AS creator_name,
-                    " . ValidationService::HEAD_RELATED_SQL . " AS head_related,
-                    (SELECT tl.leader_member_id FROM team_leaders tl WHERE tl.id = t.team_id) AS leader_member_id
+                    m.member_no, m.name AS member_name, cu.name AS creator_name
              {$from} WHERE {$whereSql}
              ORDER BY t.status_changed_at, t.id LIMIT {$pager['per_page']} OFFSET {$pager['offset']}",
             $params
         );
         foreach ($rows as &$r) {
-            $r['verdict'] = ValidationService::assess($user, $r, (bool) $r['head_related'], $r['leader_member_id'] === null ? null : (int) $r['leader_member_id']);
+            $r['verdict'] = ValidationService::assess($user);
         }
         unset($r);
         return ['rows' => $rows, 'pager' => $pager, 'byType' => $byType];

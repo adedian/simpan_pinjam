@@ -5,10 +5,6 @@
         <a class="btn btn--secondary" href="<?= e(url('/validasi/riwayat')) ?>">Riwayat validasi</a>
     </div>
 
-    <?php if ($noChecker): ?>
-        <div class="alert alert--warning" role="note">Belum ada akun <strong>Pemeriksa</strong> yang aktif. Transaksi milik Head, regu Head, atau dibuat Head tidak bisa divalidasi siapa pun sampai Head membuat akun Pemeriksa di Data Pengguna.</div>
-    <?php endif; ?>
-
     <div class="stats">
         <?php foreach ($types as $code => $label): if ($byType[$code]['n'] === 0) { continue; } ?>
             <div class="stat"><span class="stat__label"><?= e($label) ?> · <?= (int) $byType[$code]['n'] ?> transaksi</span><strong class="stat__value"><?= e(money((int) $byType[$code]['sum'])) ?></strong></div>
@@ -43,7 +39,7 @@
             <tbody>
             <?php foreach ($rows as $r): $v = $r['verdict']; ?>
                 <tr>
-                    <td data-label="No. dokumen" class="nowrap"><a href="<?= e(url('/transaksi/' . (int) $r['id'])) ?>"><?= e($r['doc_no']) ?></a><?= $r['head_related'] ? ' <span class="tag">Hanya Pemeriksa</span>' : '' ?></td>
+                    <td data-label="No. dokumen" class="nowrap"><a href="<?= e(url('/transaksi/' . (int) $r['id'])) ?>"><?= e($r['doc_no']) ?></a></td>
                     <td data-label="Jenis"><?= e($types[$r['type']] ?? $r['type']) ?></td>
                     <td data-label="Anggota"><?= $r['member_id'] !== null ? e($r['member_name']) . ' <span class="muted">· ' . e($r['member_no']) . '</span>' : '<span class="muted">-</span>' ?></td>
                     <td data-label="Nominal" class="num"><?= e(money(($r['reverses_id'] !== null ? -1 : 1) * (int) $r['amount'])) ?></td>

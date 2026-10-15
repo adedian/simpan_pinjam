@@ -185,7 +185,6 @@ final class UserService
 
     /**
      * Aturan hubungan peran-anggota:
-     *  - HEAD dan PEMERIKSA tidak boleh dipegang orang yang sama (pemisahan tugas validasi, Q3)
      *  - ANGGOTA wajib tertaut ke anggota
      *  - KETUA_REGU wajib tertaut ke anggota yang memimpin regu aktif (kalau tidak, ia tidak melihat data apa pun)
      * @param array<int,string> $roleCodes
@@ -195,15 +194,12 @@ final class UserService
         if ($roleCodes === []) {
             throw new \InvalidArgumentException('Pilih minimal satu peran.');
         }
-        if (in_array('HEAD', $roleCodes, true) && in_array('PEMERIKSA', $roleCodes, true)) {
-            throw new \InvalidArgumentException('Peran Head dan Pemeriksa tidak boleh dipegang orang yang sama: Pemeriksa adalah validator kedua.');
-        }
         if (in_array('ANGGOTA', $roleCodes, true) && $memberId === null) {
             throw new \InvalidArgumentException('Peran Anggota harus ditautkan ke data anggota.');
         }
         if (in_array('KETUA_REGU', $roleCodes, true)) {
             if ($memberId === null) {
-                throw new \InvalidArgumentException('Peran Ketua Regu harus ditautkan ke anggota yang memimpin regu.');
+                throw new \InvalidArgumentException('Peran Admin (ketua regu) harus ditautkan ke anggota yang memimpin regu.');
             }
             $stmt = $pdo->prepare('SELECT 1 FROM team_leaders WHERE leader_member_id = ? AND is_active = 1');
             $stmt->execute([$memberId]);
@@ -221,7 +217,7 @@ final class UserService
         );
         $stmt->execute([$exceptUserId]);
         if ((int) $stmt->fetchColumn() === 0) {
-            throw new \InvalidArgumentException('Harus tersisa minimal satu Head aktif. Angkat Head lain dulu.');
+            throw new \InvalidArgumentException('Harus tersisa minimal satu Superadmin aktif. Angkat Superadmin lain dulu.');
         }
     }
 
@@ -257,7 +253,11 @@ final class UserService
     private static function resolveRoles(\PDO $pdo, array $roleCodes): array
     {
         $ids = [];
+        $allowed = array_keys((array) \App\Core\Config::get('permissions.labels', []));
         foreach (array_unique($roleCodes) as $code) {
+            if (!in_array($code, $allowed, true)) {
+                throw new \InvalidArgumentException("Peran tidak dikenal: {$code}");
+            }
             $stmt = $pdo->prepare('SELECT id FROM roles WHERE code = ?');
             $stmt->execute([$code]);
             $id = $stmt->fetchColumn();
