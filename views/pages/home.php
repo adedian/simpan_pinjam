@@ -92,10 +92,8 @@ $count    = static fn (string $label, int $value, string $hint = ''): string =>
     <div class="stats stats--fin">
         <?= $stat('Saldo Total', (int) $fin['savings'], 'Tabungan anggota regu Anda') ?>
         <?= $stat('Sisa Pinjaman', (int) $fin['outstanding'], 'Sisa tagihan pinjaman anggota regu Anda') ?>
-        <?= $stat('Sisa Kas', (int) $fin['cash'], 'Arus kas transaksi regu (bukan uang fisik)', true) ?>
-        <?= $stat('Total Bunga', (int) $fin['interest'], 'Dibukukan di muka; sudah terbayar ' . money((int) $fin['interest_received'])) ?>
     </div>
-    <p class="muted">Hanya transaksi yang sudah disetujui, hanya anggota regu Anda. Sisa Kas = setoran + angsuran − pencairan − penarikan atas regu ini; kas koperasi satu dan dipinjamkan lintas regu, jadi angka ini bisa negatif.</p>
+    <p class="muted">Hanya transaksi yang sudah disetujui, hanya anggota regu Anda.</p>
 </section>
 
 <section class="section" id="regu-saya">

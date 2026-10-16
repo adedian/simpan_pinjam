@@ -2120,9 +2120,9 @@ $finA = App\Services\TeamFinance::summary($alfaTeam);
 $finB = App\Services\TeamFinance::summary($betaTeam);
 check('dashboard/regu: Ketua Regu Alfa melihat panel Tunggakan Pinjaman berisi regunya saja (ringkasan, daftar, tautan)', $has($dsa, 'id="tunggakan"') && $has($dsa, 'Tunggakan Pinjaman') && $has($dsa, 'Anggota menunggak') && $has($dsa, 'Angsuran belum dibayar') && $has($dsa, 'Total nominal tunggakan') && $has($dsa, '111.111') && !$has($dsa, '222.222') && $has($dsa, '/transaksi/angsuran/tunggakan'));
 check('dashboard/regu: Ketua Regu Beta melihat tunggakan regunya saja', $has($dsb, '222.222') && !$has($dsb, '111.111'));
-check('dashboard/regu: empat indikator Saldo Total, Sisa Pinjaman, Sisa Kas, Total Bunga tampil dengan angka dari TeamFinance (Alfa)', $has($dsa, 'id="keuangan-regu"') && $has($dsa, 'Saldo Total') && $has($dsa, 'Sisa Pinjaman') && $has($dsa, 'Sisa Kas') && $has($dsa, 'Total Bunga')
-    && $has($dsa, $rp($finA['savings'])) && $has($dsa, $rp($finA['outstanding'])) && $has($dsa, $rp($finA['cash'])) && $has($dsa, $rp($finA['interest'])));
-check('dashboard/regu: angka keuangan regu Beta berbeda dari Alfa dan hanya miliknya (tidak ada kebocoran lintas regu)', $has($dsb, $rp($finB['savings'])) && $has($dsb, $rp($finB['outstanding'])) && $has($dsb, $rp($finB['interest'])) && ($finA['outstanding'] !== $finB['outstanding'] ? !$has($dsb, $rp($finA['outstanding'])) : true));
+check('dashboard/regu: dua indikator Saldo Total dan Sisa Pinjaman tampil dengan angka dari TeamFinance (Alfa); Sisa Kas dan Total Bunga tidak ditampilkan', $has($dsa, 'id="keuangan-regu"') && $has($dsa, 'Saldo Total') && $has($dsa, 'Sisa Pinjaman') && !$has($dsa, 'Sisa Kas') && !$has($dsa, 'Total Bunga')
+    && $has($dsa, $rp($finA['savings'])) && $has($dsa, $rp($finA['outstanding'])));
+check('dashboard/regu: angka keuangan regu Beta berbeda dari Alfa dan hanya miliknya (tidak ada kebocoran lintas regu)', $has($dsb, $rp($finB['savings'])) && $has($dsb, $rp($finB['outstanding'])) &&($finA['outstanding'] !== $finB['outstanding'] ? !$has($dsb, $rp($finA['outstanding'])) : true));
 check('dashboard/regu: konsisten dengan Laporan Per Ketua Regu (sumber sama): tabungan, sisa pinjaman, bunga, arus kas Regu Alfa', (function () use ($sh, $has, $finA, $rp): bool {
     $r = $sh->get('/laporan/regu');
     $num = static fn (int $n): string => ($n < 0 ? '-' : '') . number_format(abs($n), 0, ',', '.');
