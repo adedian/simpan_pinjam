@@ -1,4 +1,4 @@
-<?php /** Tanda merek: logo tiga gelombang tenang di atas bidang ungu ("adem ayem"). Gambar di public/assets/img. */ ?>
+<?php /** Tanda merek: logo "AA" dengan tangan dan dompet di atas ubin ungu. Gambar di public/assets/img. */ ?>
 <span class="brand">
     <img class="brand__mark" src="<?= e(asset('img/logo-64.png')) ?>" srcset="<?= e(asset('img/logo-64.png')) ?> 1x, <?= e(asset('img/logo.png')) ?> 3x" width="36" height="36" alt="" decoding="async">
     <span class="brand__text">
