@@ -2185,6 +2185,49 @@ check('batal/web: sesudah batal, penetapan ulang tersedia lagi dan daftar sumber
 $re = $post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1', 'note' => 'Ulang setelah batal']);
 check('batal/web: penetapan ulang berhasil (2 snapshot, 1 batal) dan tidak bisa digandakan lagi', $re['status'] === 302 && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 2 && $has($sh->get($loc($post($sh, '/laporan/bagihasil/snapshot', ['periode' => '1']))), 'sudah ada') && $count('SELECT COUNT(*) FROM profit_share_snapshots') === 2);
 
+// -- Pencairan Akhir (web)
+$pcPaths = ['/pencairan', '/pencairan/baru'];
+check('pencairan/izin: Ketua Regu dan Anggota 403 di semua halaman dan aksi; tamu dialihkan ke login', (function () use ($sa, $sm, $pcPaths, $post): bool {
+    foreach ($pcPaths as $pth) {
+        if ($sa->get($pth)['status'] !== 403 || $sm->get($pth)['status'] !== 403) {
+            return false;
+        }
+    }
+    return $post($sa, '/pencairan', ['periode' => '1'])['status'] === 403 && $post($sm, '/pencairan/1/terima', ['line' => '1'])['status'] === 403 && $post($sa, '/pencairan/1/batal', ['reason' => 'Mencoba batal'])['status'] === 403
+        && $sa->get('/pencairan/1')['status'] === 403 && $sm->get('/pencairan/1/unduh')['status'] === 403;
+})() && (new Browser())->get('/pencairan')['status'] === 302);
+$pcIdx = $sh->get('/pencairan');
+check('pencairan/daftar: Superadmin melihat halaman dan tombol Susun; menu "Pencairan Akhir" hanya untuk Superadmin', $pcIdx['status'] === 200 && $has($pcIdx, 'Pencairan Akhir') && $has($pcIdx, '/pencairan/baru') && $has($pcIdx, 'href="/pencairan"') && !$has($sa->get('/'), 'href="/pencairan"') && !$has($sm->get('/'), 'href="/pencairan"'));
+check('pencairan/daftar: periode ngawur aman (tanpa galat)', $sh->get('/pencairan?periode=zz')['status'] === 200 && $sh->get('/pencairan?periode[]=1')['status'] === 200);
+$pcForm = $sh->get('/pencairan/baru?periode=1');
+check('pencairan/formulir: tampil dengan dasar snapshot, kolom potongan arisan dan lain, pilihan pembulatan', $pcForm['status'] === 200 && $has($pcForm, 'Susun Pencairan Akhir') && $has($pcForm, 'name="d[') && $has($pcForm, 'Kelipatan Rp 1.000') && $has($pcForm, 'name="snapshot"'));
+$pcSnap = $count('SELECT MAX(id) FROM profit_share_snapshots');
+$pcMember = $count('SELECT member_id FROM profit_share_lines WHERE snapshot_id = ? ORDER BY member_id LIMIT 1', [$pcSnap]);
+$pcBad = $post($sh, '/pencairan', ['periode' => '1', 'snapshot' => (string) $pcSnap, 'unit' => '1000', 'd' => [(string) $pcMember => ['arisan' => 'abc', 'note' => '']]]);
+check('pencairan/susun: potongan bukan angka ditolak, kembali ke formulir dengan pesan; tidak ada yang tersimpan', $pcBad['status'] === 302 && $has($sh->get($loc($pcBad)), 'harus berupa angka rupiah bulat') && $count('SELECT COUNT(*) FROM final_payouts') === 0);
+check('pencairan/susun: periode tak dikenal 404', $post($sh, '/pencairan', ['periode' => '999', 'snapshot' => (string) $pcSnap, 'unit' => '1000'])['status'] === 404);
+$pcOk = $post($sh, '/pencairan', ['periode' => '1', 'snapshot' => (string) $pcSnap, 'unit' => '1000', 'note' => 'Uji <b>pencairan</b>', 'd' => [(string) $pcMember => ['arisan' => '1.000', 'other' => '', 'note' => 'Arisan <script>x</script>']]]);
+$pcId = $count('SELECT MAX(id) FROM final_payouts');
+check('pencairan/susun: berhasil, dialihkan ke rekap, 1 pencairan, tercatat di audit', $pcOk['status'] === 302 && $pcId > 0 && str_contains($loc($pcOk), '/pencairan/' . $pcId) && $count('SELECT COUNT(*) FROM final_payouts') === 1 && $audits('PAYOUT_CREATED') === 1);
+$pcShow = $sh->get('/pencairan/' . $pcId);
+check('pencairan/rekap: tabel, jumlah, pecahan, penerimaan, batal; HTML pada catatan dan keterangan aman dari XSS', $pcShow['status'] === 200 && $has($pcShow, 'Pencairan Akhir') && $has($pcShow, 'Uang yang dibayarkan') && $has($pcShow, 'Kebutuhan uang tunai per pecahan') && $has($pcShow, 'Penerimaan uang') && $has($pcShow, 'Batalkan pencairan')
+    && !$has($pcShow, '<b>pencairan</b>') && !$has($pcShow, '<script>x</script>') && $has($pcShow, '/pencairan/' . $pcId . '/unduh'));
+check('pencairan/susun: formulir baru untuk periode yang sudah punya pencairan dialihkan ke yang berlaku; penyusunan kedua ditolak', $sh->get('/pencairan/baru?periode=1')['status'] === 302 && str_contains($loc($sh->last), '/pencairan/' . $pcId) && $has($sh->get($loc($sh->get($loc($post($sh, '/pencairan', ['periode' => '1', 'snapshot' => (string) $pcSnap, 'unit' => '1000']))))), 'sudah punya pencairan') && $count('SELECT COUNT(*) FROM final_payouts') === 1);
+check('pencairan/rekap: id tak dikenal 404 (tampilan, unduh, terima, batal)', $sh->get('/pencairan/99999')['status'] === 404 && $sh->get('/pencairan/99999/unduh')['status'] === 404 && $post($sh, '/pencairan/99999/terima', ['line' => '1'])['status'] === 404 && $post($sh, '/pencairan/99999/batal', ['reason' => 'Tidak ada'])['status'] === 404);
+$pcDl = $sh->get('/pencairan/' . $pcId . '/unduh');
+check('pencairan/unduh: Excel sah dan tercatat PAYOUT_EXPORTED', $pcDl['status'] === 200 && str_contains($pcDl['headers']['content-type'] ?? '', 'spreadsheetml') && str_starts_with($pcDl['body'], 'PK') && $audits('PAYOUT_EXPORTED') === 1);
+check('pencairan/snapshot: snapshot dasar tidak bisa dibatalkan selama pencairan berlaku (pesan di halaman snapshot)', $has($sh->get($loc($post($sh, '/laporan/bagihasil/snapshot/batal', ['periode' => '1', 'snapshot' => (string) $pcSnap, 'reason' => 'Mencoba membatalkan dasar']))), 'Pencairan Akhir yang masih berlaku'));
+$pcLine = $count('SELECT id FROM final_payout_lines WHERE payout_id = ? AND net_paid > 0 ORDER BY id LIMIT 1', [$pcId]);
+$pcZero = $count('SELECT id FROM final_payout_lines WHERE payout_id = ? AND net_paid = 0 ORDER BY id LIMIT 1', [$pcId]);
+check('pencairan/terima: tanggal masa depan ditolak; baris bernilai 0 ditolak; tidak ada catatan tersimpan', $pcLine > 0 && $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/terima', ['line' => (string) $pcLine, 'received_on' => date('Y-m-d', strtotime('+5 days'))]))), 'masa depan')
+    && ($pcZero === 0 || $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/terima', ['line' => (string) $pcZero, 'received_on' => date('Y-m-d')]))), 'tidak menerima uang tunai')) && $count('SELECT COUNT(*) FROM final_payout_receipts') === 0);
+$pcRc = $post($sh, '/pencairan/' . $pcId . '/terima', ['line' => (string) $pcLine, 'received_on' => date('Y-m-d'), 'note' => 'Tunai <i>langsung</i>']);
+$pcShow2 = $sh->get($loc($pcRc));
+check('pencairan/terima: dicatat, pesan sukses, tampil "Diterima", tercatat di audit, aman dari XSS; ganda ditolak', $pcRc['status'] === 302 && $has($pcShow2, 'Penerimaan uang dicatat') && $has($pcShow2, 'Diterima ' . date('d-m-Y')) && !$has($pcShow2, '<i>langsung</i>') && $count('SELECT COUNT(*) FROM final_payout_receipts') === 1 && $audits('PAYOUT_RECEIVED') === 1
+    && $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/terima', ['line' => (string) $pcLine, 'received_on' => date('Y-m-d')]))), 'sudah dicatat') && $count('SELECT COUNT(*) FROM final_payout_receipts') === 1);
+check('pencairan/batal: alasan kosong ditolak; setelah ada penerimaan pembatalan ditolak dan formulir batal hilang; tetap berlaku', $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/batal', ['reason' => '']))), 'Alasan pembatalan wajib')
+    && $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/batal', ['reason' => 'Alasan yang cukup']))), 'sudah ada anggota yang dicatat menerima') && $count('SELECT COUNT(*) FROM final_payout_voids') === 0 && !$has($sh->get('/pencairan/' . $pcId), 'Alasan pembatalan (wajib)') && $audits('PAYOUT_VOIDED') === 0);
+
 // -- cakupan route: setiap route yang terdaftar harus pernah diminta oleh suite ini
 $routerAll = new App\Core\Router();
 (require BASE_PATH . '/config/routes.php')($routerAll);

@@ -42,7 +42,7 @@ try {
         throw new RuntimeException("Database {$dbName} belum dimigrasi. Jalankan migrate.php dulu.");
     }
 
-    $insertOnly = ['audit_logs', 'transaction_validations', 'profit_share_snapshots', 'profit_share_lines', 'profit_share_snapshot_voids'];
+    $insertOnly = ['audit_logs', 'transaction_validations', 'profit_share_snapshots', 'profit_share_lines', 'profit_share_snapshot_voids', 'final_payouts', 'final_payout_lines', 'final_payout_voids', 'final_payout_receipts'];
     $readOnly   = ['schema_migrations', 'roles', 'loan_plan_adjustments'];   // penyesuaian rencana hanya ditulis lewat plan_adjust.php
     $grants     = [];
     foreach ($tables as $t) {

@@ -7,6 +7,7 @@ use App\Controllers\HealthController;
 use App\Controllers\HomeController;
 use App\Controllers\LiveController;
 use App\Controllers\MemberController;
+use App\Controllers\PayoutController;
 use App\Controllers\ProfileController;
 use App\Controllers\PwaController;
 use App\Controllers\ReportController;
@@ -114,6 +115,15 @@ return static function (Router $r): void {
     $r->get('/laporan/anggota/{id:\d+}/{kind:pinjaman|tabungan}', [ReportController::class, 'sheet'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/anggota/cetak/{kind:pinjaman|tabungan}', [ReportController::class, 'sheets'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/{key:[a-z]+}/unduh', [ReportController::class, 'download'], ['auth', 'can:report.export']);
+
+    // Pencairan Akhir (Superadmin). Disusun dari snapshot bagi hasil; hanya-tambah, pembatalan wajib beralasan.
+    $r->get('/pencairan', [PayoutController::class, 'index'], ['auth', 'can:payout.manage']);
+    $r->get('/pencairan/baru', [PayoutController::class, 'create'], ['auth', 'can:payout.manage']);
+    $r->post('/pencairan', [PayoutController::class, 'store'], ['auth', 'can:payout.manage']);
+    $r->get('/pencairan/{id:\d+}', [PayoutController::class, 'show'], ['auth', 'can:payout.manage']);
+    $r->get('/pencairan/{id:\d+}/unduh', [PayoutController::class, 'download'], ['auth', 'can:payout.manage']);   // unduhan juga butuh report.export (dicek di controller)
+    $r->post('/pencairan/{id:\d+}/terima', [PayoutController::class, 'receive'], ['auth', 'can:payout.manage']);
+    $r->post('/pencairan/{id:\d+}/batal', [PayoutController::class, 'void'], ['auth', 'can:payout.manage']);
 
     // Audit log (Superadmin). Hanya baca; unduhan butuh report.export juga (dicek di controller) dan tercatat.
     $r->get('/sistem/audit', [AuditController::class, 'index'], ['auth', 'can:audit.view']);

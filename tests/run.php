@@ -375,6 +375,10 @@ check('struktur: satu-satunya route laporan yang mengubah data (tetapkan dan bat
     }
     return $posts === 2;
 })() && Gate::allows(['roles' => ['HEAD']], 'profit.snapshot') && !Gate::allows(['roles' => ['KETUA_REGU']], 'profit.snapshot') && !Gate::allows(['roles' => ['ANGGOTA']], 'profit.snapshot'));
+$payRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/pencairan')));
+check('struktur: 7 route Pencairan Akhir (4 GET, 3 POST), SEMUA auth + HANYA can:payout.manage; hanya Superadmin (HEAD) yang punya izinnya', count($payRoutes) === 7 && count(array_filter($payRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 3
+    && count(array_filter($payRoutes, static fn (array $r): bool => in_array('auth', $r['middleware'], true) && $canOf($r) === ['can:payout.manage'])) === 7
+    && Gate::allows(['roles' => ['HEAD']], 'payout.manage') && !Gate::allows(['roles' => ['KETUA_REGU']], 'payout.manage') && !Gate::allows(['roles' => ['ANGGOTA']], 'payout.manage'));
 check('struktur: unduhan HANYA can:report.export; laporan per regu HANYA global; kartu anggota global|team', (function () use ($repRoutes, $canOf): bool {
     foreach ($repRoutes as $r) {
         $c = $canOf($r)[0];

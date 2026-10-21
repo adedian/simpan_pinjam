@@ -356,6 +356,11 @@ final class ProfitReport
             if ($done->fetchColumn() !== false) {
                 throw RuleViolation::field('_form', 'Snapshot ini sudah dibatalkan.');
             }
+            $used = $pdo->prepare('SELECT p.id FROM final_payouts p LEFT JOIN final_payout_voids v ON v.payout_id = p.id WHERE p.snapshot_id = ? AND v.id IS NULL');
+            $used->execute([$snapshotId]);
+            if ($used->fetchColumn() !== false) {
+                throw RuleViolation::field('_form', 'Snapshot ini menjadi dasar Pencairan Akhir yang masih berlaku. Batalkan pencairannya dulu bila snapshot memang perlu dibatalkan.');
+            }
             $pdo->prepare('INSERT INTO profit_share_snapshot_voids (snapshot_id, reason, voided_by) VALUES (?,?,?)')->execute([$snapshotId, $reason, $actor['id']]);
             AuditLog::record($request, $actor, 'PROFIT_SNAPSHOT_VOIDED', 'profit_snapshot', $snapshotId, month_label((string) $s['as_of_month']), null, [
                 'period_id' => $periodId, 'as_of' => (string) $s['as_of_month'], 'alasan' => $reason,

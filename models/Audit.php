@@ -60,6 +60,10 @@ final class Audit
         'REPORT_EXPORTED'     => ['Laporan diunduh', 'laporan'],
         'PROFIT_SNAPSHOT_CREATED' => ['Snapshot bagi hasil ditetapkan', 'laporan'],
         'PROFIT_SNAPSHOT_VOIDED' => ['Snapshot bagi hasil dibatalkan', 'laporan', 'keamanan'],
+        'PAYOUT_CREATED'      => ['Pencairan akhir disusun', 'pencairan'],
+        'PAYOUT_RECEIVED'     => ['Penerimaan uang pencairan dicatat', 'pencairan'],
+        'PAYOUT_VOIDED'       => ['Pencairan akhir dibatalkan', 'pencairan', 'keamanan'],
+        'PAYOUT_EXPORTED'     => ['Rekap pencairan diunduh', 'pencairan', 'laporan'],
         'AUDIT_EXPORTED'      => ['Audit log diunduh', 'laporan'],
         'IMPOR_EXCEL'         => ['Impor data dari Excel', 'master'],
         'PLAN_ADJUSTED'       => ['Penyesuaian rencana pembayaran (bagi hasil)', 'master'],
@@ -69,11 +73,12 @@ final class Audit
     public const GROUPS = [
         'masuk' => 'Masuk dan kata sandi', 'keamanan' => 'Keamanan', 'transaksi' => 'Transaksi', 'koreksi' => 'Koreksi (pembalik)',
         'validasi' => 'Validasi', 'master' => 'Master data', 'pengaturan' => 'Pengaturan', 'laporan' => 'Laporan dan unduhan',
+        'pencairan' => 'Pencairan akhir',
     ];
 
     /** @var array<string,string> */
     public const ENTITIES = [
-        'transaction' => 'Transaksi', 'member' => 'Anggota', 'user' => 'Pengguna', 'team' => 'Regu', 'setting' => 'Pengaturan', 'report' => 'Laporan', 'route' => 'Halaman', 'import' => 'Impor',
+        'transaction' => 'Transaksi', 'member' => 'Anggota', 'user' => 'Pengguna', 'team' => 'Regu', 'setting' => 'Pengaturan', 'report' => 'Laporan', 'route' => 'Halaman', 'import' => 'Impor', 'payout' => 'Pencairan akhir',
     ];
 
     public const PER_PAGE = 50;

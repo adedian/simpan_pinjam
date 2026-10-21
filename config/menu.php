@@ -37,6 +37,7 @@ return [
         ['label' => 'Rekap Angsuran', 'path' => '/laporan/angsuran', 'icon' => 'layers', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
         ['label' => 'Rekap Saldo', 'path' => '/laporan/saldo', 'icon' => 'chart', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
         ['label' => 'Pembagian Bunga', 'path' => '/laporan/bagihasil', 'icon' => 'chart', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
+        ['label' => 'Pencairan Akhir', 'path' => '/pencairan', 'icon' => 'card', 'can' => ['payout.manage'], 'phase' => 20, 'available' => true],
         ['label' => 'Laporan Transaksi', 'path' => '/laporan/transaksi', 'icon' => 'file', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
         ['label' => 'Laporan Per Ketua Regu', 'path' => '/laporan/regu', 'icon' => 'file', 'can' => ['report.view.global'], 'phase' => 12, 'available' => true],
         ['label' => 'Laporan Per Anggota', 'path' => '/laporan/anggota', 'icon' => 'file', 'can' => ['report.view.global', 'report.view.team'], 'phase' => 12, 'available' => true],
