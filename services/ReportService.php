@@ -27,7 +27,7 @@ final class ReportService
     public const SELF = 'self';
     public const NONE = 'none';
 
-    public const KEYS = ['simpanan', 'pinjaman', 'angsuran', 'saldo', 'transaksi', 'regu', 'bagihasil'];
+    public const KEYS = ['simpanan', 'pinjaman', 'angsuran', 'saldo', 'transaksi', 'regu', 'bagihasil', 'shu'];
     public const EXPORT_MAX_ROWS = 50000;
     public const PER_PAGE = 50;
 
@@ -241,6 +241,7 @@ final class ReportService
             'pinjaman'  => self::loanReport($user, $f),
             'regu'      => self::teamReport($user, $f),
             'bagihasil' => ProfitReport::build($user, $f),
+            'shu'       => ShuReport::build($user, $f),
             'transaksi' => self::transactionReport($user, $f, $page, $all),
             default     => throw new \InvalidArgumentException('Laporan tidak dikenal.'),
         };

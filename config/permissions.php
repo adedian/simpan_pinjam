@@ -28,7 +28,7 @@ return [
             'team_leader.manage', 'member.view.all', 'member.view.self', 'member.manage', 'user.manage',
             'transaction.view.all', 'transaction.validate',
             'report.view.global', 'report.export',
-            'settings.manage', 'audit.view', 'profit.snapshot', 'payout.manage',
+            'settings.manage', 'audit.view', 'profit.snapshot', 'payout.manage', 'expense.manage',
         ],
         'KETUA_REGU' => [
             'dashboard.view', 'profile.view',

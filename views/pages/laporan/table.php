@@ -44,6 +44,15 @@ $exportQuery = http_build_query($query);
         <?= View::include('partials/profit-extra', ['report' => $report, 'snapshotForm' => $snapshotForm ?? null, 'voidForm' => $voidForm ?? null, 'filters' => $filters]) ?>
     <?php endif; ?>
 
+    <?php if ($report['key'] === 'shu' && !empty($report['summary'])): ?>
+        <div class="stats stats--report">
+            <?php foreach ($report['summary'] as $s): ?>
+                <div class="stat"><span class="stat__label"><?= e($s['label']) ?></span><strong class="stat__value"><?= e(money((int) $s['value'])) ?></strong><span class="stat__hint"><?= e($s['hint']) ?></span></div>
+            <?php endforeach; ?>
+        </div>
+        <?php if (isset($report['control']) && !$report['control']['ok']): ?><div class="alert alert--danger" role="alert">Kontrol gagal: penabung + peminjam + Kas SHU tidak sama dengan bunga dibukukan. Periksa data.</div><?php endif; ?>
+    <?php endif; ?>
+
     <?php if ($level === 'none'): ?>
         <div class="alert alert--warning" role="note">Akun Anda belum tertaut ke data anggota atau regu, jadi belum ada laporan yang bisa ditampilkan.</div>
     <?php endif; ?>

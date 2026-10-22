@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 use App\Controllers\AuditController;
 use App\Controllers\AuthController;
+use App\Controllers\BiayaController;
 use App\Controllers\HealthController;
 use App\Controllers\HomeController;
 use App\Controllers\LiveController;
@@ -109,12 +110,22 @@ return static function (Router $r): void {
     $r->post('/laporan/bagihasil/snapshot', [ReportController::class, 'bagihasilSnapshot'], ['auth', 'can:profit.snapshot']);
     $r->post('/laporan/bagihasil/snapshot/batal', [ReportController::class, 'bagihasilSnapshotVoid'], ['auth', 'can:profit.snapshot']);
     $r->get('/laporan/regu', [ReportController::class, 'regu'], ['auth', 'can:report.view.global']);
+    $r->get('/laporan/shu', [ReportController::class, 'shu'], ['auth', 'can:report.view.global']);
     $r->get('/laporan/anggota', [ReportController::class, 'members'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/anggota/{id:\d+}', [ReportController::class, 'member'], ['auth', 'can:report.view.global|report.view.team']);
     // Formulir cetak per anggota (Rekap Pinjaman, Tabungan Hari Raya): satu anggota, atau massal per regu/pencarian.
     $r->get('/laporan/anggota/{id:\d+}/{kind:pinjaman|tabungan}', [ReportController::class, 'sheet'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/anggota/cetak/{kind:pinjaman|tabungan}', [ReportController::class, 'sheets'], ['auth', 'can:report.view.global|report.view.team']);
     $r->get('/laporan/{key:[a-z]+}/unduh', [ReportController::class, 'download'], ['auth', 'can:report.export']);
+
+    // Biaya operasional (Superadmin), dibebankan ke Kas SHU. Validasi tetap lewat /validasi.
+    $r->get('/biaya', [BiayaController::class, 'index'], ['auth', 'can:expense.manage']);
+    $r->get('/biaya/baru', [BiayaController::class, 'create'], ['auth', 'can:expense.manage']);
+    $r->post('/biaya', [BiayaController::class, 'store'], ['auth', 'can:expense.manage']);
+    $r->get('/biaya/{id:\d+}/ubah', [BiayaController::class, 'edit'], ['auth', 'can:expense.manage']);
+    $r->post('/biaya/{id:\d+}', [BiayaController::class, 'update'], ['auth', 'can:expense.manage']);
+    $r->post('/biaya/{id:\d+}/ajukan', [BiayaController::class, 'submit'], ['auth', 'can:expense.manage']);
+    $r->post('/biaya/{id:\d+}/batal', [BiayaController::class, 'cancel'], ['auth', 'can:expense.manage']);
 
     // Pencairan Akhir (Superadmin). Disusun dari snapshot bagi hasil; hanya-tambah, pembatalan wajib beralasan.
     $r->get('/pencairan', [PayoutController::class, 'index'], ['auth', 'can:payout.manage']);

@@ -23,6 +23,7 @@ return [
         ['label' => 'Simpanan', 'path' => '/transaksi/simpanan', 'icon' => 'download', 'can' => ['transaction.view.all', 'transaction.view.team', 'transaction.view.self'], 'phase' => 6, 'available' => true],
         ['label' => 'Pinjaman', 'path' => '/transaksi/pinjaman', 'icon' => 'upload', 'can' => ['transaction.view.all', 'transaction.view.team', 'transaction.view.self'], 'phase' => 7, 'available' => true],
         ['label' => 'Angsuran', 'path' => '/transaksi/angsuran', 'icon' => 'card', 'can' => ['transaction.view.all', 'transaction.view.team', 'transaction.view.self'], 'phase' => 8, 'available' => true],
+        ['label' => 'Biaya', 'path' => '/biaya', 'icon' => 'upload', 'can' => ['expense.manage'], 'phase' => 20, 'available' => true],
         ['label' => 'Riwayat Transaksi', 'path' => '/transaksi/riwayat', 'icon' => 'clock', 'can' => ['transaction.view.all', 'transaction.view.team', 'transaction.view.self'], 'phase' => 6, 'available' => true],
     ]],
 
@@ -38,6 +39,7 @@ return [
         ['label' => 'Rekap Saldo', 'path' => '/laporan/saldo', 'icon' => 'chart', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
         ['label' => 'Pembagian Bunga', 'path' => '/laporan/bagihasil', 'icon' => 'chart', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
         ['label' => 'Pencairan Akhir', 'path' => '/pencairan', 'icon' => 'card', 'can' => ['payout.manage'], 'phase' => 20, 'available' => true],
+        ['label' => 'Jasa Pinjaman dan Kas SHU', 'path' => '/laporan/shu', 'icon' => 'chart', 'can' => ['report.view.global'], 'phase' => 20, 'available' => true],
         ['label' => 'Laporan Transaksi', 'path' => '/laporan/transaksi', 'icon' => 'file', 'can' => ['report.view.global', 'report.view.team', 'report.view.self'], 'phase' => 12, 'available' => true],
         ['label' => 'Laporan Per Ketua Regu', 'path' => '/laporan/regu', 'icon' => 'file', 'can' => ['report.view.global'], 'phase' => 12, 'available' => true],
         ['label' => 'Laporan Per Anggota', 'path' => '/laporan/anggota', 'icon' => 'file', 'can' => ['report.view.global', 'report.view.team'], 'phase' => 12, 'available' => true],

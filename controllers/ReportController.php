@@ -53,6 +53,12 @@ final class ReportController extends BaseController
         return $this->table($request, 'regu');
     }
 
+    /** Laporan Jasa Pinjaman dan Kas SHU (hanya cakupan seluruh koperasi). @param array<string,string> $params */
+    public function shu(Request $request, array $params = []): Response
+    {
+        return $this->table($request, 'shu');
+    }
+
     /** Report Pembagian Bunga per anggota. @param array<string,string> $params */
     public function bagihasil(Request $request, array $params = []): Response
     {
@@ -330,7 +336,7 @@ final class ReportController extends BaseController
             }
             $out[] = ['name' => 'status', 'label' => 'Status', 'type' => 'select', 'options' => $statuses, 'value' => $f['status']];
         }
-        if ($level === ReportService::ALL) {
+        if ($level === ReportService::ALL && $key !== 'shu') {
             $teams = ['0' => 'Semua regu'];
             foreach (ReportService::teams() as $t) {
                 $teams[$t['id']] = $t['name'];

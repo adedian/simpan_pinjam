@@ -361,7 +361,7 @@ check('izin: hanya Superadmin (HEAD) yang punya transaction.validate; Admin (ket
 // ---- Laporan (Phase 12): hanya baca; unduhan hanya report.export ----
 $repRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/laporan')));
 $canOf = static fn (array $r): array => array_values(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:')));
-check('struktur: 15 route laporan: 13 GET (auth + tepat satu can:) dan 2 POST (tetapkan dan batalkan snapshot bagi hasil)', count($repRoutes) === 15 && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'GET' && in_array('auth', $r['middleware'], true) && count(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:'))) === 1)) === 13
+check('struktur: 16 route laporan: 14 GET (auth + tepat satu can:) dan 2 POST (tetapkan dan batalkan snapshot bagi hasil)', count($repRoutes) === 16 && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'GET' && in_array('auth', $r['middleware'], true) && count(array_filter($r['middleware'], static fn (string $m): bool => str_starts_with($m, 'can:'))) === 1)) === 14
     && count(array_filter($repRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 2);
 check('struktur: satu-satunya route laporan yang mengubah data (tetapkan dan batalkan snapshot bagi hasil) HANYA can:profit.snapshot dan hanya HEAD yang punya izinnya', (function () use ($repRoutes, $canOf): bool {
     $posts = 0;
@@ -375,6 +375,10 @@ check('struktur: satu-satunya route laporan yang mengubah data (tetapkan dan bat
     }
     return $posts === 2;
 })() && Gate::allows(['roles' => ['HEAD']], 'profit.snapshot') && !Gate::allows(['roles' => ['KETUA_REGU']], 'profit.snapshot') && !Gate::allows(['roles' => ['ANGGOTA']], 'profit.snapshot'));
+$expRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/biaya')));
+check('struktur: 7 route Biaya (2 GET baca + 1 GET formulir ubah, 4 POST), SEMUA auth + HANYA can:expense.manage; hanya Superadmin (HEAD) yang punya izinnya, dan HEAD tetap tidak punya transaction.create', count($expRoutes) === 7 && count(array_filter($expRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 4
+    && count(array_filter($expRoutes, static fn (array $r): bool => in_array('auth', $r['middleware'], true) && $canOf($r) === ['can:expense.manage'])) === 7
+    && Gate::allows(['roles' => ['HEAD']], 'expense.manage') && !Gate::allows(['roles' => ['KETUA_REGU']], 'expense.manage') && !Gate::allows(['roles' => ['ANGGOTA']], 'expense.manage') && !Gate::allows(['roles' => ['HEAD']], 'transaction.create'));
 $payRoutes = array_values(array_filter($guard->all(), static fn (array $r): bool => str_starts_with($r['regex'], '#^/pencairan')));
 check('struktur: 7 route Pencairan Akhir (4 GET, 3 POST), SEMUA auth + HANYA can:payout.manage; hanya Superadmin (HEAD) yang punya izinnya', count($payRoutes) === 7 && count(array_filter($payRoutes, static fn (array $r): bool => $r['method'] === 'POST')) === 3
     && count(array_filter($payRoutes, static fn (array $r): bool => in_array('auth', $r['middleware'], true) && $canOf($r) === ['can:payout.manage'])) === 7
@@ -385,7 +389,7 @@ check('struktur: unduhan HANYA can:report.export; laporan per regu HANYA global;
         if (str_contains($r['regex'], 'unduh') && $c !== 'can:report.export') {
             return false;
         }
-        if (str_contains($r['regex'], '/laporan/regu') && $c !== 'can:report.view.global') {
+        if ((str_contains($r['regex'], '/laporan/regu') || str_contains($r['regex'], '/laporan/shu')) && $c !== 'can:report.view.global') {
             return false;
         }
         if (str_contains($r['regex'], '/laporan/anggota') && !str_contains($r['regex'], 'unduh') && $c !== 'can:report.view.global|report.view.team') {

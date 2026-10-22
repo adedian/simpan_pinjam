@@ -2228,6 +2228,57 @@ check('pencairan/terima: dicatat, pesan sukses, tampil "Diterima", tercatat di a
 check('pencairan/batal: alasan kosong ditolak; setelah ada penerimaan pembatalan ditolak dan formulir batal hilang; tetap berlaku', $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/batal', ['reason' => '']))), 'Alasan pembatalan wajib')
     && $has($sh->get($loc($post($sh, '/pencairan/' . $pcId . '/batal', ['reason' => 'Alasan yang cukup']))), 'sudah ada anggota yang dicatat menerima') && $count('SELECT COUNT(*) FROM final_payout_voids') === 0 && !$has($sh->get('/pencairan/' . $pcId), 'Alasan pembatalan (wajib)') && $audits('PAYOUT_VOIDED') === 0);
 
+// -- Biaya operasional (web) dan Laporan Jasa Pinjaman + Kas SHU
+check('biaya/izin: Ketua Regu dan Anggota 403 di semua halaman dan aksi; tamu dialihkan ke login', $sa->get('/biaya')['status'] === 403 && $sa->get('/biaya/baru')['status'] === 403 && $sm->get('/biaya')['status'] === 403 && $sm->get('/biaya/baru')['status'] === 403
+    && $post($sa, '/biaya', ['category' => 'x'])['status'] === 403 && $post($sm, '/biaya/1/ajukan', [])['status'] === 403 && $post($sa, '/biaya/1/batal', ['note' => 'x'])['status'] === 403
+    && $sa->get('/biaya/1/ubah')['status'] === 403 && $post($sm, '/biaya/1', ['category' => 'x'])['status'] === 403 && (new Browser())->get('/biaya')['status'] === 302);
+// kas untuk persetujuan biaya: satu simpanan DISETUJUI Rp 20.000.000 disisipkan langsung (kas fixture sebelumnya sengaja dikuras)
+Database::pdo()->exec("INSERT INTO transactions (trx_no, doc_no, type, member_id, team_id, period_month_id, trx_date, amount, source) VALUES ('TRX-UJI-KAS2','SMP-UJI-KAS2','SIMPANAN'," . $mid(2) . ",1,1,'{$today}',20000000,'APLIKASI')");
+$kas2Id = (int) Database::pdo()->lastInsertId();
+Database::pdo()->exec("INSERT INTO savings (transaction_id, kind) VALUES ({$kas2Id}, 'SUKARELA')");
+Database::pdo()->exec("UPDATE transactions SET status = 'MENUNGGU_VALIDASI' WHERE id = {$kas2Id}");
+Database::pdo()->exec("UPDATE transactions SET status = 'DISETUJUI' WHERE id = {$kas2Id}");
+$byIdx = $sh->get('/biaya');
+check('biaya/daftar: Superadmin melihat halaman, tombol Catat, dan menu Biaya; Admin dan Anggota tidak punya menunya', $byIdx['status'] === 200 && $has($byIdx, 'Catat biaya') && $has($byIdx, 'href="/biaya"') && !$has($sa->get('/'), 'href="/biaya"') && !$has($sm->get('/'), 'href="/biaya"'));
+$byForm = $sh->get('/biaya/baru');
+$byMonth = preg_match('/<select id="f_period_month_id"[^>]*>\s*<option value="">[^<]*<\/option>\s*<option value="(\d+)"/', $byForm['body'], $bm) === 1 ? $bm[1] : '1';
+check('biaya/formulir: tampil dengan token sekali pakai, keperluan, bulan, nominal; tombol draft di urutan pertama', $byForm['status'] === 200 && $tokenOf($byForm) !== '' && $has($byForm, 'name="category"') && $has($byForm, 'name="period_month_id"') && $has($byForm, 'name="amount"') && strpos($byForm['body'], 'value="draft"') < strpos($byForm['body'], 'value="submit"'));
+$byBad = $post($sh, '/biaya', ['_form_id' => $tokenOf($sh->get('/biaya/baru')), 'category' => '', 'period_month_id' => $byMonth, 'amount' => 'abc', 'trx_date' => $today, 'action' => 'draft']);
+check('biaya/simpan: isian salah ditolak, kembali ke formulir dengan pesan; tidak ada yang tersimpan', $byBad['status'] === 302 && $loc($byBad) === '/biaya/baru' && $has($sh->get('/biaya/baru'), 'wajib diisi') && $count("SELECT COUNT(*) FROM transactions WHERE type = 'BIAYA' AND doc_no LIKE 'BYA-%'") === 0);
+$byTok = $tokenOf($sh->get('/biaya/baru'));
+$byOk = $post($sh, '/biaya', ['_form_id' => $byTok, 'category' => 'Cetak <b>laporan</b> uji', 'period_month_id' => $byMonth, 'amount' => '1.000', 'trx_date' => $today, 'description' => 'Uji <script>x</script>', 'action' => 'draft']);
+$byId = $count("SELECT MAX(id) FROM transactions WHERE type = 'BIAYA' AND doc_no LIKE 'BYA-%'");
+check('biaya/simpan: draft tersimpan, dialihkan ke daftar, tercatat di audit; sumber dana SHU; atas nama Superadmin', $byOk['status'] === 302 && $loc($byOk) === '/biaya' && $byId > 0 && $str('SELECT status FROM transactions WHERE id = ?', [$byId]) === 'DRAFT' && $str('SELECT fund_source FROM expenses WHERE transaction_id = ?', [$byId]) === 'SHU'
+    && $audits('EXPENSE_CREATED') === 1 && $count('SELECT created_by FROM transactions WHERE id = ?', [$byId]) === $count("SELECT id FROM users WHERE username = 'kepala'"));
+$byList = $sh->get('/biaya');
+check('biaya/daftar: baris draft tampil dengan Ubah, Ajukan, Batalkan; HTML di keperluan dan keterangan aman dari XSS', $has($byList, 'Draft') && $has($byList, '/biaya/' . $byId . '/ubah') && $has($byList, '/biaya/' . $byId . '/ajukan') && $has($byList, '/biaya/' . $byId . '/batal') && !$has($byList, '<b>laporan</b>') && !$has($byList, '<script>x</script>'));
+check('biaya/simpan: kiriman ganda (token yang sama) tidak membuat biaya kedua', $post($sh, '/biaya', ['_form_id' => $byTok, 'category' => 'Cetak <b>laporan</b> uji', 'period_month_id' => $byMonth, 'amount' => '1.000', 'trx_date' => $today, 'action' => 'draft'])['status'] === 302 && $count("SELECT COUNT(*) FROM transactions WHERE type = 'BIAYA' AND doc_no LIKE 'BYA-%'") === 1);
+$byEdit = $sh->get('/biaya/' . $byId . '/ubah');
+check('biaya/ubah: formulir draft terisi dengan versi; biaya yang bukan draft atau bukan biaya 404 atau dialihkan', $byEdit['status'] === 200 && $versionOf($byEdit) !== '' && $has($byEdit, 'Ubah draft') && $sh->get('/biaya/99999/ubah')['status'] === 404 && $sh->get('/biaya/' . $count("SELECT id FROM transactions WHERE type = 'SIMPANAN' LIMIT 1") . '/ubah')['status'] === 404);
+$byUp = $post($sh, '/biaya/' . $byId, ['_version' => $versionOf($byEdit), 'category' => 'Cetak laporan uji', 'period_month_id' => $byMonth, 'amount' => '2.000', 'trx_date' => $today, 'description' => '', 'action' => 'draft']);
+check('biaya/ubah: draft berubah (2.000) dan tercatat di audit; versi basi ditolak dengan pesan', $byUp['status'] === 302 && $count('SELECT amount FROM transactions WHERE id = ?', [$byId]) === 2000 && $audits('EXPENSE_UPDATED') === 1
+    && $has($sh->get($loc($post($sh, '/biaya/' . $byId, ['_version' => '2000-01-01 00:00:00', 'category' => 'Cetak laporan uji', 'period_month_id' => $byMonth, 'amount' => '3.000', 'trx_date' => $today, 'action' => 'draft']))), 'baru saja berubah') === false || $count('SELECT amount FROM transactions WHERE id = ?', [$byId]) === 2000);
+$byVer = $versionOf($sh->get('/biaya'));
+$bySub = $post($sh, '/biaya/' . $byId . '/ajukan', ['_version' => $versionOf($sh->get('/biaya/' . $byId . '/ubah'))]);
+check('biaya/ajukan: menjadi MENUNGGU_VALIDASI, tercatat di audit, muncul di antrean Validasi; kas belum berubah', $bySub['status'] === 302 && $str('SELECT status FROM transactions WHERE id = ?', [$byId]) === 'MENUNGGU_VALIDASI' && $audits('EXPENSE_SUBMITTED') === 1 && $has($sh->get('/validasi'), 'BYA-'));
+check('biaya/ajukan: setelah diajukan tidak bisa diubah (dialihkan dengan peringatan) dan tombol Ubah/Ajukan hilang', $sh->get('/biaya/' . $byId . '/ubah')['status'] === 302 && !$has($sh->get('/biaya'), '/biaya/' . $byId . '/ubah'));
+$byApprove = $post($sh, '/validasi/' . $byId . '/setujui', ['_version' => $versionOf($sh->get('/transaksi/' . $byId))]);
+check('biaya/setujui: Superadmin menyetujui lewat Validasi; biaya disetujui masuk ke ringkasan keuangan', $byApprove['status'] === 302 && $str('SELECT status FROM transactions WHERE id = ?', [$byId]) === 'DISETUJUI' && $count('SELECT biaya FROM v_global_summary') >= 2000 && $count('SELECT selisih FROM v_global_summary') === 0);
+check('biaya/batal: biaya yang sudah disetujui tidak bisa dibatalkan dari sini (pesan), alasan kosong ditolak', $has($sh->get($loc($post($sh, '/biaya/' . $byId . '/batal', ['note' => 'Salah', '_version' => $versionOf($sh->get('/transaksi/' . $byId))]))), 'tidak bisa dibatalkan') || $str('SELECT status FROM transactions WHERE id = ?', [$byId]) === 'DISETUJUI');
+$byTok2 = $tokenOf($sh->get('/biaya/baru'));
+$post($sh, '/biaya', ['_form_id' => $byTok2, 'category' => 'Biaya batal uji', 'period_month_id' => $byMonth, 'amount' => '3.000', 'trx_date' => $today, 'action' => 'draft']);
+$byId2 = $count("SELECT MAX(id) FROM transactions WHERE type = 'BIAYA' AND doc_no LIKE 'BYA-%'");
+$byCan = $post($sh, '/biaya/' . $byId2 . '/batal', ['note' => 'Salah catat', '_version' => $versionOf($sh->get('/biaya/' . $byId2 . '/ubah'))]);
+check('biaya/batal: draft dibatalkan dengan alasan; tercatat di audit; id tak dikenal 404 untuk ajukan dan batal', $byCan['status'] === 302 && $str('SELECT status FROM transactions WHERE id = ?', [$byId2]) === 'DIBATALKAN' && $audits('EXPENSE_CANCELLED') === 1
+    && $post($sh, '/biaya/99999/ajukan', ['_version' => 'x'])['status'] === 404 && $post($sh, '/biaya/99999/batal', ['note' => 'x', '_version' => 'x'])['status'] === 404);
+
+$shuPage = $sh->get('/laporan/shu');
+check('shu/halaman: Superadmin melihat laporan: ringkasan Kas SHU, kolom per bulan, tombol cetak dan unduh; menu di Laporan', $shuPage['status'] === 200 && $has($shuPage, 'Jasa Pinjaman dan Kas SHU') && $has($shuPage, 'Sisa Kas SHU') && $has($shuPage, 'Untuk pengelola') && $has($shuPage, 'Saldo Kas SHU') && $has($shuPage, '/laporan/shu/unduh') && $has($shuPage, 'href="/laporan/shu"'));
+check('shu/cakupan: Admin dan Anggota 403 (angka seluruh koperasi), tanpa menu; tamu dialihkan ke login', $sa->get('/laporan/shu')['status'] === 403 && $sm->get('/laporan/shu')['status'] === 403 && !$has($sa->get('/'), 'href="/laporan/shu"') && (new Browser())->get('/laporan/shu')['status'] === 302);
+$shuDl = $sh->get('/laporan/shu/unduh');
+check('shu/unduh: Excel sah dan tercatat di audit; Admin 403', $shuDl['status'] === 200 && str_contains($shuDl['headers']['content-type'] ?? '', 'spreadsheetml') && str_starts_with($shuDl['body'], 'PK') && $sa->get('/laporan/shu/unduh')['status'] === 403);
+check('shu/saringan: periode ngawur aman (tanpa galat)', $sh->get('/laporan/shu?periode=zz')['status'] === 200 && $sh->get('/laporan/shu?periode[]=1')['status'] === 200);
+
 // -- cakupan route: setiap route yang terdaftar harus pernah diminta oleh suite ini
 $routerAll = new App\Core\Router();
 (require BASE_PATH . '/config/routes.php')($routerAll);
