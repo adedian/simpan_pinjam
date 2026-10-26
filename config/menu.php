@@ -48,6 +48,7 @@ return [
     ['label' => 'Sistem', 'items' => [
         ['label' => 'Profil', 'path' => '/profil', 'icon' => 'user', 'can' => ['profile.view'], 'phase' => 4, 'available' => true],
         ['label' => 'Pengaturan', 'path' => '/sistem/pengaturan', 'icon' => 'sliders', 'can' => ['settings.manage'], 'phase' => 5, 'available' => true],
+        ['label' => 'Komponen Bunga', 'path' => '/sistem/pembagian-bunga', 'icon' => 'chart', 'can' => ['settings.manage'], 'phase' => 21, 'available' => true],
         ['label' => 'Audit Log', 'path' => '/sistem/audit', 'icon' => 'shield', 'can' => ['audit.view'], 'phase' => 13, 'available' => true],
     ]],
 ];

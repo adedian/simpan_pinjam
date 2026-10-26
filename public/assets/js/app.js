@@ -55,6 +55,32 @@
         if (target instanceof Element && target.closest('[data-print]')) { window.print(); }
     });
 
+    // ---- Rentang cepat laporan: <select data-range-preset> mengisi <input data-range-from> dan <input data-range-to> ----
+    // Tanpa JS, server tetap memahami pilihan rentang cepat; ini hanya agar tanggal langsung terlihat.
+    document.querySelectorAll('[data-range-form]').forEach(function (form) {
+        var preset = form.querySelector('[data-range-preset]');
+        var from = form.querySelector('[data-range-from]');
+        var to = form.querySelector('[data-range-to]');
+        if (!preset || !from || !to) { return; }
+        function iso(d) {
+            var m = d.getMonth() + 1, day = d.getDate();
+            return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day;
+        }
+        preset.addEventListener('change', function () {
+            if (preset.value === '') { return; }   // "Rentang khusus": biarkan tanggal yang sudah diisi
+            var now = new Date(), y = now.getFullYear(), mo = now.getMonth(), r = null;
+            if (preset.value === 'bulan-ini') { r = [new Date(y, mo, 1), new Date(y, mo + 1, 0)]; }
+            else if (preset.value === 'bulan-lalu') { r = [new Date(y, mo - 1, 1), new Date(y, mo, 0)]; }
+            else if (preset.value === 'tahun-ini') { r = [new Date(y, 0, 1), new Date(y, 11, 31)]; }
+            else if (preset.value === 'tahun-lalu') { r = [new Date(y - 1, 0, 1), new Date(y - 1, 11, 31)]; }
+            from.value = r ? iso(r[0]) : '';
+            to.value = r ? iso(r[1]) : '';
+        });
+        [from, to].forEach(function (input) {
+            input.addEventListener('input', function () { preset.value = ''; });
+        });
+    });
+
     // ---- Tombol tampilkan/sembunyikan kata sandi (hanya muncul bila JS aktif) ----
     document.querySelectorAll('[data-password-toggle]').forEach(function (btn) {
         var input = document.getElementById(btn.getAttribute('data-password-toggle'));

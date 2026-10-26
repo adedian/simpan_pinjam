@@ -11,6 +11,10 @@ $s = $overdue['summary'];
         <a class="btn btn--secondary btn--sm" href="<?= e(url('/transaksi/angsuran/tunggakan')) ?>">Lihat semua</a>
     </div>
 
+    <?php if ($overdue['today']['installments'] > 0): ?>
+        <p class="alert alert--warning" role="note"><strong>Jatuh tempo hari ini:</strong> <?= (int) $overdue['today']['installments'] ?> cicilan (<?= (int) $overdue['today']['members'] ?> anggota), <?= e(money($overdue['today']['amount'])) ?>. Baru dihitung terlambat mulai besok bila belum dibayar.</p>
+    <?php endif; ?>
+
     <?php if ($s['installments'] === 0): ?>
         <p class="empty">Tidak ada tunggakan. Semua cicilan yang sudah jatuh tempo sudah dibayar.</p>
     <?php else: ?>

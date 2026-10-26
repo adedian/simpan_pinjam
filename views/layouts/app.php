@@ -10,6 +10,9 @@
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
     <?php /* app.js lebih dulu: ia mencatat HTML asli wilayah live sebelum grafik menggambar ke canvas */ ?>
     <script src="<?= e(asset('js/app.js')) ?>" defer></script>
+    <?php foreach ((array) ($scripts ?? []) as $extraScript): ?>
+        <script src="<?= e(asset($extraScript)) ?>" defer></script>
+    <?php endforeach; ?>
     <?php if (!empty($charts)): ?>
         <script src="<?= e(asset('vendor/chart.umd.min.js')) ?>" defer></script>
         <script src="<?= e(asset('js/charts.js')) ?>" defer></script>

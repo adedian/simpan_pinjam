@@ -9,6 +9,7 @@ use App\Controllers\HomeController;
 use App\Controllers\LiveController;
 use App\Controllers\MemberController;
 use App\Controllers\PayoutController;
+use App\Controllers\ProfitConfigController;
 use App\Controllers\ProfileController;
 use App\Controllers\PwaController;
 use App\Controllers\ReportController;
@@ -140,6 +141,10 @@ return static function (Router $r): void {
     $r->get('/sistem/audit', [AuditController::class, 'index'], ['auth', 'can:audit.view']);
     $r->get('/sistem/audit/unduh', [AuditController::class, 'download'], ['auth', 'can:audit.view']);
     $r->get('/sistem/audit/{id:\d+}', [AuditController::class, 'show'], ['auth', 'can:audit.view']);
+
+    // Komponen pembagian bunga (Superadmin): versi baru berlaku mulai bulan tertentu, versi lama tidak berubah.
+    $r->get('/sistem/pembagian-bunga', [ProfitConfigController::class, 'index'], ['auth', 'can:settings.manage']);
+    $r->post('/sistem/pembagian-bunga', [ProfitConfigController::class, 'store'], ['auth', 'can:settings.manage']);
 
     // Pengaturan koperasi
     $r->get('/sistem/pengaturan', [SettingController::class, 'index'], ['auth', 'can:settings.manage']);

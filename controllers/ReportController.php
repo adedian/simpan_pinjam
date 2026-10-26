@@ -83,7 +83,7 @@ final class ReportController extends BaseController
             'printedAt' => date('d-m-Y H:i'),
             'query'     => $this->activeQuery($request),
             'basePath'  => '/laporan/bagihasil',
-            'snapshotForm' => Gate::allows($user, 'profit.snapshot') && ($report['meta']['source'] ?? '') === \App\Services\ProfitReport::SOURCE_LIVE && $asOf !== null
+            'snapshotForm' => Gate::allows($user, 'profit.snapshot') && ($report['meta']['source'] ?? '') === \App\Services\ProfitReport::SOURCE_LIVE && $asOf !== null && ($report['meta']['window'] ?? null) === null
                 ? ['period' => $f['period'], 'as_of' => $asOf, 'exists' => $exists] : null,
             'voidForm' => Gate::allows($user, 'profit.snapshot') && ($report['meta']['source'] ?? '') === \App\Services\ProfitReport::SOURCE_SNAPSHOT && ($report['meta']['voided'] ?? null) === null
                 ? ['period' => $f['period'], 'snapshot' => (int) $report['meta']['snapshot_id'], 'as_of' => $asOf] : null,
@@ -326,9 +326,14 @@ final class ReportController extends BaseController
                 $opts[$p['id']] = $p['name'] . ($p['status'] === 'AKTIF' ? ' (aktif)' : '');
             }
             $out[] = ['name' => 'periode', 'label' => 'Periode', 'type' => 'select', 'options' => $opts, 'value' => (string) $f['period']];
-        } else {
-            $out[] = ['name' => 'dari', 'label' => 'Dari tanggal', 'type' => 'date', 'value' => $f['from']];
-            $out[] = ['name' => 'sampai', 'label' => 'Sampai tanggal', 'type' => 'date', 'value' => $f['to']];
+        }
+        // Rentang tanggal bebas untuk semua laporan: rentang cepat mengisi dua tanggal di bawahnya.
+        $out[] = ['name' => 'rentang', 'label' => 'Rentang cepat', 'type' => 'select', 'preset' => true, 'value' => (string) $f['preset'], 'options' => [
+            '' => 'Rentang khusus', 'bulan-ini' => 'Bulan ini', 'bulan-lalu' => 'Bulan lalu', 'tahun-ini' => 'Tahun ini', 'tahun-lalu' => 'Tahun lalu',
+        ]];
+        $out[] = ['name' => 'dari', 'label' => 'Tanggal mulai', 'type' => 'date', 'value' => $f['from']];
+        $out[] = ['name' => 'sampai', 'label' => 'Tanggal akhir', 'type' => 'date', 'value' => $f['to']];
+        if ($key === 'transaksi') {
             $out[] = ['name' => 'jenis', 'label' => 'Jenis', 'type' => 'select', 'options' => ['' => 'Semua jenis'] + Transaction::TYPE_LABELS, 'value' => $f['type']];
             $statuses = ['' => 'Semua status'];
             foreach (Transaction::STATUSES as $s) {
@@ -366,7 +371,7 @@ final class ReportController extends BaseController
     private function activeQuery(Request $request): array
     {
         $out = [];
-        foreach (['periode', 'regu', 'q', 'dari', 'sampai', 'jenis', 'anggota', 'snapshot'] as $k) {
+        foreach (['periode', 'regu', 'q', 'dari', 'sampai', 'rentang', 'jenis', 'anggota', 'snapshot'] as $k) {
             if ($request->queryStr($k) !== '') {
                 $out[$k] = $request->queryStr($k);
             }

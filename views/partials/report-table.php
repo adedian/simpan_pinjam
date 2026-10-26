@@ -15,11 +15,25 @@ $cell = static function (array $col, mixed $v): string {
     };
 };
 $numeric = static fn (array $c): bool => in_array($c['type'], ['money', 'int', 'pct'], true);
+// Lebar kolom mengikuti isi: kolom teks yang isinya pendek (regu, status, bulan, jenis) menyusut sebesar isinya dan tidak patah;
+// kolom teks panjang (nama, anggota) mengambil sisa lebar. Ambang berdasarkan isi sebenarnya, bukan angka tetap per laporan.
+$fit = [];
+foreach ($report['columns'] as $c) {
+    if ($numeric($c) || $c['type'] !== 'text') {
+        continue;
+    }
+    $max = 0;
+    foreach ($report['rows'] as $row) {
+        $max = max($max, mb_strlen((string) ($row[$c['key']] ?? '')));
+    }
+    $fit[$c['key']] = $max <= 18;
+}
+$cls = static fn (array $c, bool $isNum, array $fit): string => $isNum ? ' class="num"' : (!empty($fit[$c['key']]) ? ' class="fit"' : '');
 ?>
 <div class="table-wrap table-wrap--report">
     <table class="table table--report">
         <thead>
-            <tr><?php foreach ($report['columns'] as $c): ?><th<?= $numeric($c) ? ' class="num"' : '' ?>><?= e($c['label']) ?></th><?php endforeach; ?></tr>
+            <tr><?php foreach ($report['columns'] as $c): ?><th<?= $cls($c, $numeric($c), $fit) ?>><?= e($c['label']) ?></th><?php endforeach; ?></tr>
         </thead>
         <tbody>
         <?php if ($report['rows'] === []): ?>
@@ -28,7 +42,7 @@ $numeric = static fn (array $c): bool => in_array($c['type'], ['money', 'int', '
         <?php foreach ($report['rows'] as $row): ?>
             <tr>
                 <?php foreach ($report['columns'] as $c): $v = $row[$c['key']] ?? null; $href = $row['_links'][$c['key']] ?? null; ?>
-                    <td<?= $numeric($c) ? ' class="num"' : '' ?>><?= $href !== null ? '<a href="' . e(url($href)) . '">' . $cell($c, $v) . '</a>' : $cell($c, $v) ?></td>
+                    <td<?= $cls($c, $numeric($c), $fit) ?>><?= $href !== null ? '<a href="' . e(url($href)) . '">' . $cell($c, $v) . '</a>' : $cell($c, $v) ?></td>
                 <?php endforeach; ?>
             </tr>
         <?php endforeach; ?>

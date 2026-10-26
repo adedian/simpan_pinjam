@@ -78,15 +78,21 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 
 .nav__group + .nav__group { margin-top: 20px; }
 .nav__label {
-    padding: 0 12px 6px; font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px; padding: 0 12px 8px; font-size: 12px; font-weight: 700;
     letter-spacing: .1em; text-transform: uppercase; color: rgba(255, 255, 255, .62);
 }
+.nav__label::after { content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, .18); }
 .nav__item {
     display: flex; align-items: center; gap: 12px;
-    min-height: 42px; padding: 8px 14px; border-radius: 999px;
+    min-height: 44px; padding: 6px 14px 6px 8px; margin-bottom: 2px; border-radius: 999px;
     color: rgba(255, 255, 255, .92); text-decoration: none;
-    transition: background .15s ease;
+    transition: background .15s ease, transform .15s ease;
 }
+/* ikon dalam gelembung bulat: mudah dipindai, aktif menyala */
+.nav__item > .icon { box-sizing: content-box; width: 18px; height: 18px; padding: 6px; border-radius: 50%; background: rgba(255, 255, 255, .13); transition: background .15s ease; }
+.nav__item:hover > .icon { background: rgba(255, 255, 255, .24); }
+.nav__item.is-active > .icon { background: var(--brand-100); color: var(--brand-700); }
+.nav__item:not(.is-active):not(.is-disabled):hover { transform: translateX(2px); }
 .nav__item span { flex: 1; min-width: 0; }
 .nav__item:hover { background: rgba(255, 255, 255, .14); color: #fff; }
 .nav__item.is-active {
@@ -252,11 +258,12 @@ code { font-size: .9em; background: var(--brand-50); padding: 1px 5px; border-ra
 .field__error { font-size: 12.5px; color: var(--bad); }
 .field--error .input { border-color: var(--bad); }
 
-/* Tabel */
-.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; }
-.table { width: 100%; border-collapse: collapse; background: var(--surface); }
-.table th, .table td { padding: 13px 18px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.table th { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-700); background: #f4f0fe; white-space: nowrap; }
+/* Tabel: satu sistem untuk seluruh aplikasi. Lebar kolom mengikuti ISI (lihat "Sistem lebar kolom" di bawah): kolom pendek menyusut
+   sebesar isinya, kolom teks panjang mengambil sisa ruang. Jangan memberi lebar tetap per halaman. */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 14px; }
+.table th, .table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.table th { padding-top: 11px; padding-bottom: 11px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-700); background: #f4f0fe; white-space: nowrap; }
 .table tbody tr:last-child td { border-bottom: 0; }
 .table tbody tr:hover td { background: #faf8ff; }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -679,3 +686,87 @@ textarea.input { resize: vertical; min-height: 84px; }
     .sheet__table td { background: #fff; }
     .sheet__table--blue .sheet__sum td { background: var(--sheet-blue) !important; }
 }
+
+/* ---------- Komponen pembagian bunga (Sistem > Komponen Bunga) ---------- */
+.comp { display: grid; gap: 16px; margin-top: 14px; }
+.comp__head, .comp-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px 130px 112px; gap: 12px; align-items: start; }
+.comp__head { padding: 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-700); }
+.comp__rows { display: grid; gap: 10px; }
+.comp-row { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.comp-row[data-kind="DANA"] { background: var(--brand-50); }
+.comp-row--error { border-color: var(--bad); }
+.comp-row__kind { display: block; margin-top: 4px; font-size: 12.5px; color: var(--ink-3); }
+.comp-row__amount { align-self: center; font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); white-space: nowrap; }
+.comp-row__tools { align-self: center; display: flex; gap: 6px; justify-content: flex-end; }
+.icon-btn--danger { color: var(--bad); }
+.comp__add { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.comp__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.comp-chip { display: inline-block; margin: 0 6px 4px 0; padding: 2px 10px; border-radius: 999px; background: var(--brand-50); font-size: 13px; white-space: nowrap; }
+
+.alloc { padding: 12px 14px; border-radius: var(--radius-sm); background: var(--brand-50); border: 1px solid var(--line); }
+.alloc__bar { height: 8px; border-radius: 999px; background: var(--brand-100); overflow: hidden; }
+.alloc__bar > span { display: block; height: 100%; width: 0; background: var(--brand-500); border-radius: 999px; transition: width .2s; }
+.alloc__text { margin-top: 8px; font-size: 14px; }
+.alloc--ok .alloc__bar > span { background: var(--ok); }
+.alloc--ok { background: var(--ok-bg); }
+.alloc--warn .alloc__bar > span { background: #c98a14; }
+.alloc--warn { background: var(--warn-bg); }
+.alloc--bad .alloc__bar > span { background: var(--bad); }
+.alloc--bad { background: var(--bad-bg); }
+
+.components { margin: 8px 0 14px; }
+.components__title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+
+@media (max-width: 720px) {
+    .comp__head { display: none; }
+    .comp-row { grid-template-columns: minmax(0, 1fr) 120px; }
+    .comp-row__amount { text-align: left; grid-column: 1; }
+    .comp-row__tools { grid-column: 2; }
+}
+@media (prefers-reduced-motion: reduce) { .alloc__bar > span { transition: none; } }
+
+/* ---------- Sistem lebar kolom (Revisi 5) ----------
+   Tabel memakai tata letak otomatis. Kolom yang isinya pendek dan berpola tetap (tanggal, status, nomor, angka, aksi) diberi
+   width: 1% + nowrap: ia menyusut persis sebesar isinya, dan seluruh sisa lebar jatuh ke kolom teks (nama, keterangan).
+   Tidak ada lebar tetap per halaman. Kolom pendek ditandai: .num (angka), .fit / .nowrap (teks pendek), .cell-actions (aksi),
+   atau label data (data-label) untuk tabel bertumpuk. Di bawah 861px tabel bertumpuk (label: nilai) dan aturan ini tidak berlaku. */
+@media (min-width: 861px) {
+    .table .num, .table .fit, .table .nowrap, .table .cell-actions,
+    .table td[data-label="Status"], .table td[data-label="Tanggal"], .table td[data-label="Waktu"], .table td[data-label="Bulan"],
+    .table td[data-label="Jatuh tempo"], .table td[data-label="Jenis"], .table td[data-label="Tenor"], .table td[data-label="Cicilan ke"],
+    .table td[data-label="No."], .table td[data-label="No. dokumen"], .table td[data-label="No. Transaksi"], .table td[data-label="No. Anggota"],
+    .table td[data-label="No. Pinjaman"], .table td[data-label="Dokumen"], .table td[data-label="Terlambat"], .table td[data-label="Aksi"],
+    .table td[data-label="IP"], .table td[data-label="Peran"], .table td[data-label="Blok"], .table td[data-label="Dibuat"],
+    .table td[data-label="Diajukan"], .table td[data-label="Disusun"], .table td[data-label="Diterima"], .table td[data-label="Dibayar"],
+    .table td[data-label="Dibayarkan"], .table td[data-label="Berlaku mulai"], .table td[data-label="Terakhir masuk"],
+    .table td[data-label="Keputusan"], .table td[data-label="Regu"], .table td[data-label="Ketua"] { width: 1%; white-space: nowrap; }
+    /* kolom teks utama: tidak menyempit sampai tak terbaca, boleh turun baris */
+    .table td[data-label="Anggota"], .table td[data-label="Nama"] { min-width: 170px; }
+    .table td[data-label="Keterangan"], .table td[data-label="Catatan"], .table td[data-label="Keperluan"], .table td[data-label="Referensi"],
+    .table td[data-label="Objek"], .table td[data-label="Komponen"] { min-width: 160px; }
+}
+.table .fit { width: 1%; white-space: nowrap; }
+.table th.fit { white-space: nowrap; }
+.table--compact th, .table--compact td { padding-top: 8px; padding-bottom: 8px; }
+.table td .badge { vertical-align: middle; }
+
+/* Saringan dengan label terlihat (rentang tanggal laporan, per tanggal): label kecil di atas setiap isian */
+.toolbar__field { display: grid; gap: 3px; }
+.toolbar__label { padding-left: 8px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+.report .toolbar { align-items: end; }
+.report__period { margin: 4px 0 10px; }
+.toolbar .btn--primary { min-height: 44px; }
+
+/* Kartu: garis ungu kecil di depan judul, supaya halaman mudah dipindai */
+.card__title::before { content: ""; display: inline-block; width: 4px; height: 1em; margin-right: 10px; border-radius: 2px; background: var(--grad); vertical-align: -2px; }
+.stat { transition: transform .15s ease, box-shadow .15s ease; }
+.stat:hover { transform: translateY(-2px); box-shadow: 0 14px 24px -16px rgba(75, 46, 154, .5); }
+.table tbody tr:nth-child(even) td { background: #fdfcff; }
+.table tbody tr:hover td { background: #f6f2ff; }
+@media (prefers-reduced-motion: reduce) {
+    .nav__item, .nav__item > .icon, .stat { transition: none; }
+    .nav__item:not(.is-active):not(.is-disabled):hover, .stat:hover { transform: none; }
+}
+
+/* Atribut hidden selalu menang atas display bawaan komponen (mis. .field { display: grid }) */
+[hidden] { display: none !important; }

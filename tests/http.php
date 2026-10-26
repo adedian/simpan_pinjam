@@ -580,18 +580,18 @@ check('master/pengguna: aksi pengubah via GET tidak ada (405/404)', in_array($hd
 $st = $hd->get('/sistem/pengaturan');
 check('pengaturan: halaman tampil dengan nominal berformat', $st['status'] === 200 && $has($st, 'value="15.000.000"') && $has($st, 'Bunga per bulan'));
 $hd->post('/sistem/pengaturan', ['s' => ['interest_rate_pct_month' => '2.00', 'loan_tenor_min' => '1', 'loan_tenor_max' => '5', 'loan_max_amount' => '15.000.000', 'loan_max_active_per_member' => '0', 'saving_pokok_amount' => '50.000',
-    'profit_share_saver_pct' => '50', 'profit_share_borrower_pct' => '40', 'profit_share_shu_pct' => '20', 'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40']]);
+    'reserve_pct' => '5', 'shu_member_pct' => '70', 'shu_manager_pct' => '40']]);
 $bad = $hd->get('/sistem/pengaturan');
-check('pengaturan: jumlah bagi hasil salah ditolak dengan pesan jelas', $has($bad, 'harus berjumlah tepat 100%'));
-check('pengaturan: isian salah dipertahankan di formulir', $has($bad, 'value="50"'));
-check('pengaturan: tidak ada yang tersimpan saat ada galat', $count("SELECT setting_value FROM settings WHERE setting_key = 'profit_share_saver_pct'") === 40);
+check('pengaturan: jumlah pembagian SHU salah ditolak dengan pesan jelas', $has($bad, 'harus berjumlah tepat 100%'));
+check('pengaturan: isian salah dipertahankan di formulir', $has($bad, 'value="70"'));
+check('pengaturan: tidak ada yang tersimpan saat ada galat', $count("SELECT setting_value FROM settings WHERE setting_key = 'shu_member_pct'") === 60);
 $hd->post('/sistem/pengaturan', ['s' => ['interest_rate_pct_month' => '2,5', 'loan_tenor_min' => '1', 'loan_tenor_max' => '4', 'loan_max_amount' => '20.000.000', 'loan_max_active_per_member' => '0', 'saving_pokok_amount' => '50.000',
-    'profit_share_saver_pct' => '40', 'profit_share_borrower_pct' => '40', 'profit_share_shu_pct' => '20', 'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40', 'withdrawals_enabled' => '1']]);
+    'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40', 'withdrawals_enabled' => '1']]);
 $ok = $hd->get('/sistem/pengaturan');
 check('pengaturan: perubahan valid tersimpan dan diberitahukan', $has($ok, '4 pengaturan disimpan') && $has($ok, 'value="2.50"') && $has($ok, 'value="20.000.000"'));
 check('pengaturan: tercatat di audit per kunci', $audits('SETTING_UPDATED') === 4);
 $hd->post('/sistem/pengaturan', ['s' => ['interest_rate_pct_month' => '2,5', 'loan_tenor_min' => '1', 'loan_tenor_max' => '4', 'loan_max_amount' => '20.000.000', 'loan_max_active_per_member' => '0', 'saving_pokok_amount' => '50.000',
-    'profit_share_saver_pct' => '40', 'profit_share_borrower_pct' => '40', 'profit_share_shu_pct' => '20', 'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40', 'withdrawals_enabled' => '1']]);
+    'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40', 'withdrawals_enabled' => '1']]);
 check('pengaturan: kirim ulang tanpa perubahan -> "Tidak ada perubahan", tanpa audit baru', $has($hd->get('/sistem/pengaturan'), 'Tidak ada perubahan') && $audits('SETTING_UPDATED') === 4);
 
 // ---- 12g. transaksi simpanan (Phase 6) ----
@@ -920,7 +920,7 @@ $r = $putPay($sa, ['description' => 'Bayar <i>pertemuan</i>']);
 $pid = $count("SELECT MAX(id) FROM transactions WHERE type = 'ANGSURAN'");
 check('angsuran/draft: berhasil, dialihkan ke detail, DRAFT, atas nama pembuat dan regunya', $r['status'] === 302 && $loc($r) === '/transaksi/' . $pid && $payCount() === 1 && $str('SELECT status FROM transactions WHERE id = ?', [$pid]) === 'DRAFT' && $count('SELECT team_id FROM transactions WHERE id = ?', [$pid]) === 1);
 $d = $sa->get('/transaksi/' . $pid);
-check('angsuran/detail: nomor ANG-, jumlah, dan pembagian ke cicilan paling tua dulu (1.766.666 + 233.334)', $d['status'] === 200 && $has($d, 'ANG-' . date('Y') . '-000001') && $has($d, 'Pembagian ke cicilan') && $has($d, 'Rp 1.766.666') && $has($d, 'Rp 233.334') && $has($d, 'April 2026') && $has($d, 'Mei 2026'));
+check('angsuran/detail: nomor ANG-, jumlah, dan pembagian ke cicilan paling tua dulu (1.766.666 + 233.334)', $d['status'] === 200 && $has($d, 'ANG-' . date('Y') . '-000001') && $has($d, 'Pembagian ke cicilan') && $has($d, 'Rp 1.766.666') && $has($d, 'Rp 233.334') && $has($d, '30-04-2026') && $has($d, '31-05-2026'));
 check('angsuran/detail: pembagian menaut ke pinjaman, jumlah total 2.000.000, penjelasan belum memengaruhi saldo', $has($d, 'href="/transaksi/' . $lid . '"') && $has($d, $loanDoc) && $has($d, 'Belum memengaruhi saldo') && $has($d, 'Rp 2.000.000'));
 check('angsuran/detail: keterangan ber-HTML tampil sebagai teks', $has($d, '&lt;i&gt;pertemuan&lt;/i&gt;') && !$has($d, '<i>pertemuan'));
 check('angsuran/draft: alokasi di database berjumlah persis nominal; audit PAYMENT_CREATED', $count('SELECT SUM(amount) FROM installment_payments WHERE transaction_id = ?', [$pid]) === 2000000 && $audits('PAYMENT_CREATED') === 1);
@@ -2156,6 +2156,42 @@ check('bagihasil/saringan: periode, regu, dan pencarian; nilai ngawur aman (tanp
 $dl = $sh->get('/laporan/bagihasil/unduh');
 check('bagihasil/unduh: hanya Superadmin (report.export); berkas Excel sah dan tercatat di audit; Ketua Regu dan Anggota 403', $dl['status'] === 200 && str_contains($dl['headers']['content-type'] ?? '', 'spreadsheetml') && str_starts_with($dl['body'], 'PK') && $sa->get('/laporan/bagihasil/unduh')['status'] === 403 && $sm->get('/laporan/bagihasil/unduh')['status'] === 403 && $audits('REPORT_EXPORTED') >= 1);
 
+// -- Komponen pembagian bunga (Sistem > Komponen Bunga)
+$kp = $sh->get('/sistem/pembagian-bunga');
+check('komponen/web: Superadmin membuka halaman: komponen tetap, riwayat versi, total otomatis', $kp['status'] === 200 && $has($kp, 'Komponen pembagian bunga') && $has($kp, 'Kas SHU') && $has($kp, 'Riwayat versi') && $has($kp, 'data-comp-form') && $has($kp, 'profit-config.js'));
+check('komponen/web: Ketua Regu dan Anggota 403; tamu dialihkan ke halaman masuk', $sa->get('/sistem/pembagian-bunga')['status'] === 403 && $sm->get('/sistem/pembagian-bunga')['status'] === 403 && (new Browser())->get('/sistem/pembagian-bunga')['status'] === 302);
+$kpPost = fn (Browser $br, array $form): array => $br->post('/sistem/pembagian-bunga', $form);
+$kpOk = [
+    ['code' => 'PENABUNG', 'name' => 'Penabung', 'pct' => '30'], ['code' => 'PEMINJAM', 'name' => 'Peminjam', 'pct' => '30'], ['code' => 'SHU', 'name' => 'Kas SHU', 'pct' => '20'],
+    ['code' => '', 'name' => 'Dana <b>Uji</b>', 'pct' => '10'], ['code' => '', 'name' => 'Dana Operasional', 'pct' => '10'],
+];
+$before = $count('SELECT COUNT(*) FROM profit_share_configs');
+$sh->get('/sistem/pembagian-bunga');
+check('komponen/web: POST tanpa token CSRF = 419; Ketua Regu dan Anggota 403 tanpa menyimpan', $sh->post('/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '2099-01'], false)['status'] === 419
+    && $post($sa, '/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '2099-01'])['status'] === 403 && $post($sm, '/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '2099-01'])['status'] === 403
+    && $count('SELECT COUNT(*) FROM profit_share_configs') === $before);
+$bad90 = $kpOk;
+$bad90[4]['pct'] = '0';
+$badR = $post($sh, '/sistem/pembagian-bunga', ['items' => $bad90, 'effective_from' => '2099-01', '_form_id' => $tokenOf($sh->get('/sistem/pembagian-bunga'))]);
+$badPage = $sh->get($loc($badR));
+check('komponen/web: total 90% ditolak dengan pesan "tersisa 10%", isian dipertahankan, tidak ada versi baru', $badR['status'] === 302 && $has($badPage, 'tersisa 10%') && $has($badPage, 'value="Dana Operasional"') && $count('SELECT COUNT(*) FROM profit_share_configs') === $before);
+$noName = $kpOk;
+$noName[3]['name'] = '';
+$nnR = $post($sh, '/sistem/pembagian-bunga', ['items' => $noName, 'effective_from' => '2099-01', '_form_id' => $tokenOf($sh->get('/sistem/pembagian-bunga'))]);
+check('komponen/web: nama komponen dana kosong tapi persen terisi ditolak; bulan berlaku kosong ditolak', $has($sh->get($loc($nnR)), 'nama komponen wajib diisi')
+    && $has($sh->get($loc($post($sh, '/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '', '_form_id' => $tokenOf($sh->get('/sistem/pembagian-bunga'))]))), 'Bulan berlaku wajib diisi') && $count('SELECT COUNT(*) FROM profit_share_configs') === $before);
+$fid = $tokenOf($sh->get('/sistem/pembagian-bunga'));
+$okR = $post($sh, '/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '2099-01', 'note' => 'Uji <i>web</i>', '_form_id' => $fid]);
+$okPage = $sh->get($loc($okR));
+check('komponen/web: versi valid tersimpan (lima komponen), berlaku Januari 2099, tercatat di audit, pesan sukses', $okR['status'] === 302 && $count('SELECT COUNT(*) FROM profit_share_configs') === $before + 1
+    && $count("SELECT COUNT(*) FROM profit_share_config_items i JOIN profit_share_configs c ON c.id = i.config_id WHERE c.effective_from = '2099-01-01'") === 5 && $audits('PROFIT_CONFIG_CHANGED') === 1 && $has($okPage, 'Komponen pembagian bunga disimpan') && $has($okPage, 'Januari 2099'));
+check('komponen/web: nama dan catatan di-escape (aman dari XSS) di riwayat', $has($okPage, 'Dana &lt;b&gt;Uji&lt;/b&gt;') && !$has($okPage, 'Dana <b>Uji</b>') && !$has($okPage, '<i>web</i>'));
+$dupR = $sh->post('/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '2099-02', '_token' => $sh->csrf(), '_form_id' => $fid]);
+check('komponen/web: kirim ganda dengan token formulir yang sama tidak membuat versi kedua', $dupR['status'] === 302 && $count('SELECT COUNT(*) FROM profit_share_configs') === $before + 1);
+$earlyR = $post($sh, '/sistem/pembagian-bunga', ['items' => $kpOk, 'effective_from' => '2098-12', '_form_id' => $tokenOf($sh->get('/sistem/pembagian-bunga'))]);
+check('komponen/web: bulan berlaku sebelum versi terakhir ditolak (hanya-tambah)', $has($sh->get($loc($earlyR)), 'Bulan berlaku paling awal') && $count('SELECT COUNT(*) FROM profit_share_configs') === $before + 1);
+check('komponen/web: menu Sistem memuat "Komponen Bunga" untuk Superadmin, tidak untuk Ketua Regu', $has($sh->get('/sistem/pengaturan'), 'Komponen Bunga') && !$has($sa->get('/'), 'Komponen Bunga'));
+check('komponen/web: Pengaturan tidak lagi memuat persentase penabung/peminjam/Kas SHU', !$has($sh->get('/sistem/pengaturan'), 'Untuk penabung'));
 // -- Snapshot lewat web
 $snapPage = $sh->get('/laporan/bagihasil');
 $snapToken = preg_match('/name="_token" value="([^"]+)"/', $snapPage['body'], $tm) === 1 ? $tm[1] : '';

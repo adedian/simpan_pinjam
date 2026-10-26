@@ -277,7 +277,7 @@ check('pengaturan: kunci tak dikenal ditolak', (function (): bool {
     return false;
 })());
 $try = fn (array $o) => SettingsService::validate($o + $vals)[0];
-check('pengaturan: bagi hasil harus berjumlah 100', isset($try(['profit_share_saver_pct' => '50'])['profit_share_shu_pct']));
+check('pengaturan: kunci lama persentase bagi hasil diabaikan (tidak lagi dikelola di sini)', !isset($try(['profit_share_saver_pct' => '50'])['profit_share_shu_pct']));
 check('pengaturan: SHU harus berjumlah 100', isset($try(['shu_member_pct' => '70'])['shu_manager_pct']));
 check('pengaturan: tenor min > max ditolak', isset($try(['loan_tenor_min' => '6'])['loan_tenor_max']));
 check('pengaturan: tenor maks > 12 ditolak', isset($try(['loan_tenor_max' => '13'])['loan_tenor_max']));

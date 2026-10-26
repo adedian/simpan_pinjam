@@ -36,6 +36,8 @@ final class Audit
         'LOAN_UPDATED'        => ['Pinjaman diubah', 'transaksi'],
         'LOAN_SUBMITTED'      => ['Pinjaman diajukan', 'transaksi'],
         'LOAN_CANCELLED'      => ['Pinjaman dibatalkan', 'transaksi'],
+        'LOAN_SCHEDULE_DATED' => ['Tanggal jatuh tempo ditetapkan', 'transaksi'],
+        'PROFIT_CONFIG_CHANGED' => ['Komponen pembagian bunga diubah', 'pengaturan'],
         'PAYMENT_CREATED'     => ['Angsuran dicatat', 'transaksi'],
         'PAYMENT_UPDATED'     => ['Angsuran diubah', 'transaksi'],
         'PAYMENT_REALLOCATED' => ['Pembagian angsuran dihitung ulang', 'transaksi'],

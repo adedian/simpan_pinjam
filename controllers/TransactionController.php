@@ -166,12 +166,16 @@ final class TransactionController extends BaseController
     {
         $user    = Auth::user();
         $level   = \App\Services\Scope::level($user, 'transaction');
-        $filters = ['q' => mb_substr(clean_text($request->query['q'] ?? ''), 0, 60), 'team' => $level === \App\Services\Scope::ALL ? max(0, (int) ($request->query['regu'] ?? 0)) : 0];
+        $per     = $request->queryStr('per');
+        $perDate = \DateTime::createFromFormat('!Y-m-d', $per);
+        $per     = $perDate !== false && $perDate->format('Y-m-d') === $per && $per < date('Y-m-d') ? $per : '';   // hanya tanggal pemeriksaan yang sudah lewat; kosong = sekarang
+        $filters = ['q' => mb_substr(clean_text($request->query['q'] ?? ''), 0, 60), 'team' => $level === \App\Services\Scope::ALL ? max(0, (int) ($request->query['regu'] ?? 0)) : 0, 'asof' => $per];
         $items   = \App\Services\OverdueService::items($user, $filters);
         return $this->view($request, 'transaksi/overdue', [
             'title'    => 'Tunggakan Pinjaman',
             'items'    => $items,
             'summary'  => \App\Services\OverdueService::summary($items),
+            'today'    => $per === '' ? \App\Services\OverdueService::dueToday($user) : null,
             'filters'  => $filters,
             'teams'    => $level === \App\Services\Scope::ALL ? \App\Services\ReportService::teams() : [],
             'showTeam' => $level === \App\Services\Scope::ALL,

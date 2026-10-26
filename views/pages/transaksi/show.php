@@ -78,12 +78,13 @@ $statusText = static fn (string $s): string => strip_tags(status_badge($s));
     <h2 class="card__title">Jadwal cicilan</h2>
     <div class="table-wrap">
         <table class="table table--stack">
-            <thead><tr><th>Cicilan ke</th><th>Jatuh tempo</th><th class="num">Tagihan</th><?php if ($loanInfo['balance'] !== null): ?><th class="num">Terbayar</th><th class="num">Sisa</th><?php endif; ?></tr></thead>
+            <thead><tr><th>Cicilan ke</th><th>Jatuh tempo</th><?php if ($loanInfo['balance'] !== null): ?><th>Status</th><?php endif; ?><th class="num">Tagihan</th><?php if ($loanInfo['balance'] !== null): ?><th class="num">Terbayar</th><th class="num">Sisa</th><?php endif; ?></tr></thead>
             <tbody>
             <?php foreach ($loanInfo['installments'] as $in): ?>
                 <tr>
                     <td data-label="Cicilan ke"><?= (int) $in['seq'] ?></td>
-                    <td data-label="Jatuh tempo"><?= e(month_label((string) $in['due_month'])) ?></td>
+                    <td data-label="Jatuh tempo"><?= $isCounted && $loanInfo['balance'] !== null ? e(date_id((string) $in['due_date'])) : e(month_label((string) $in['due_month'])) ?></td>
+                    <?php if ($loanInfo['balance'] !== null): ?><td data-label="Status"><?= due_badge(\App\Services\DueSchedule::status((string) $in['due_date'], (int) $in['remaining_amount'])) ?></td><?php endif; ?>
                     <td data-label="Tagihan" class="num"><?= e(money((int) $in['amount_due'])) ?></td>
                     <?php if ($loanInfo['balance'] !== null): ?>
                     <td data-label="Terbayar" class="num"><?= e(money((int) $in['paid_amount'])) ?></td>
@@ -94,7 +95,7 @@ $statusText = static fn (string $s): string => strip_tags(status_badge($s));
             </tbody>
         </table>
     </div>
-    <?php if (!$isCounted): ?><p class="muted">Jadwal ini baru berlaku setelah pencairan disetujui.</p><?php endif; ?>
+    <?php if (!$isCounted): ?><p class="muted">Jadwal ini baru berlaku setelah pencairan disetujui. Tanggal jatuh tempo ditetapkan saat itu: tanggal disetujui ditambah n bulan (hari yang sama tiap bulan); kolom di atas masih menampilkan bulan siklus.</p><?php endif; ?>
 </section>
 
 <?php endif; ?>
@@ -113,7 +114,7 @@ $statusText = static fn (string $s): string => strip_tags(status_badge($s));
                 <tr>
                     <td data-label="Pinjaman"><a href="<?= e(url('/transaksi/' . (int) $al['loan_transaction_id'])) ?>"><?= e($al['loan_no']) ?></a></td>
                     <td data-label="Cicilan ke"><?= (int) $al['seq'] ?></td>
-                    <td data-label="Jatuh tempo"><?= e(month_label((string) $al['due_month'])) ?></td>
+                    <td data-label="Jatuh tempo"><?= e(date_id((string) $al['due_date'])) ?></td>
                     <td data-label="Dibayar" class="num"><?= e(money((int) $al['amount'])) ?></td>
                 </tr>
             <?php endforeach; ?>

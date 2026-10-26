@@ -10,8 +10,11 @@ use App\Core\Database;
  * dihitung dari transaksi DISETUJUI, jadwal pinjaman, dan penyesuaian rencana (loan_plan_adjustments).
  *
  * Dasar (Phase 1, analisis §3.2): bunga yang DITERIMA pada bulan k+1 dibagi menurut keadaan AKHIR bulan k.
- *   pool penabung  = profit_share_saver_pct (40%) x bunga bulan k+1;  porsi = saldo tabungan / total saldo semua anggota
- *   pool peminjam  = profit_share_borrower_pct (40%) x bunga bulan k+1; porsi = sisa dasar anggota / total sisa dasar
+ *   pool penabung  = persentase komponen PENABUNG (bawaan 40%) x bunga bulan k+1;  porsi = saldo tabungan / total saldo semua anggota
+ *   pool peminjam  = persentase komponen PEMINJAM (bawaan 40%) x bunga bulan k+1; porsi = sisa dasar anggota / total sisa dasar
+ *   Persentase diambil dari ProfitConfig menurut BULAN BUNGA DITERIMA (versi konfigurasi yang berlaku bulan itu), jadi mengubah
+ *   persentase/nama komponen tidak mengubah bulan-bulan yang sudah lewat. Komponen lain (Kas SHU, dana) hanya dijumlahkan ('funds').
+ *   Parameter $window membatasi siklus pada bulan bunga diterima tertentu (rentang tanggal laporan).
  *   cadangan reserve_pct (5%) dipotong dari keduanya, kecuali anggota reserve_exempt.
  *   Bunga dalam satu pembayaran = pembayaran x total bunga / total tagihan pinjaman (bunga flat, pro rata).
  *   Tiap baris formulir dibulatkan ke rupiah; formulir menjumlahkan baris yang sudah dibulatkan.
@@ -48,7 +51,7 @@ final class ProfitShare
      *   cycles?:array<int,array<string,mixed>>
      * }
      */
-    public static function compute(int $periodId, ?bool $excel = null, bool $detail = false): array
+    public static function compute(int $periodId, ?bool $excel = null, bool $detail = false, ?array $window = null): array
     {
         $excel ??= self::FOLLOW_EXCEL;
         $months = Database::select('SELECT id, month_date FROM period_months WHERE period_id = ? ORDER BY month_date', [$periodId]);
@@ -60,9 +63,7 @@ final class ProfitShare
         }
         $n = count($months);
 
-        $saverPct    = (int) SettingsService::get('profit_share_saver_pct') / 100;
-        $borrowerPct = (int) SettingsService::get('profit_share_borrower_pct') / 100;
-        $reservePct  = (float) SettingsService::get('reserve_pct') / 100;
+        $reservePct  = (float) SettingsService::get('reserve_pct') / 100;   // persentase penabung/peminjam/dana: ProfitConfig, per bulan bunga diterima
 
         $exempt = [];
         foreach (Database::select('SELECT id, reserve_exempt FROM members WHERE deleted_at IS NULL') as $r) {
@@ -186,12 +187,32 @@ final class ProfitShare
 
         $poolTotal = 0.0;
         $undistributed = 0.0;
+        $totalInterest = 0.0;                       // jumlah bunga diterima pada siklus yang dihitung (sumber pembagian)
+        $funds = [];                                // kode komponen => jumlah (sesuai persentase versi yang berlaku tiap bulan)
+        $configsUsed = [];                          // id versi => versi, yang dipakai
         $cycles = [];                               // rincian per siklus (hanya bila $detail)
         $rows = [];                                 // member => [siklus => rincian]
         for ($k = 1; $k < $n; $k++) {
             $base = $interest[$k + 1];
             if ($base <= 0) {
                 continue;
+            }
+            // Jendela bulan bunga diterima (rentang tanggal laporan): siklus di luar jendela tidak ikut.
+            $interestMonth = (string) $months[$k]['month_date'];
+            if ($window !== null && ($interestMonth < $window['from'] || $interestMonth > $window['to'])) {
+                continue;
+            }
+            $cfg = ProfitConfig::forMonth($interestMonth);
+            $fr = ProfitConfig::fractions($cfg);
+            $saverPct = $fr['saver'];
+            $borrowerPct = $fr['borrower'];
+            $configsUsed[$cfg['id']] = $cfg;
+            $totalInterest += $base;
+            $funds['PENABUNG'] = ($funds['PENABUNG'] ?? 0.0) + $base * $saverPct;
+            $funds['PEMINJAM'] = ($funds['PEMINJAM'] ?? 0.0) + $base * $borrowerPct;
+            $funds['SHU'] = ($funds['SHU'] ?? 0.0) + $base * $fr['shu'];
+            foreach ($fr['dana'] as $code => $f) {
+                $funds[$code] = ($funds[$code] ?? 0.0) + $base * $f;
             }
             $poolTotal += $base * ($saverPct + $borrowerPct);
             $out = $excel && $k >= self::EXCEL_BASIS_SWITCH_CYCLE ? $outI : $outP;
@@ -208,7 +229,7 @@ final class ProfitShare
             if ($detail) {
                 $cycles[$k] = [
                     'k' => $k, 'month' => (string) $months[$k - 1]['month_date'], 'interest_month' => (string) $months[$k]['month_date'], 'interest' => $base,
-                    'saver_pool' => $base * $saverPct, 'borrower_pool' => $base * $borrowerPct, 'sum_savings' => $sumS, 'sum_basis' => $sumB,
+                    'saver_pool' => $base * $saverPct, 'borrower_pool' => $base * $borrowerPct, 'config_id' => $cfg['id'], 'saver_pct' => $saverPct, 'borrower_pct' => $borrowerPct, 'shu_pct' => $fr['shu'], 'sum_savings' => $sumS, 'sum_basis' => $sumB,
                     'basis' => $excel && $k >= self::EXCEL_BASIS_SWITCH_CYCLE ? 'bunga' : 'pokok', 'saver_paid' => $saverPaid, 'borrower_paid' => $borrowerPaid,
                 ];
             }
@@ -254,6 +275,7 @@ final class ProfitShare
         $result = [
             'period_id' => $periodId, 'as_of' => $asOf > 0 ? (string) $months[$asOf - 1]['month_date'] : null, 'months' => $n, 'excel' => $excel,
             'interest_pool' => $poolTotal, 'undistributed' => $undistributed, 'members' => $members,
+            'total_interest' => $totalInterest, 'funds' => $funds, 'configs' => array_values($configsUsed),
         ];
         if ($detail) {
             $result['cycles'] = $cycles;

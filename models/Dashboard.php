@@ -159,7 +159,7 @@ final class Dashboard
 
     /**
      * Ringkasan pribadi seorang anggota: tabungan per jenis, pinjaman, dan cicilan berikutnya.
-     * @return array{savings:int,byKind:array<string,int>,loans:array<int,array<string,mixed>>,outstanding:int,overdue:int,next:?array{due_month:string,remaining:int}}
+     * @return array{savings:int,byKind:array<string,int>,loans:array<int,array<string,mixed>>,outstanding:int,overdue:int,next:?array{due_month:string,due_date:string,remaining:int}}
      */
     public static function member(int $memberId): array
     {
@@ -183,14 +183,14 @@ final class Dashboard
 
         $overdue = (int) (Database::select('SELECT COALESCE(SUM(remaining_amount), 0) AS s FROM v_overdue_installments WHERE member_id = ?', [$memberId])[0]['s'] ?? 0);
         $next = Database::select(
-            "SELECT s.due_month, s.remaining_amount FROM v_installment_status s JOIN v_loan_balances b ON b.loan_id = s.loan_id
-             WHERE b.member_id = ? AND s.remaining_amount > 0 ORDER BY s.due_month, s.loan_id, s.seq LIMIT 1",
+            "SELECT s.due_month, s.due_date, s.remaining_amount FROM v_installment_status s JOIN v_loan_balances b ON b.loan_id = s.loan_id
+             WHERE b.member_id = ? AND s.remaining_amount > 0 ORDER BY s.due_date, s.loan_id, s.seq LIMIT 1",
             [$memberId]
         )[0] ?? null;
 
         return [
             'savings' => $savings, 'byKind' => $byKind, 'loans' => $loans, 'outstanding' => (int) $outstanding, 'overdue' => $overdue,
-            'next' => $next === null ? null : ['due_month' => (string) $next['due_month'], 'remaining' => (int) $next['remaining_amount']],
+            'next' => $next === null ? null : ['due_month' => (string) $next['due_month'], 'due_date' => (string) $next['due_date'], 'remaining' => (int) $next['remaining_amount']],
         ];
     }
 

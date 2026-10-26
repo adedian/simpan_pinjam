@@ -73,6 +73,15 @@ final class ValidationService
             $trx = self::lockPending($pdo, $actor, $id, $version);
             self::assertApprovable($pdo, $trx);
             TransactionFlow::move($pdo, $request, $actor, $trx, 'DISETUJUI', $note, 'TRX_APPROVED');
+            // Tanggal pinjaman diterima = tanggal disetujui; dari sini jadwal jatuh tempo per tanggal ditetapkan (sekali).
+            if ($trx['type'] === 'PENCAIRAN_PINJAMAN' && $trx['reverses_id'] === null) {
+                $approvedOn = DueSchedule::approvalDate();
+                $dates      = DueSchedule::stamp($pdo, (int) $trx['id'], $approvedOn);
+                if ($dates !== []) {
+                    AuditLog::record($request, $actor, 'LOAN_SCHEDULE_DATED', 'transaction', (int) $trx['id'], (string) $trx['doc_no'], null,
+                        ['approved_on' => $approvedOn, 'first_due' => $dates[0], 'last_due' => $dates[count($dates) - 1], 'installments' => count($dates)], $pdo);
+                }
+            }
         });
     }
 

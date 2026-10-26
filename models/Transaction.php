@@ -183,7 +183,7 @@ final class Transaction
         return [
             'loan'         => $loan,
             'installments' => Database::select(
-                'SELECT seq, due_month, amount_due, paid_amount, remaining_amount FROM v_installment_status WHERE loan_id = ? ORDER BY seq',
+                'SELECT seq, due_month, due_date, amount_due, paid_amount, remaining_amount FROM v_installment_status WHERE loan_id = ? ORDER BY seq',
                 [(int) $loan['id']]
             ),
             'balance'      => Database::select('SELECT paid, outstanding, outstanding_principal, loan_status FROM v_loan_balances WHERE transaction_id = ?', [$transactionId])[0] ?? null,
@@ -198,7 +198,7 @@ final class Transaction
     public static function allocations(int $transactionId): array
     {
         return Database::select(
-            'SELECT ip.amount, li.seq, pm.month_date AS due_month, lt.id AS loan_transaction_id, lt.doc_no AS loan_no
+            'SELECT ip.amount, li.seq, pm.month_date AS due_month, COALESCE(li.due_date, LAST_DAY(pm.month_date)) AS due_date, lt.id AS loan_transaction_id, lt.doc_no AS loan_no
              FROM installment_payments ip
              JOIN loan_installments li ON li.id = ip.installment_id
              JOIN loans l ON l.id = li.loan_id
@@ -220,12 +220,13 @@ final class Transaction
     public static function dueByMember(?array $user): array
     {
         [$scope, $params] = Scope::memberCondition($user, 'm.id', 'transaction');
-        $cur = date('Y-m-01');
+        $today    = date('Y-m-d');
+        $monthEnd = date('Y-m-t');
         return Database::select(
             "SELECT m.id, m.member_no, m.name, tl.name AS team_name,
                     SUM(s.remaining_amount) AS outstanding,
-                    SUM(IF(s.due_month <= ?, s.remaining_amount, 0)) AS due_now,
-                    SUM(IF(s.due_month < ?, s.remaining_amount, 0)) AS overdue,
+                    SUM(IF(s.due_date <= ?, s.remaining_amount, 0)) AS due_now,
+                    SUM(IF(s.due_date < ?, s.remaining_amount, 0)) AS overdue,
                     (SELECT COALESCE(SUM(pt.amount), 0) FROM transactions pt
                       WHERE pt.member_id = m.id AND pt.type = 'ANGSURAN' AND pt.status = 'MENUNGGU_VALIDASI' AND pt.reverses_id IS NULL AND pt.deleted_at IS NULL) AS pending
              FROM v_installment_status s
@@ -236,7 +237,7 @@ final class Transaction
              WHERE s.remaining_amount > 0 AND m.deleted_at IS NULL AND ({$scope})
              GROUP BY m.id, m.member_no, m.name, tl.name
              ORDER BY overdue DESC, due_now DESC, m.name",
-            array_merge([$cur, $cur], $params)
+            array_merge([$monthEnd, $today], $params)
         );
     }
 

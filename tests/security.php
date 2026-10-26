@@ -56,7 +56,8 @@ $sqlReviewed = [
     'models/Validation.php' => ['$from', '$whereSql', '$pager'],
     'services/ExcelImporter.php' => ['$table'],           // daftar tabel konstan, hanya CLI
     'services/LoanService.php' => ['$tenor'],             // (int) $data['tenor']
-    'services/OverdueService.php' => ['implode'],         // $where = potongan tetap + Scope::memberCondition (berparameter); tak ada nilai pengguna
+    'services/OverdueService.php' => ['$late', '$pend', '$source', '$scope'],   // $where = potongan tetap + Scope::memberCondition (berparameter); $late/$pend/$source = potongan SQL konstan yang dipilih server (tanggal pemeriksaan lewat parameter ?)
+    'services/AsOf.php' => ['self', '$in'],            // self::PAID_PER_LOAN = konstanta SQL; $in = deretan id yang di-intval; tanggal lewat parameter ?
     'services/ReportService.php' => ['$column', '$mIn', '$pIn', '$in', '$from', '$w', '$scope', 'implode', '$mScope'],   // kolom divalidasi regex; IN() dari intval
     'services/MemberSheet.php' => ['$scope', '$in'],      // $scope dari ReportService::memberCondition (potongan tetap + parameter ?); $in = deretan "?,?" dari jumlah id
     'services/Scope.php' => ['$memberColumn'],           // divalidasi regex ^[a-z_][a-z0-9_]*(\.[a-z_][a-z0-9_]*)?$
@@ -297,7 +298,7 @@ $outputPart = static function (string $expr): string {
 // Ekspresi mentah yang sudah ditinjau (berkas|ekspresi dengan spasi dirapatkan). Penutup: closure di bawah meng-escape sendiri.
 $viewReviewed = [
     'home.php' => ['$stat(', '$chart(', '$count('],   // closure di awal home.php: e() pada label dan money() pada angka bulat; chart.php meng-escape sendiri
-    'report-table.php' => ['$cell('],                 // $cell memakai e() pada setiap cabang
+    'report-table.php' => ['$cell(', '$cls('],        // $cell memakai e() pada setiap cabang; $cls hanya mengembalikan atribut class literal
     'audit-show.php' => ['$a === null ?'],           // percabangan: keluaran hanya e($a) atau literal; $b/$a hanya syarat
     'field.php' => ['$attrs'],                        // $attrs disusun dari e() dan (int) di atas berkas
     'sidebar.php' => ['$count'],                      // (int)
@@ -319,7 +320,7 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(ROOT . '/v
         $out = $stripCalls($outputPart($e), ['e', 'money', 'month_label']);
         $out = (string) preg_replace('/\(int\)\s*\$\w+(?:\[[^\]]*\])*|\(int\)\s*\([^)]*\)|\(float\)\s*\$\w+(?:\[[^\]]*\])*/', '§', $out);
         $out = (string) preg_replace(['/\'(?:[^\'\\\\]|\\\\.)*\'/', '/"(?:[^"\\\\]|\\\\.)*"/'], ['§', '§'], $out);
-        $out = $stripCalls($out, ['count', 'status_badge', 'View::include', 'Audit::label', 'array_sum']);
+        $out = $stripCalls($out, ['count', 'status_badge', 'due_badge', 'View::include', 'Audit::label', 'array_sum']);
         if (!preg_match('/\$\w+/', $out)) {
             continue;
         }

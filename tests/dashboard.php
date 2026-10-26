@@ -191,7 +191,9 @@ check('pribadi: anggota tanpa pinjaman: kosong dan tanpa cicilan berikutnya', $m
 
 // tunggakan: pinjaman Beta jatuh tempo bulan lalu-nya menunggak bila belum dibayar -> buat pinjaman bulan lalu-2 untuk anggota 5
 [$e, $d] = LoanService::parse(['member_id' => 5, 'period_month_id' => $mid[$m2], 'principal' => '300.000', 'tenor' => '2', 'trx_date' => $m2, 'confirm_duplicate' => '1']);
+\App\Services\DueSchedule::pretendApprovalDate(date('Y-m-t', strtotime($m2)));   // pinjaman lama: jatuh tempo mengikuti tanggal disetujui (akhir m2 -> akhir m1, akhir m0)
 ok($head, LoanService::create(req(), $beta, $d, true));
+\App\Services\DueSchedule::pretendApprovalDate(null);
 check('tunggakan: cicilan yang jatuh tempo sebelum bulan ini belum dibayar tampil sebagai tunggakan', Dashboard::member(5)['overdue'] === 156000 && Dashboard::teams()[1]['overdue'] === 156000 && array_column(Dashboard::teamMembers(2), null, 'name')['Anggota Beta 2']['overdue'] === 156000);
 
 // ======================= transaksi terbaru dan pekerjaan sendiri =======================

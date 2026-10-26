@@ -55,6 +55,20 @@ try {
     echo $counts === [] ? "  (belum ada)\n" : '  ' . implode(', ', array_map(fn ($k, $v) => "{$k}: {$v}", array_keys($counts), $counts)) . "\n";
 
     $issues = $pdo->query('SELECT issue, reference, detail FROM v_integrity_issues ORDER BY issue, reference')->fetchAll();
+
+    // Pemeriksaan tambahan (migrasi 012-013), hanya bila tabelnya sudah ada.
+    $has = static fn (string $t): bool => (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = '{$t}'")->fetchColumn() === 1;
+    if ($has('profit_share_configs')) {
+        foreach ($pdo->query('SELECT c.id, c.effective_from, COALESCE(SUM(i.pct_hundredths), 0) AS total, SUM(i.kind = "PENABUNG") AS a, SUM(i.kind = "PEMINJAM") AS b, SUM(i.kind = "SHU") AS s FROM profit_share_configs c LEFT JOIN profit_share_config_items i ON i.config_id = c.id GROUP BY c.id, c.effective_from')->fetchAll() as $c) {
+            if ((int) $c['total'] !== 10000 || (int) $c['a'] !== 1 || (int) $c['b'] !== 1 || (int) $c['s'] !== 1) {
+                $issues[] = ['issue' => 'KONFIGURASI_BUNGA_TIDAK_VALID', 'reference' => (string) $c['effective_from'], 'detail' => 'total ' . (int) $c['total'] . ' (harus 10000), penabung/peminjam/SHU = ' . (int) $c['a'] . '/' . (int) $c['b'] . '/' . (int) $c['s']];
+            }
+        }
+    }
+    // Pinjaman disetujui yang sebagian cicilannya bertanggal dan sebagian tidak = penetapan tanggal tidak lengkap.
+    foreach ($pdo->query("SELECT ln.id, t.doc_no FROM loan_installments li JOIN loans ln ON ln.id = li.loan_id JOIN transactions t ON t.id = ln.transaction_id AND t.status = 'DISETUJUI' GROUP BY ln.id, t.doc_no HAVING COUNT(li.due_date) > 0 AND COUNT(li.due_date) < COUNT(*)")->fetchAll() as $p) {
+        $issues[] = ['issue' => 'JADWAL_TANGGAL_TIDAK_LENGKAP', 'reference' => (string) $p['doc_no'], 'detail' => 'sebagian cicilan bertanggal jatuh tempo, sebagian tidak'];
+    }
     echo "\n== MASALAH INTEGRITAS ==\n";
     if ($issues === []) {
         echo "  Tidak ada. Semua pemeriksaan lolos.\n";

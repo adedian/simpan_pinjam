@@ -153,7 +153,7 @@ $count    = static fn (string $label, int $value, string $hint = ''): string =>
     <div class="stats">
         <?= $stat('Saldo tabungan', $me['savings']) ?>
         <?= $stat('Sisa pinjaman', $me['outstanding'], $me['loans'] === [] ? 'Tidak ada pinjaman berlaku' : '') ?>
-        <?= $stat('Cicilan berikutnya', $me['next']['remaining'] ?? 0, $me['next'] !== null ? 'Jatuh tempo ' . month_label($me['next']['due_month']) : 'Tidak ada tagihan') ?>
+        <?= $stat('Cicilan berikutnya', $me['next']['remaining'] ?? 0, $me['next'] !== null ? 'Jatuh tempo ' . date_id($me['next']['due_date']) : 'Tidak ada tagihan') ?>
         <?= $stat('Tunggakan', $me['overdue'], $me['overdue'] > 0 ? 'Cicilan lewat jatuh tempo' : 'Tidak ada tunggakan') ?>
     </div>
 </section>

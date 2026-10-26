@@ -51,18 +51,21 @@ final class ProfitReport
      * Data bagi hasil yang sudah dinormalkan (live atau snapshot). Snapshot yang bukan milik periode ini dianggap tidak ada.
      * @return array<string,mixed>|null null bila snapshot tidak ditemukan
      */
-    public static function dataset(int $periodId, int $snapshotId = 0): ?array
+    public static function dataset(int $periodId, int $snapshotId = 0, ?array $window = null): ?array
     {
         if ($snapshotId <= 0) {
-            $r = ProfitShare::compute($periodId, null, true);
+            $r = ProfitShare::compute($periodId, null, true, $window);
             $mode = $r['excel'] ? 'EXCEL' : 'ATURAN';
+            $last = $r['configs'] === [] ? ProfitConfig::forMonth($r['as_of'] ?? date('Y-m-01')) : $r['configs'][count($r['configs']) - 1];
+            $fr   = ProfitConfig::fractions($last);
             return [
                 'source' => self::SOURCE_LIVE, 'snapshot_id' => null, 'period_id' => $periodId, 'as_of' => $r['as_of'], 'mode' => $mode,
-                'calculated_at' => date('Y-m-d H:i:s'), 'status' => 'Perkiraan (dihitung langsung)',
-                'saver_pct' => (int) SettingsService::get('profit_share_saver_pct'), 'borrower_pct' => (int) SettingsService::get('profit_share_borrower_pct'),
-                'shu_pct' => (int) SettingsService::get('profit_share_shu_pct'), 'reserve_pct' => (float) SettingsService::get('reserve_pct'),
+                'calculated_at' => date('Y-m-d H:i:s'), 'status' => $window === null ? 'Perkiraan (dihitung langsung)' : 'Perkiraan (dihitung langsung, rentang ' . month_label($window['from']) . ' s.d. ' . month_label($window['to']) . ')',
+                'saver_pct' => (int) round($fr['saver'] * 100), 'borrower_pct' => (int) round($fr['borrower'] * 100),
+                'shu_pct' => (int) round($fr['shu'] * 100), 'reserve_pct' => (float) SettingsService::get('reserve_pct'),
                 'interest_pool' => $r['interest_pool'], 'undistributed' => $r['undistributed'], 'members' => $r['members'], 'cycles' => $r['cycles'] ?? [],
-                'voided' => null,
+                'voided' => null, 'window' => $window,
+                'components' => self::components($r['funds'], $r['configs'], (float) $r['total_interest']), 'total_interest' => (int) round($r['total_interest']),
             ];
         }
         $s = Database::select('SELECT * FROM profit_share_snapshots WHERE id = ? AND period_id = ?', [$snapshotId, $periodId])[0] ?? null;
@@ -84,13 +87,77 @@ final class ProfitReport
                 'rows' => json_decode((string) ($l['detail_json'] ?? '[]'), true) ?: [],
             ];
         }
+        $cycles = json_decode((string) ($s['cycles_json'] ?? '[]'), true) ?: [];
+        $stored = $s['components_json'] === null ? null : json_decode((string) $s['components_json'], true);
+        if (is_array($stored) && isset($stored['funds'], $stored['configs'])) {
+            $components = self::components($stored['funds'], $stored['configs'], (float) ($stored['total_interest'] ?? 0));
+            $totalInterest = (int) round((float) ($stored['total_interest'] ?? 0));
+        } else {
+            // Snapshot lama (sebelum migrasi 013): tiga komponen dari persentase yang tersimpan; jumlahnya dari rincian siklus.
+            $totalInterest = (float) array_sum(array_column($cycles, 'interest'));
+            $pool = ['PENABUNG' => (float) array_sum(array_column($cycles, 'saver_pool')), 'PEMINJAM' => (float) array_sum(array_column($cycles, 'borrower_pool'))];
+            $legacy = ['items' => [
+                ['code' => 'PENABUNG', 'kind' => 'PENABUNG', 'name' => 'Penabung', 'pct' => (int) $s['saver_pct'] * 100],
+                ['code' => 'PEMINJAM', 'kind' => 'PEMINJAM', 'name' => 'Peminjam', 'pct' => (int) $s['borrower_pct'] * 100],
+                ['code' => 'SHU', 'kind' => 'SHU', 'name' => 'Kas SHU', 'pct' => (int) $s['shu_pct'] * 100],
+            ], 'effective_from' => (string) $s['as_of_month']];
+            $components = self::components($pool + ['SHU' => $totalInterest - array_sum($pool)], [$legacy], $totalInterest);
+            $totalInterest = (int) round($totalInterest);
+        }
         return [
             'source' => self::SOURCE_SNAPSHOT, 'snapshot_id' => (int) $s['id'], 'period_id' => $periodId, 'as_of' => (string) $s['as_of_month'], 'mode' => (string) $s['mode'],
             'calculated_at' => (string) $s['created_at'], 'status' => $voided === null ? 'Snapshot ditetapkan' : 'Snapshot DIBATALKAN',
             'saver_pct' => (int) $s['saver_pct'], 'borrower_pct' => (int) $s['borrower_pct'], 'shu_pct' => (int) $s['shu_pct'], 'reserve_pct' => (float) $s['reserve_pct'],
             'interest_pool' => (float) $s['interest_pool'], 'undistributed' => (float) $s['undistributed'], 'members' => $members,
-            'cycles' => json_decode((string) ($s['cycles_json'] ?? '[]'), true) ?: [], 'note' => $s['note'], 'voided' => $voided,
+            'cycles' => $cycles, 'note' => $s['note'], 'voided' => $voided, 'window' => null,
+            'components' => $components, 'total_interest' => $totalInterest,
         ];
+    }
+
+    /**
+     * Rincian komponen pembagian untuk tampilan: nama (terbaru), persentase (berurutan bila berubah antar versi), dan nominal.
+     * Nominal dibulatkan ke rupiah; Kas SHU menyerap selisih pembulatan sehingga jumlah semua komponen = total bunga sumber.
+     * @param array<string,float> $funds kode => jumlah mentah @param array<int,array<string,mixed>> $configs versi yang dipakai
+     * @return array<int,array{code:string,kind:string,name:string,pct:string,amount:int}>
+     */
+    public static function components(array $funds, array $configs, float $totalInterest): array
+    {
+        $order = [];
+        $name  = [];
+        $kind  = [];
+        $pcts  = [];
+        foreach ($configs as $cfg) {
+            foreach ($cfg['items'] as $pos => $i) {
+                $order[$i['code']] ??= $pos;
+                $name[$i['code']] = $i['name'];
+                $kind[$i['code']] = $i['kind'];
+                $txt = ProfitConfig::fmtPct((int) $i['pct']);
+                if (!in_array($txt, $pcts[$i['code']] ?? [], true)) {
+                    $pcts[$i['code']][] = $txt;
+                }
+            }
+        }
+        asort($order);
+        $total = (int) round($totalInterest);
+        $amounts = [];
+        $used = 0;
+        foreach (array_keys($order) as $code) {
+            if ($kind[$code] === 'SHU') {
+                continue;
+            }
+            $amounts[$code] = (int) round((float) ($funds[$code] ?? 0.0));
+            $used += $amounts[$code];
+        }
+        foreach (array_keys($order) as $code) {
+            if ($kind[$code] === 'SHU') {
+                $amounts[$code] = $total - $used;
+            }
+        }
+        $out = [];
+        foreach (array_keys($order) as $code) {
+            $out[] = ['code' => $code, 'kind' => $kind[$code], 'name' => $name[$code], 'pct' => implode(' → ', $pcts[$code]), 'amount' => $amounts[$code]];
+        }
+        return $out;
     }
 
     // ------------------------------------------------------------------ laporan tabel
@@ -112,10 +179,12 @@ final class ProfitReport
             ['key' => 'total', 'label' => 'Total bagi hasil', 'type' => 'money'],
         ];
         $base = ['key' => 'bagihasil', 'title' => 'Report Pembagian Bunga', 'subtitle' => '', 'columns' => $columns, 'rows' => [], 'totals' => null, 'note' => '', 'summary' => [], 'meta' => null];
-        $data = self::dataset((int) $f['period'], (int) ($f['snap'] ?? 0));
+        $window = self::windowOf($f);
+        // Rentang tanggal = perhitungan langsung untuk bunga yang diterima pada bulan-bulan itu; snapshot tidak dipotong rentang.
+        $data = self::dataset((int) $f['period'], $window === null ? (int) ($f['snap'] ?? 0) : 0, $window);
         $fallback = $data === null;
         if ($fallback) {
-            $data = self::dataset((int) $f['period'], 0);   // snapshot bukan milik periode ini: tampilkan perhitungan langsung
+            $data = self::dataset((int) $f['period'], 0, $window);   // snapshot bukan milik periode ini: tampilkan perhitungan langsung
         }
 
         $leaders = [];
@@ -160,13 +229,14 @@ final class ProfitReport
         $base['rows'] = $rows;
         $base['totals'] = $rows === [] ? null : $totals;
         $base['note'] = ($fallback ? 'Snapshot yang dipilih tidak ada pada periode ini, jadi yang tampil perhitungan langsung. ' : '') . self::voidText($data) . self::ruleText($data);
-        $base['meta'] = ['source' => $data['source'], 'snapshot_id' => $data['snapshot_id'], 'as_of' => $data['as_of'], 'mode' => $data['mode'], 'status' => $data['status'], 'when' => $when, 'global' => $global, 'voided' => $data['voided']];
+        $base['meta'] = ['source' => $data['source'], 'snapshot_id' => $data['snapshot_id'], 'as_of' => $data['as_of'], 'mode' => $data['mode'], 'status' => $data['status'], 'when' => $when, 'global' => $global, 'voided' => $data['voided'], 'components' => $global ? $data['components'] : array_map(static fn (array $c): array => ['amount' => 0] + $c, array_map(static fn (array $c): array => array_diff_key($c, ['amount' => 1]), $data['components'])),
+            'total_interest' => $global ? $data['total_interest'] : 0, 'window' => $data['window'] ?? null];
 
         // Ringkasan. Angka GLOBAL (pool seluruh koperasi) hanya untuk cakupan seluruh koperasi; yang lain melihat jumlah barisnya saja.
         $base['summary'] = [
             ['label' => 'Total bagi hasil ' . ($global && (int) $f['team'] === 0 && (string) $f['q'] === '' ? 'seluruh anggota' : 'yang ditampilkan'), 'value' => $totals['total'], 'hint' => 'Penabung + peminjam, setelah cadangan'],
-            ['label' => 'Bagi hasil penabung', 'value' => $totals['saver'], 'hint' => $data['saver_pct'] . '% dari bunga, menurut saldo tabungan'],
-            ['label' => 'Bagi hasil peminjam', 'value' => $totals['borrower'], 'hint' => $data['borrower_pct'] . '% dari bunga, menurut dasar pinjaman'],
+            ['label' => 'Bagi hasil ' . self::componentName($data, 'PENABUNG', 'penabung'), 'value' => $totals['saver'], 'hint' => self::componentPct($data, 'PENABUNG') . ' dari bunga, menurut saldo tabungan'],
+            ['label' => 'Bagi hasil ' . self::componentName($data, 'PEMINJAM', 'peminjam'), 'value' => $totals['borrower'], 'hint' => self::componentPct($data, 'PEMINJAM') . ' dari bunga, menurut dasar pinjaman'],
             ['label' => 'Cadangan ' . rtrim(rtrim(number_format($reservePct, 2, ',', '.'), '0'), ',') . '%', 'value' => $totals['reserve'], 'hint' => 'Dipotong dari bagi hasil (kecuali anggota yang dikecualikan)'],
         ];
         if ($global) {
@@ -182,11 +252,52 @@ final class ProfitReport
         return $base;
     }
 
+    /**
+     * Jendela bulan bunga diterima dari rentang tanggal laporan (null = tanpa rentang). Pembagian bunga dihitung per bulan
+     * bunga diterima, jadi rentang memilih bulan-bulan itu (bulan penuh yang beririsan dengan rentang).
+     * @param array<string,mixed> $f @return array{from:string,to:string}|null
+     */
+    public static function windowOf(array $f): ?array
+    {
+        $r = ReportService::rangeOf($f);
+        return $r === null ? null : ['from' => substr($r['from'], 0, 7) . '-01', 'to' => substr($r['to'], 0, 7) . '-01'];
+    }
+
+    /** Nama komponen menurut kode jenis (nama terbaru), atau cadangan bila tidak ada. @param array<string,mixed> $data */
+    private static function componentName(array $data, string $kind, string $fallback): string
+    {
+        foreach ($data['components'] ?? [] as $c) {
+            if ($c['kind'] === $kind) {
+                return mb_strtolower($c['name']);
+            }
+        }
+        return $fallback;
+    }
+
+    /** Persentase komponen (teks) menurut jenis. @param array<string,mixed> $data */
+    private static function componentPct(array $data, string $kind): string
+    {
+        foreach ($data['components'] ?? [] as $c) {
+            if ($c['kind'] === $kind) {
+                return $c['pct'];
+            }
+        }
+        return '0%';
+    }
+
     /** Teks aturan yang dipakai (ditampilkan di bawah laporan dan ikut ke Excel). @param array<string,mixed> $data */
     private static function ruleText(array $data): string
     {
-        $txt = 'Dasar: bunga yang diterima bulan berikutnya dibagi menurut keadaan akhir bulan sebelumnya: ' . $data['saver_pct'] . '% untuk penabung (porsi = saldo tabungan anggota / total saldo) dan '
-            . $data['borrower_pct'] . '% untuk peminjam (porsi = dasar pinjaman anggota / total dasar), ' . $data['shu_pct'] . '% ke Kas SHU. Cadangan '
+        $parts = [];
+        foreach ($data['components'] as $c) {
+            $parts[] = $c['pct'] . ' ' . $c['name'] . ' (' . match ($c['kind']) {
+                'PENABUNG' => 'porsi anggota = saldo tabungan / total saldo',
+                'PEMINJAM' => 'porsi anggota = dasar pinjaman / total dasar',
+                'SHU'      => 'Kas SHU',
+                default    => 'dana, tidak dibagi per anggota',
+            } . ')';
+        }
+        $txt = 'Dasar: bunga yang diterima bulan berikutnya dibagi menurut keadaan akhir bulan sebelumnya, dengan komponen: ' . implode('; ', $parts) . '. Cadangan '
             . rtrim(rtrim(number_format((float) $data['reserve_pct'], 2, ',', '.'), '0'), ',') . '% dipotong dari bagi hasil anggota kecuali yang dikecualikan; setiap baris dibulatkan ke rupiah. ';
         if ($data['mode'] === 'EXCEL') {
             $txt .= 'Mengikuti perhitungan Excel koperasi: cicilan dianggap dibayar sesuai jadwal (bukan pembayaran nyata), dasar peminjam = sisa pokok sampai Mei lalu sisa bunga sejak Juni, '
@@ -211,7 +322,7 @@ final class ProfitReport
     /** Query string saringan aktif untuk tautan ke rincian. @param array<string,mixed> $f */
     public static function queryFor(array $f): string
     {
-        $q = array_filter(['periode' => (string) $f['period'], 'snapshot' => (int) ($f['snap'] ?? 0) > 0 ? (string) $f['snap'] : ''], static fn (string $v): bool => $v !== '');
+        $q = array_filter(['periode' => (string) $f['period'], 'snapshot' => (int) ($f['snap'] ?? 0) > 0 ? (string) $f['snap'] : '', 'dari' => (string) ($f['from'] ?? ''), 'sampai' => (string) ($f['to'] ?? '')], static fn (string $v): bool => $v !== '');
         return $q === [] ? '' : '?' . http_build_query($q);
     }
 
@@ -228,7 +339,8 @@ final class ProfitReport
         if ($visible === []) {
             return null;
         }
-        $data = self::dataset((int) $f['period'], (int) ($f['snap'] ?? 0)) ?? self::dataset((int) $f['period'], 0);
+        $window = self::windowOf($f);
+        $data = self::dataset((int) $f['period'], $window === null ? (int) ($f['snap'] ?? 0) : 0, $window) ?? self::dataset((int) $f['period'], 0, $window);
         if ($data === null) {
             return null;
         }
@@ -283,6 +395,11 @@ final class ProfitReport
         foreach (Database::select('SELECT member_id, team_id FROM member_team_assignments WHERE valid_to IS NULL') as $a) {
             $team[(int) $a['member_id']] = (int) $a['team_id'];
         }
+        $last = $r['configs'] === [] ? ProfitConfig::forMonth((string) $r['as_of']) : $r['configs'][count($r['configs']) - 1];
+        $fr   = ProfitConfig::fractions($last);
+        // kolom persentase lama berupa bilangan bulat; persentase tepat ada di components_json
+        $pcts = ['saver' => (int) round($fr['saver'] * 100), 'borrower' => (int) round($fr['borrower'] * 100), 'shu' => (int) round($fr['shu'] * 100)];
+        $componentsJson = json_encode(['configs' => $r['configs'], 'funds' => $r['funds'], 'total_interest' => $r['total_interest']], JSON_UNESCAPED_UNICODE);
         $gross = 0.0;
         $reserve = 0.0;
         $saver = 0;
@@ -295,7 +412,7 @@ final class ProfitReport
             $borrower += $m['borrower'];
         }
 
-        return Database::transaction(static function (\PDO $pdo) use ($request, $actor, $periodId, $note, $r, $team, $gross, $reserve, $saver, $borrower, $reservePct): int {
+        return Database::transaction(static function (\PDO $pdo) use ($request, $actor, $periodId, $note, $r, $team, $gross, $reserve, $saver, $borrower, $reservePct, $pcts, $componentsJson): int {
             // Kunci baris periode: dua penetapan bersamaan untuk periode yang sama berjalan bergantian, jadi pemeriksaan ganda di bawah andal
             // (indeks unik diganti di migrasi 010 supaya snapshot yang dibatalkan boleh ditetapkan ulang).
             $pdo->prepare('SELECT id FROM periods WHERE id = ? FOR UPDATE')->execute([$periodId]);
@@ -308,11 +425,10 @@ final class ProfitReport
                 throw RuleViolation::field('_form', 'Snapshot untuk data per ' . month_label((string) $r['as_of']) . ' sudah ada. Pembagian tidak boleh ditetapkan dua kali untuk keadaan data yang sama.');
             }
             $pdo->prepare(
-                'INSERT INTO profit_share_snapshots (period_id, as_of_month, mode, saver_pct, borrower_pct, shu_pct, reserve_pct, interest_pool, undistributed, gross_total, reserve_total, saver_total, borrower_total, cycles_json, note, created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                'INSERT INTO profit_share_snapshots (period_id, as_of_month, mode, saver_pct, borrower_pct, shu_pct, components_json, reserve_pct, interest_pool, undistributed, gross_total, reserve_total, saver_total, borrower_total, cycles_json, note, created_by)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
             )->execute([
-                $periodId, $r['as_of'], $r['excel'] ? 'EXCEL' : 'ATURAN', (int) SettingsService::get('profit_share_saver_pct'), (int) SettingsService::get('profit_share_borrower_pct'),
-                (int) SettingsService::get('profit_share_shu_pct'), $reservePct, (int) round($r['interest_pool']), (int) round($r['undistributed']), (int) round($gross), (int) round($reserve),
+                $periodId, $r['as_of'], $r['excel'] ? 'EXCEL' : 'ATURAN', $pcts['saver'], $pcts['borrower'], $pcts['shu'], $componentsJson, $reservePct, (int) round($r['interest_pool']), (int) round($r['undistributed']), (int) round($gross), (int) round($reserve),
                 $saver, $borrower, json_encode($r['cycles'], JSON_UNESCAPED_UNICODE), $note, $actor['id'],
             ]);
             $id = (int) $pdo->lastInsertId();

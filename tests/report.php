@@ -227,7 +227,9 @@ check('angsuran: per bulan anggota 4 (520.000 di bulan ini), 5 (204.000 di bulan
 
 // tunggakan: pinjaman anggota 2 (Alfa) cair di m2, tenor 2 -> cicilan 1 jatuh tempo m1 (menunggak)
 [$e, $d] = LoanService::parse(['member_id' => 2, 'period_month_id' => $mid[$m2], 'principal' => '300.000', 'tenor' => '2', 'trx_date' => $m2, 'confirm_duplicate' => '1']);
+\App\Services\DueSchedule::pretendApprovalDate(date('Y-m-t', strtotime($m2)));   // jatuh tempo mengikuti tanggal disetujui (akhir m2 -> akhir m1 menunggak, akhir m0 belum)
 ok($periksa, LoanService::create(req(), $purwati, $d, true));
+\App\Services\DueSchedule::pretendApprovalDate(null);
 $ang2 = ReportService::build('angsuran', $head, f());
 check('angsuran: tunggakan cicilan yang jatuh tempo sebelum bulan ini tampil (156.000)', row($ang2, 'no', 'AGT-002')['overdue'] === 156000 && $ang2['totals']['overdue'] === 156000);
 
@@ -359,6 +361,82 @@ check('kartu: saldo per bulan kumulatif berakhir di saldo tabungan; jadwal cicil
 check('kartu: seluruh transaksi anggota termasuk pembalik', count($card['transactions']['rows']) >= 5 && count(array_filter($card['transactions']['rows'], static fn ($r) => $r['amount'] < 0)) === 1);
 check('kartu: di luar cakupan = null (Ketua Regu Beta tak bisa membuka anggota Alfa; Anggota tak bisa anggota lain; tidak ada = null)', ReportService::statement($beta, 2) === null && ReportService::statement($ang4, 5) === null && ReportService::statement($head, 99999) === null && ReportService::statement($yatim, 4) === null);
 check('kartu: Ketua Regu membuka anggota regunya dan Anggota membuka dirinya', ReportService::statement($beta, 4) !== null && ReportService::statement($ang4, 4) !== null);
+
+// ======================= rentang tanggal bebas =======================
+$m2end = date('Y-m-t', strtotime($m2));
+$m1end = date('Y-m-t', strtotime($m1));
+$m0end = date('Y-m-t', strtotime($m0));
+$oracle = static fn (string $type, string $from, string $to): int => (int) one('SELECT COALESCE(SUM(sign * amount), 0) FROM v_ledger WHERE type = ? AND trx_date BETWEEN ? AND ?', [$type, $from, $to]);
+
+$fr = ReportService::filters(['rentang' => 'bulan-ini'], $head);
+check('rentang: "bulan ini" diisi server (awal dan akhir bulan berjalan) dan menjadi rentang aktif', $fr['from'] === $m0 && $fr['to'] === $m0end && $fr['preset'] === 'bulan-ini' && ReportService::rangeOf($fr) !== null);
+check('rentang cepat: bulan lalu, tahun ini, tahun lalu', ReportService::presetRange('bulan-lalu', '2026-10-26') === ['2026-09-01', '2026-09-30'] && ReportService::presetRange('tahun-ini', '2026-10-26') === ['2026-01-01', '2026-12-31']
+    && ReportService::presetRange('tahun-lalu', '2026-10-26') === ['2025-01-01', '2025-12-31'] && ReportService::presetRange('bulan-lalu', '2026-01-15') === ['2025-12-01', '2025-12-31']);
+check('rentang: tanggal yang diisi menang atas rentang cepat', ReportService::filters(['rentang' => 'tahun-lalu', 'dari' => '2026-03-01'], $head)['preset'] === '' && ReportService::filters(['rentang' => 'tahun-lalu', 'dari' => '2026-03-01'], $head)['from'] === '2026-03-01');
+$bad = ReportService::filters(['dari' => '2026-05-01', 'sampai' => '2026-03-01'], $head);
+check('rentang: mulai setelah akhir ditolak dengan pesan, rentang diabaikan (kembali ke periode)', $bad['from'] === '' && $bad['to'] === '' && $bad['range_error'] !== '' && ReportService::rangeOf($bad) === null);
+check('rentang: rentang cepat ngawur diabaikan; tanpa rentang laporan memakai periode', ReportService::filters(['rentang' => 'ngawur'], $head)['preset'] === '' && ReportService::rangeOf(f()) === null);
+check('rentang: label periode aktif menyebut tanggal', str_contains(ReportService::periodLabel(f(['from' => $m2, 'to' => $m1end])), date_id($m2)) && str_contains(ReportService::periodLabel(f()), 'Periode'));
+
+// simpanan: hanya bulan di rentang; total = orakel SQL independen
+$rs = ReportService::build('simpanan', $head, f(['from' => $m2, 'to' => $m2end]));
+check('rentang simpanan: satu bulan kalender, hanya transaksi bulan itu (anggota 4 = 300.000), total sama dengan orakel', count(array_filter($rs['columns'], static fn ($c) => str_starts_with($c['key'], 'c'))) === 1
+    && row($rs, 'no', 'AGT-004')['total'] === 300000 && $rs['totals']['total'] === $oracle('SIMPANAN', $m2, $m2end));
+$rs2 = ReportService::build('simpanan', $head, f(['from' => $m1, 'to' => $m0end]));
+check('rentang simpanan: dua bulan, bulan di luar rentang (m2) tidak ikut, total = orakel', count(array_filter($rs2['columns'], static fn ($c) => str_starts_with($c['key'], 'c'))) === 2
+    && row($rs2, 'no', 'AGT-005')['total'] === 400000 && $rs2['totals']['total'] === $oracle('SIMPANAN', $m1, $m0end));
+check('rentang simpanan: saldo tabungan pada tanggal akhir rentang masa lalu = saldo sampai tanggal itu, bukan saldo sekarang',
+    row($rs, 'no', 'AGT-004')['savings'] === (int) one("SELECT COALESCE(SUM(savings_delta), 0) FROM v_ledger WHERE member_id = 4 AND trx_date <= ?", [$m2end]) && row($rs, 'no', 'AGT-004')['savings'] !== row($sim2, 'no', 'AGT-004')['savings']);
+// inklusif: transaksi tepat pada tanggal akhir ikut, sehari sesudahnya tidak
+rawApproved('SIMPANAN', 5, 2, 70000, $mid[$m2], $m2end);
+rawApproved('SIMPANAN', 5, 2, 90000, $mid[$m1], $m1);
+$ledgerSnap = (string) json_encode(Database::select('SELECT transaction_id, trx_date, amount, sign FROM v_ledger ORDER BY transaction_id'));
+$txSnap = (int) one('SELECT COUNT(*) FROM transactions');
+$edge = ReportService::build('simpanan', $head, f(['from' => $m2, 'to' => $m2end]));
+check('rentang: transaksi pada TANGGAL AKHIR ikut terhitung (inklusif); transaksi hari berikutnya tidak', row($edge, 'no', 'AGT-005')['total'] === 70000 && $edge['totals']['total'] === $oracle('SIMPANAN', $m2, $m2end));
+check('rentang: tanggal mulai juga inklusif (transaksi tanggal 1 bulan m1 ikut pada rentang yang dimulai m1)', row(ReportService::build('simpanan', $head, f(['from' => $m1, 'to' => $m1end])), 'no', 'AGT-005')['total'] >= 90000);
+check('rentang: rentang kosong menampilkan baris dengan nol (periode tanpa transaksi), bukan galat', ReportService::build('simpanan', $head, f(['from' => '2020-01-01', 'to' => '2020-01-31']))['totals']['total'] === 0);
+check('rentang: hanya tanggal mulai atau hanya tanggal akhir tetap valid (ujung terbuka)', ReportService::build('simpanan', $head, f(['from' => $m1, 'to' => '']))['totals']['total'] === $oracle('SIMPANAN', $m1, date('Y-m-d')) && ReportService::build('simpanan', $head, f(['from' => '', 'to' => $m2end]))['totals']['total'] === $oracle('SIMPANAN', '1900-01-01', $m2end));
+check('rentang: Ketua Regu Beta tetap hanya regunya pada rentang bebas', ReportService::build('simpanan', $beta, f(['from' => $m2, 'to' => $m0end], $beta))['rows'] !== [] && row(ReportService::build('simpanan', $beta, f(['from' => $m2, 'to' => $m0end], $beta)), 'no', 'AGT-002') === []);
+
+// angsuran
+$ra = ReportService::build('angsuran', $head, f(['from' => $m0, 'to' => $m0end]));
+check('rentang angsuran: pembayaran 520.000 anggota 4 di bulan ini; pembayaran bulan lalu (anggota 5) tidak ikut; total = orakel', row($ra, 'no', 'AGT-004')['total'] === 520000 && row($ra, 'no', 'AGT-005')['total'] === 0 && $ra['totals']['total'] === $oracle('ANGSURAN', $m0, $m0end));
+$ra2 = ReportService::build('angsuran', $head, f(['from' => $m1, 'to' => $m1end]));
+check('rentang angsuran: sisa pinjaman pada akhir bulan lalu (belum ada angsuran anggota 4) = 1.040.000, bukan sisa sekarang', row($ra2, 'no', 'AGT-004')['outstanding'] === 1040000 && row($ra2, 'no', 'AGT-004')['outstanding'] !== row($ra, 'no', 'AGT-004')['outstanding'] + 0 * 1);
+
+// saldo
+$rsal = ReportService::build('saldo', $head, f(['from' => $m1, 'to' => $m0end]));
+check('rentang saldo: saldo akhir tiap bulan = kumulatif sampai akhir bulan itu (termasuk sebelum rentang)', row($rsal, 'no', 'AGT-004')['c' . date('Ym', strtotime($m1))] === (int) one("SELECT COALESCE(SUM(savings_delta), 0) FROM v_ledger WHERE member_id = 4 AND trx_date <= ?", [$m1end])
+    && row($rsal, 'no', 'AGT-004')['c' . date('Ym', strtotime($m0))] === (int) one("SELECT COALESCE(SUM(savings_delta), 0) FROM v_ledger WHERE member_id = 4 AND trx_date <= ?", [$m0end]));
+
+// pinjaman: berdasarkan tanggal pencairan
+$rp = ReportService::build('pinjaman', $head, f(['from' => $m2, 'to' => $m2end]));
+check('rentang pinjaman: hanya pinjaman yang dicairkan dalam rentang (anggota 5 dan 2 di m2), pinjaman m1 tidak ikut', count($rp['rows']) === 2 && str_contains($rp['rows'][0]['name'], 'AGT-005') && $rp['totals']['principal'] === 500000);
+check('rentang pinjaman: terbayar dan sisa menurut keadaan pada tanggal akhir (belum dibayar pada akhir m2), bukan sekarang', $rp['rows'][0]['paid'] === 0 && $rp['rows'][0]['outstanding'] === 204000 && $rp['rows'][0]['status'] === 'Aktif');
+$rp2 = ReportService::build('pinjaman', $head, f(['from' => $m1, 'to' => $m0end]));
+check('rentang pinjaman: dua bulan memuat pinjaman anggota 4; saringan status memakai keadaan pada tanggal akhir', count($rp2['rows']) === 1 && count(ReportService::build('pinjaman', $head, f(['from' => $m2, 'to' => $m2end, 'status' => 'LUNAS']))['rows']) === 0 && count(ReportService::build('pinjaman', $head, f(['from' => $m2, 'to' => $m2end, 'status' => 'AKTIF']))['rows']) === 2);
+
+// regu
+$rr = ReportService::build('regu', $head, f(['from' => $m2, 'to' => $m2end]));
+$beta1 = array_values(array_filter($rr['rows'], static fn ($r) => $r['team'] === 'Regu Beta'))[0] ?? [];
+check('rentang regu: setoran, angsuran, pencairan menurut tanggal transaksi dalam rentang', ($beta1['saved'] ?? -1) === (int) one("SELECT COALESCE(SUM(l.sign * l.amount), 0) FROM v_ledger l JOIN member_team_assignments a ON a.member_id = l.member_id AND a.valid_to IS NULL WHERE a.team_id = 2 AND l.type = 'SIMPANAN' AND l.trx_date BETWEEN ? AND ?", [$m2, $m2end])
+    && ($beta1['paid'] ?? -1) === 0 && ($beta1['lent'] ?? -1) === 200000);
+
+// transaksi
+$rt = ReportService::build('transaksi', $head, f(['from' => $m2, 'to' => $m2end, 'status' => 'DISETUJUI']));
+check('rentang transaksi: jumlah baris = transaksi disetujui pada rentang; tidak ada baris di luar rentang', $rt['totals']['doc_no'] === 'Jumlah ' . (int) one("SELECT COUNT(*) FROM transactions WHERE status = 'DISETUJUI' AND deleted_at IS NULL AND trx_date BETWEEN ? AND ?", [$m2, $m2end]) . ' transaksi');
+
+// SHU: bulan siklus yang beririsan
+$rshu = ReportService::build('shu', $head, f(['from' => $m1, 'to' => $m1end]));
+check('rentang SHU: hanya bulan siklus yang beririsan dengan rentang (satu baris)', count($rshu['rows']) === 1);
+
+// periode otomatis dari rentang (tanpa memilih periode)
+$autoOld = ReportService::filters(['dari' => $old, 'sampai' => date('Y-m-t', strtotime($old))], $head);
+check('rentang: tanpa memilih periode, laporan membuka periode yang memuat tanggal akhir rentang', $autoOld['period'] === (int) one('SELECT period_id FROM period_months WHERE month_date = ?', [$old]));
+
+// filter hanya mengubah tampilan
+check('rentang: membuka laporan dengan berbagai rentang tidak mengubah transaksi maupun buku besar', (string) json_encode(Database::select('SELECT transaction_id, trx_date, amount, sign FROM v_ledger ORDER BY transaction_id')) === $ledgerSnap && (int) one('SELECT COUNT(*) FROM transactions') === $txSnap);
 
 check('akhir: invarian dan integritas tetap bersih (laporan hanya membaca)', (int) Database::select('SELECT selisih FROM v_global_summary')[0]['selisih'] === 0 && (int) one('SELECT COUNT(*) FROM v_integrity_issues') === 0);
 

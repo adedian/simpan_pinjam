@@ -64,6 +64,20 @@ function status_badge(string $status): string
     return '<span class="' . e($class) . '">' . e($label) . '</span>';
 }
 
+/** Lencana status jatuh tempo cicilan (hasil DueSchedule::status). Hari terlambat/menuju ditulis di tooltip. */
+function due_badge(array $status): string
+{
+    $class = match ($status['key']) {
+        'LUNAS'    => 'badge--disetujui',
+        'TERLAMBAT' => 'badge--ditolak',
+        'HARI_INI' => 'badge--menunggu-validasi',
+        default    => 'badge--draft',
+    };
+    $days  = (int) $status['days'];
+    $title = $status['key'] === 'TERLAMBAT' ? $days . ' hari terlambat' : ($status['key'] === 'BELUM' ? (-$days) . ' hari lagi' : '');
+    return '<span class="badge ' . $class . '"' . ($title === '' ? '' : ' title="' . e($title) . '"') . '>' . e((string) $status['label']) . '</span>';
+}
+
 /** "2026-03-01" -> "Maret 2026". */
 function month_label(string $date): string
 {

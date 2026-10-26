@@ -36,9 +36,6 @@ final class ShuReport
         }
 
         $period    = (int) $f['period'];
-        $saverPct  = (int) SettingsService::get('profit_share_saver_pct');
-        $borrPct   = (int) SettingsService::get('profit_share_borrower_pct');
-        $shuPct    = (int) SettingsService::get('profit_share_shu_pct');
         $memberPct = (int) SettingsService::get('shu_member_pct');
         $mgrPct    = (int) SettingsService::get('shu_manager_pct');
 
@@ -63,22 +60,73 @@ final class ShuReport
         $rows = [];
         $cum = 0;
         $balance = 0;
-        foreach (ReportService::months($period) as $m) {
+        // Laporan ini per bulan siklus. Dengan rentang tanggal: bulan siklus yang beririsan dengan rentang (bulan penuh), dalam periode terpilih.
+        $range = ReportService::rangeOf($f);
+        $shown = array_values(array_filter(ReportService::months($period), static fn (array $m): bool => $range === null
+            || ($m['month'] >= substr($range['from'], 0, 7) . '-01' && $m['month'] <= substr($range['to'], 0, 7) . '-01')));
+        // Komponen menurut versi konfigurasi yang berlaku pada bulan itu (ProfitConfig); komponen dana dijadikan kolom tambahan.
+        $danaNames = [];
+        foreach ($shown as $m) {
+            foreach (ProfitConfig::forMonth($m['month'])['items'] as $it) {
+                if ($it['kind'] === 'DANA') {
+                    $danaNames[$it['code']] = $it['name'];
+                }
+            }
+        }
+        $names = ['PENABUNG' => 'Penabung', 'PEMINJAM' => 'Peminjam', 'SHU' => 'Kas SHU'];
+        $lastCfg = $shown === [] ? ProfitConfig::current() : ProfitConfig::forMonth($shown[count($shown) - 1]['month']);
+        foreach ($lastCfg['items'] as $it) {
+            $names[$it['code']] = $it['name'];
+        }
+        foreach ($shown as $m) {
             $l = $loans[$m['id']] ?? ['n' => 0, 'p' => 0, 'i' => 0];
-            $saver = (int) round($l['i'] * $saverPct / 100);
-            $borrower = (int) round($l['i'] * $borrPct / 100);
-            $shu = $l['i'] - $saver - $borrower;   // sisa: tiga bagian selalu pas = bunga
+            $alloc = ProfitConfig::allocate(ProfitConfig::forMonth($m['month'])['items'], $l['i']);   // Kas SHU menyerap selisih pembulatan: semua komponen pas = bunga
+            $saver = $alloc['PENABUNG'] ?? 0;
+            $borrower = $alloc['PEMINJAM'] ?? 0;
+            $shu = $alloc['SHU'] ?? 0;
             $exp = $expense[$m['id']] ?? 0;
+            $danaRow = [];
+            foreach ($danaNames as $code => $_) {
+                $danaRow['d_' . $code] = $alloc[$code] ?? 0;
+            }
             $cum += $l['i'];
             $balance += $shu - $exp;
             $rows[] = [
                 'month' => month_label($m['month']), 'loans' => $l['n'], 'principal' => $l['p'], 'interest' => $l['i'], 'cumulative' => $cum,
                 'saver' => $saver, 'borrower' => $borrower, 'shu_in' => $shu, 'expense' => $exp, 'balance' => $balance,
-            ];
+            ] + $danaRow;
         }
+        // Kolom: nama komponen terbaru; komponen dana (bila ada) setelah Peminjam.
+        $columns = [
+            ['key' => 'month', 'label' => 'Bulan', 'type' => 'text'], ['key' => 'loans', 'label' => 'Pinjaman cair', 'type' => 'int'],
+            ['key' => 'principal', 'label' => 'Pokok dicairkan', 'type' => 'money'], ['key' => 'interest', 'label' => 'Bunga dibukukan', 'type' => 'money'],
+            ['key' => 'cumulative', 'label' => 'Bunga kumulatif', 'type' => 'money'], ['key' => 'saver', 'label' => $names['PENABUNG'], 'type' => 'money'],
+            ['key' => 'borrower', 'label' => $names['PEMINJAM'], 'type' => 'money'],
+        ];
+        foreach ($danaNames as $code => $label) {
+            $columns[] = ['key' => 'd_' . $code, 'label' => $names[$code] ?? $label, 'type' => 'money'];
+        }
+        array_push($columns, ['key' => 'shu_in', 'label' => 'Pemasukan ' . $names['SHU'], 'type' => 'money'], ['key' => 'expense', 'label' => 'Biaya', 'type' => 'money'], ['key' => 'balance', 'label' => 'Saldo ' . $names['SHU'], 'type' => 'money']);
+        $base['columns'] = $columns;
         $sum = static fn (string $k): int => (int) array_sum(array_column($rows, $k));
         $totals = ['month' => 'Jumlah', 'loans' => $sum('loans'), 'principal' => $sum('principal'), 'interest' => $sum('interest'), 'cumulative' => $cum,
             'saver' => $sum('saver'), 'borrower' => $sum('borrower'), 'shu_in' => $sum('shu_in'), 'expense' => $sum('expense'), 'balance' => $balance];
+        $danaTotal = 0;
+        foreach ($danaNames as $code => $_) {
+            $totals['d_' . $code] = $sum('d_' . $code);
+            $danaTotal += $totals['d_' . $code];
+        }
+        $shuItem = null;
+        foreach ($lastCfg['items'] as $it) {
+            if ($it['kind'] === 'SHU') {
+                $shuItem = $it;
+            }
+        }
+        $shuPctText = $shuItem === null ? '' : ProfitConfig::fmtPct($shuItem['pct']);
+        $splitText = [];
+        foreach ($lastCfg['items'] as $it) {
+            $splitText[] = ProfitConfig::fmtPct($it['pct']) . ' ' . mb_strtolower($it['name']);
+        }
 
         $memberShare = (int) round($balance * $memberPct / 100);
         $mgrShare = $balance - $memberShare;
@@ -88,18 +136,18 @@ final class ShuReport
                 $periodName = $p['name'];
             }
         }
-        $base['subtitle'] = 'Periode ' . $periodName . ' · bunga dibukukan saat pinjaman dicairkan · rupiah';
+        $base['subtitle'] = ($range === null ? 'Periode ' . $periodName : 'Periode ' . $periodName . ', bulan siklus ' . date_id($range['from']) . ' s.d. ' . date_id($range['to'])) . ' · bunga dibukukan saat pinjaman dicairkan · rupiah';
         $base['rows'] = $rows;
         $base['totals'] = $rows === [] ? null : $totals;
         $base['summary'] = [
-            ['label' => 'Pemasukan Kas SHU ' . $shuPct . '%', 'value' => $totals['shu_in'], 'hint' => 'Dari bunga yang dibukukan'],
+            ['label' => 'Pemasukan ' . $names['SHU'] . ' ' . $shuPctText, 'value' => $totals['shu_in'], 'hint' => 'Dari bunga yang dibukukan'],
             ['label' => 'Biaya operasional', 'value' => $totals['expense'], 'hint' => 'Disetujui; dibebankan ke Kas SHU'],
             ['label' => 'Sisa Kas SHU', 'value' => $balance, 'hint' => 'Pemasukan dikurangi biaya'],
             ['label' => 'Untuk anggota ' . $memberPct . '%', 'value' => $memberShare, 'hint' => 'Dari sisa Kas SHU'],
             ['label' => 'Untuk pengelola ' . $mgrPct . '%', 'value' => $mgrShare, 'hint' => 'Total saja, tanpa pembagian antar pengelola'],
         ];
-        $base['control'] = ['ok' => $totals['saver'] + $totals['borrower'] + $totals['shu_in'] === $totals['interest'] && $totals['interest'] === $cum, 'interest' => $totals['interest']];
-        $base['note'] = 'Bunga dibagi ' . $saverPct . '% penabung, ' . $borrPct . '% peminjam, ' . $shuPct . '% Kas SHU (Pengaturan). Kas SHU = pemasukan SHU dikurangi biaya operasional yang sudah disetujui. '
+        $base['control'] = ['ok' => $totals['saver'] + $totals['borrower'] + $danaTotal + $totals['shu_in'] === $totals['interest'] && $totals['interest'] === $cum, 'interest' => $totals['interest']];
+        $base['note'] = 'Bunga dibagi ' . implode(', ', $splitText) . ' (komponen pembagian bunga yang berlaku bulan terakhir pada laporan ini; tiap bulan memakai versi yang berlaku saat itu). ' . $names['SHU'] . ' = pemasukan SHU dikurangi biaya operasional yang sudah disetujui. '
             . 'Sisa Kas SHU dibagi ' . $memberPct . '% anggota dan ' . $mgrPct . '% pengelola: anggota ' . Money::format($memberShare) . ', pengelola ' . Money::format($mgrShare)
             . '. Ini angka bulanan dari bunga yang dibukukan; pembagian bunga per anggota ada di Pembagian Bunga.';
         return $base;

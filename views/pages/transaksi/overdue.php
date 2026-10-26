@@ -7,8 +7,9 @@
         <a class="btn btn--secondary" href="<?= e(url('/transaksi/angsuran/tagihan')) ?>">Tagihan angsuran</a>
     </div>
     <p class="muted">
-        Cicilan yang bulan jatuh temponya sudah lewat dan masih ada sisanya, per <strong><?= e(date_id(date('Y-m-d'))) ?></strong>. Jadwal hanya menyimpan bulan jatuh tempo,
-        jadi tanggal jatuh tempo = akhir bulan itu dan keterlambatan dihitung dari tanggal tersebut. Pembayaran yang masih menunggu validasi belum mengurangi tunggakan. Tidak ada denda.
+        Cicilan yang tanggal jatuh temponya sudah lewat dan masih ada sisanya, per <strong><?= e(date_id($filters['asof'] !== '' ? $filters['asof'] : date('Y-m-d'))) ?></strong><?= $filters['asof'] !== '' ? ' (tanggal pemeriksaan)' : '' ?>.
+        Jatuh tempo hari ini belum menunggak. Tanggal jatuh tempo = tanggal pinjaman disetujui ditambah n bulan; pinjaman lama memakai akhir bulan jatuh tempo.
+        Pembayaran yang masih menunggu validasi belum mengurangi tunggakan. Tidak ada denda.
     </p>
 
     <form class="toolbar no-print" method="get" action="<?= e(url('/transaksi/angsuran/tunggakan')) ?>">
@@ -25,9 +26,17 @@
             </select>
         </div>
         <?php endif; ?>
-        <button type="submit" class="btn btn--secondary">Tampilkan</button>
-        <a class="btn btn--link" href="<?= e(url('/transaksi/angsuran/tunggakan')) ?>">Atur ulang</a>
+        <div class="toolbar__field toolbar__field--date">
+            <label class="toolbar__label" for="t_per">Per tanggal</label>
+            <input id="t_per" class="input" type="date" name="per" value="<?= e($filters['asof']) ?>" max="<?= e(date('Y-m-d', strtotime('-1 day'))) ?>" title="Tanggal pemeriksaan (kosong = hari ini)">
+        </div>
+        <button type="submit" class="btn btn--primary">Terapkan Filter</button>
+        <a class="btn btn--link" href="<?= e(url('/transaksi/angsuran/tunggakan')) ?>">Reset</a>
     </form>
+
+    <?php if (!empty($today) && $today['installments'] > 0): ?>
+        <p class="alert alert--warning" role="note"><strong>Jatuh tempo hari ini:</strong> <?= (int) $today['installments'] ?> cicilan (<?= (int) $today['members'] ?> anggota), <?= e(money($today['amount'])) ?>. Belum dihitung menunggak; terlambat mulai besok bila belum dibayar.</p>
+    <?php endif; ?>
 
     <div class="stats stats--report">
         <div class="stat"><span class="stat__label">Anggota menunggak</span><strong class="stat__value"><?= e(number_format($summary['members'], 0, ',', '.')) ?></strong></div>

@@ -23,7 +23,7 @@ $s = $card['summary'];
     <div class="stats">
         <div class="stat"><span class="stat__label">Saldo tabungan</span><strong class="stat__value"><?= e(money($s['savings'])) ?></strong></div>
         <div class="stat"><span class="stat__label">Sisa pinjaman</span><strong class="stat__value"><?= e(money($s['outstanding'])) ?></strong></div>
-        <div class="stat"><span class="stat__label">Cicilan berikutnya</span><strong class="stat__value"><?= e(money($s['next']['remaining'] ?? 0)) ?></strong><span class="stat__hint"><?= $s['next'] !== null ? 'Jatuh tempo ' . e(month_label($s['next']['due_month'])) : 'Tidak ada tagihan' ?></span></div>
+        <div class="stat"><span class="stat__label">Cicilan berikutnya</span><strong class="stat__value"><?= e(money($s['next']['remaining'] ?? 0)) ?></strong><span class="stat__hint"><?= $s['next'] !== null ? 'Jatuh tempo ' . e(date_id($s['next']['due_date'])) : 'Tidak ada tagihan' ?></span></div>
         <div class="stat"><span class="stat__label">Tunggakan</span><strong class="stat__value<?= $s['overdue'] > 0 ? ' stat__value--negative' : '' ?>"><?= e(money($s['overdue'])) ?></strong></div>
     </div>
     <?php if ($s['byKind'] !== []): ?>
@@ -62,11 +62,12 @@ $s = $card['summary'];
     <p class="muted">Total tagihan <?= e(money((int) $l['total_due'])) ?> · terbayar <?= e(money((int) $l['paid'])) ?> · sisa <strong><?= e(money((int) $l['outstanding'])) ?></strong></p>
     <div class="table-wrap table-wrap--report">
         <table class="table table--report">
-            <thead><tr><th>Cicilan ke</th><th>Jatuh tempo</th><th class="num">Tagihan</th><th class="num">Terbayar</th><th class="num">Sisa</th></tr></thead>
+            <thead><tr><th>Cicilan ke</th><th>Jatuh tempo</th><th>Status</th><th class="num">Tagihan</th><th class="num">Terbayar</th><th class="num">Sisa</th></tr></thead>
             <tbody>
             <?php foreach ($l['installments'] as $in): ?>
                 <tr>
-                    <td><?= (int) $in['seq'] ?></td><td><?= e(month_label((string) $in['due_month'])) ?></td>
+                    <td><?= (int) $in['seq'] ?></td><td><?= e(date_id((string) $in['due_date'])) ?></td>
+                    <td><?= due_badge(\App\Services\DueSchedule::status((string) $in['due_date'], (int) $in['remaining_amount'])) ?></td>
                     <td class="num"><?= e(\App\Helpers\Money::format((int) $in['amount_due'], false)) ?></td>
                     <td class="num"><?= (int) $in['paid_amount'] === 0 ? '<span class="muted">-</span>' : e(\App\Helpers\Money::format((int) $in['paid_amount'], false)) ?></td>
                     <td class="num"><?= (int) $in['remaining_amount'] > 0 ? e(\App\Helpers\Money::format((int) $in['remaining_amount'], false)) : '<span class="muted">Lunas</span>' ?></td>

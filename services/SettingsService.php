@@ -31,12 +31,9 @@ final class SettingsService
             'help' => 'BELUM FINAL: Excel menghitung Rp 50.000, pengumuman menyebut Rp 25.000. Pastikan sebelum dipakai.'],
         'withdrawals_enabled' => ['group' => 'Simpanan', 'label' => 'Izinkan penarikan tabungan', 'type' => 'bool',
             'help' => 'Default mati: tabungan baru dicairkan pada pembagian akhir.'],
-        'profit_share_saver_pct' => ['group' => 'Bagi hasil bunga', 'label' => 'Untuk penabung', 'type' => 'int', 'min' => 0, 'max' => 100, 'unit' => '%'],
-        'profit_share_borrower_pct' => ['group' => 'Bagi hasil bunga', 'label' => 'Untuk peminjam', 'type' => 'int', 'min' => 0, 'max' => 100, 'unit' => '%'],
-        'profit_share_shu_pct' => ['group' => 'Bagi hasil bunga', 'label' => 'Untuk Kas SHU', 'type' => 'int', 'min' => 0, 'max' => 100, 'unit' => '%',
-            'help' => 'Ketiga bagian di atas harus berjumlah tepat 100%.'],
+        // Komponen dan persentase pembagian bunga (penabung, peminjam, Kas SHU, dana lain) kini diatur di menu Pembagian Bunga (ProfitConfig), per bulan berlaku.
         'reserve_pct' => ['group' => 'Bagi hasil bunga', 'label' => 'Potongan cadangan', 'type' => 'decimal', 'min' => 0, 'max' => 50, 'unit' => '%',
-            'help' => 'Dipotong dari bagi hasil penabung dan peminjam. Pengecualian diatur per anggota.'],
+            'help' => 'Dipotong dari bagi hasil penabung dan peminjam. Pengecualian diatur per anggota. Komponen pembagian bunga diatur di Sistem > Pembagian Bunga.'],
         'shu_member_pct' => ['group' => 'Pembagian SHU', 'label' => 'Untuk anggota', 'type' => 'int', 'min' => 0, 'max' => 100, 'unit' => '%'],
         'shu_manager_pct' => ['group' => 'Pembagian SHU', 'label' => 'Untuk pengelola', 'type' => 'int', 'min' => 0, 'max' => 100, 'unit' => '%',
             'help' => 'Kedua bagian harus berjumlah tepat 100%.'],
@@ -117,9 +114,6 @@ final class SettingsService
             }
             return $total;
         };
-        if (($s = $sum(['profit_share_saver_pct', 'profit_share_borrower_pct', 'profit_share_shu_pct'])) !== null && $s !== 100) {
-            $errors['profit_share_shu_pct'] = "Bagi hasil bunga harus berjumlah tepat 100% (sekarang {$s}%).";
-        }
         if (($s = $sum(['shu_member_pct', 'shu_manager_pct'])) !== null && $s !== 100) {
             $errors['shu_manager_pct'] = "Pembagian SHU harus berjumlah tepat 100% (sekarang {$s}%).";
         }

@@ -92,11 +92,113 @@ final class ReportService
         return array_map(static fn (array $r): array => ['id' => (int) $r['id'], 'month' => (string) $r['month_date']], $rows);
     }
 
+    public const PRESETS = ['bulan-ini', 'bulan-lalu', 'tahun-ini', 'tahun-lalu'];
+    public const MAX_RANGE_MONTHS = 60;
+
+    /**
+     * Rentang cepat -> [dari, sampai] (Y-m-d, inklusif, zona waktu aplikasi).
+     * @return array{0:string,1:string}
+     */
+    public static function presetRange(string $preset, ?string $today = null): array
+    {
+        $t = new \DateTimeImmutable($today ?? date('Y-m-d'));
+        return match ($preset) {
+            'bulan-ini'  => [$t->format('Y-m-01'), $t->format('Y-m-t')],
+            'bulan-lalu' => [$t->modify('first day of last month')->format('Y-m-d'), $t->modify('last day of last month')->format('Y-m-d')],
+            'tahun-ini'  => [$t->format('Y-01-01'), $t->format('Y-12-31')],
+            'tahun-lalu' => [($t->format('Y') - 1) . '-01-01', ($t->format('Y') - 1) . '-12-31'],
+            default      => ['', ''],
+        };
+    }
+
+    /**
+     * Rentang tanggal aktif, atau null bila laporan memakai pilihan Periode. Ujung yang dikosongkan diisi: awal = awal periode
+     * paling awal, akhir = hari ini. Inklusif: transaksi pada tanggal akhir (jam berapa pun) ikut terhitung.
+     * @param array<string,mixed> $f
+     * @return array{from:string,to:string,open_from:bool,open_to:bool}|null
+     */
+    public static function rangeOf(array $f): ?array
+    {
+        $from = (string) ($f['from'] ?? '');
+        $to   = (string) ($f['to'] ?? '');
+        if ($from === '' && $to === '') {
+            return null;
+        }
+        $openFrom = $from === '';
+        $openTo   = $to === '';
+        if ($openFrom) {
+            $min  = Database::select('SELECT MIN(start_date) AS d FROM periods')[0]['d'] ?? null;
+            $from = $min !== null ? (string) $min : date('Y-m-01');
+        }
+        if ($openTo) {
+            $to = date('Y-m-d');
+        }
+        return ['from' => $from, 'to' => $to, 'open_from' => $openFrom, 'open_to' => $openTo];
+    }
+
+    /**
+     * Penanda periode laporan yang sedang aktif, untuk judul/indikator tampilan dan Excel.
+     * @param array<string,mixed> $f
+     */
+    public static function periodLabel(array $f): string
+    {
+        $r = self::rangeOf($f);
+        if ($r === null) {
+            return 'Periode ' . self::periodName($f);
+        }
+        return 'Tanggal ' . date_id($r['from']) . ' s.d. ' . date_id($r['to']);
+    }
+
+    /**
+     * Kolom bulan kalender dalam rentang (maksimum MAX_RANGE_MONTHS), untuk rekap bulanan berdasarkan TANGGAL transaksi.
+     * @param array{from:string,to:string} $r
+     * @return array<int,array{key:string,label:string,ym:string}>
+     */
+    private static function calendarColumns(array $r): array
+    {
+        $cur  = new \DateTimeImmutable(substr($r['from'], 0, 7) . '-01');
+        $end  = new \DateTimeImmutable(substr($r['to'], 0, 7) . '-01');
+        $cols = [];
+        while ($cur <= $end && count($cols) < self::MAX_RANGE_MONTHS) {
+            $cols[] = ['key' => 'c' . $cur->format('Ym'), 'label' => month_label($cur->format('Y-m-d')), 'ym' => $cur->format('Ym')];
+            $cur = $cur->modify('+1 month');
+        }
+        return $cols;
+    }
+
+    /**
+     * Jumlah bersih per anggota per bulan kalender (menurut tanggal transaksi) dalam rentang.
+     * @param array<int,int> $memberIds @param array{from:string,to:string} $r
+     * @return array<int,array<string,int>> [anggota]['c202601'] => rupiah
+     */
+    private static function pivotRange(string $type, array $memberIds, array $r): array
+    {
+        if ($memberIds === []) {
+            return [];
+        }
+        $mIn = implode(',', array_map('intval', $memberIds));
+        $out = [];
+        foreach (Database::select(
+            "SELECT member_id, DATE_FORMAT(trx_date, '%Y%m') AS ym, SUM(sign * amount) AS v FROM v_ledger
+             WHERE type = ? AND member_id IN ({$mIn}) AND trx_date BETWEEN ? AND ? GROUP BY member_id, ym",
+            [$type, $r['from'], $r['to']]
+        ) as $row) {
+            $out[(int) $row['member_id']]['c' . $row['ym']] = (int) $row['v'];
+        }
+        return $out;
+    }
+
+    /** Keadaan pada tanggal akhir rentang bila tanggal itu sudah lewat; null = keadaan sekarang. */
+    private static function asOfDate(?array $r): ?string
+    {
+        return $r !== null && !AsOf::isCurrent($r['to']) ? $r['to'] : null;
+    }
+
     /**
      * Saringan dari query string, sudah dibersihkan dan dibatasi. Periode tak dikenal jatuh ke periode aktif.
      * @param array<string,mixed> $q
      * @param array<string,mixed>|null $user
-     * @return array{period:int,team:int,q:string,from:string,to:string,type:string,status:string,anggota:int,bulan:int,snap:int}
+     * @return array{period:int,team:int,q:string,from:string,to:string,preset:string,range_error:string,type:string,status:string,anggota:int,bulan:int,snap:int}
      */
     public static function filters(array $q, ?array $user): array
     {
@@ -118,12 +220,44 @@ final class ReportService
             return $d !== false && $d->format('Y-m-d') === $v ? $v : '';
         };
         $status  = array_key_exists('status', $q) ? (string) $q['status'] : 'DISETUJUI';
+
+        // Rentang tanggal bebas. Tanggal yang diisi menang; "rentang cepat" hanya dipakai bila kedua tanggal kosong.
+        $from   = $date($q['dari'] ?? '');
+        $to     = $date($q['sampai'] ?? '');
+        $preset = (string) ($q['rentang'] ?? '');
+        if (!in_array($preset, self::PRESETS, true)) {
+            $preset = '';
+        }
+        if ($from === '' && $to === '' && $preset !== '') {
+            [$from, $to] = self::presetRange($preset);
+        } elseif ($from !== '' || $to !== '') {
+            $preset = '';
+        }
+        $rangeError = '';
+        if ($from !== '' && $to !== '' && $from > $to) {
+            $rangeError = 'Tanggal mulai tidak boleh setelah tanggal akhir. Rentang tanggal diabaikan.';
+            $from = '';
+            $to = '';
+            $preset = '';
+        }
+        // Rentang tanpa periode yang dipilih sendiri: pakai periode yang memuat tanggal akhir (atau tanggal mulai), supaya
+        // laporan yang menurut periode (Kas SHU, Pembagian Bunga) membuka program yang benar walau sudah lama berlalu.
+        if (!in_array($period, $valid, true) && ($from !== '' || $to !== '')) {
+            $probe = $to !== '' ? $to : $from;
+            $hit   = Database::select('SELECT id FROM periods WHERE start_date <= ? AND end_date >= ? ORDER BY start_date DESC LIMIT 1', [$probe, $probe])[0]['id'] ?? null;
+            if ($hit !== null) {
+                $period = (int) $hit;
+                $default = (int) $hit;
+            }
+        }
         return [
             'period'  => in_array($period, $valid, true) ? $period : (int) $default,
             'team'    => self::level($user) === self::ALL ? max(0, (int) ($q['regu'] ?? 0)) : 0,
             'q'       => mb_substr(clean_text($q['q'] ?? ''), 0, 60),
-            'from'    => $date($q['dari'] ?? ''),
-            'to'      => $date($q['sampai'] ?? ''),
+            'from'    => $from,
+            'to'      => $to,
+            'preset'  => $preset,
+            'range_error' => $rangeError,
             'type'    => isset(Transaction::TYPE_LABELS[(string) ($q['jenis'] ?? '')]) ? (string) $q['jenis'] : '',
             'status'  => in_array($status, array_merge(Transaction::STATUSES, ['AKTIF', 'LUNAS']), true) ? $status : '',
             'anggota' => max(0, (int) ($q['anggota'] ?? 0)),
@@ -202,7 +336,7 @@ final class ReportService
      * @param array<int,int> $memberIds
      * @return array<int,array{savings:int,outstanding:int,overdue:int}>
      */
-    private static function standing(array $memberIds): array
+    private static function standing(array $memberIds, ?string $asOf = null): array
     {
         if ($memberIds === []) {
             return [];
@@ -211,6 +345,19 @@ final class ReportService
         $out = [];
         foreach ($memberIds as $id) {
             $out[(int) $id] = ['savings' => 0, 'outstanding' => 0, 'overdue' => 0];
+        }
+        if ($asOf !== null && !AsOf::isCurrent($asOf)) {
+            // Rentang berakhir di masa lalu: keadaan pada tanggal akhir itu, bukan keadaan sekarang.
+            foreach (AsOf::savings($memberIds, $asOf) as $id => $v) {
+                $out[$id]['savings'] = $v;
+            }
+            foreach (AsOf::outstanding($memberIds, $asOf) as $id => $v) {
+                $out[$id]['outstanding'] = $v;
+            }
+            foreach (AsOf::overdue($memberIds, $asOf) as $id => $v) {
+                $out[$id]['overdue'] = $v;
+            }
+            return $out;
         }
         foreach (Database::select("SELECT member_id, savings_balance FROM v_member_savings WHERE member_id IN ({$in})") as $r) {
             $out[(int) $r['member_id']]['savings'] = (int) $r['savings_balance'];
@@ -271,15 +418,34 @@ final class ReportService
      */
     private static function matrixReport(string $key, string $title, string $type, ?array $user, array $f, string $note): array
     {
-        $months  = self::months($f['period']);
+        $range   = self::rangeOf($f);
         $members = self::members($user, $f);
         $ids     = array_column($members, 'id');
-        $pivot   = self::pivot($type, $ids, array_column($months, 'id'));
-        $stand   = self::standing($ids);
+        if ($range === null) {
+            $months = self::months($f['period']);
+            $pivot  = [];
+            foreach (self::pivot($type, $ids, array_column($months, 'id')) as $memberId => $byMonth) {
+                foreach ($byMonth as $monthId => $v) {
+                    $pivot[$memberId]['m' . $monthId] = $v;
+                }
+            }
+            $cols   = array_map(static fn (array $m): array => ['key' => 'm' . $m['id'], 'label' => month_label($m['month']), 'type' => 'money'], $months);
+            $stand  = self::standing($ids);
+        } else {
+            // Rentang bebas: bulan kalender menurut TANGGAL transaksi; saldo, sisa, dan tunggakan pada tanggal akhir.
+            $cal   = self::calendarColumns($range);
+            $pivot = self::pivotRange($type, $ids, $range);
+            $cols  = array_map(static fn (array $c): array => ['key' => $c['key'], 'label' => $c['label'], 'type' => 'money'], $cal);
+            $stand = self::standing($ids, self::asOfDate($range));
+            $note  = ($key === 'simpanan'
+                ? 'Setoran bersih per bulan menurut tanggal transaksi dalam rentang (pembalik mengurangi); saldo tabungan = keadaan pada '
+                : 'Angsuran bersih per bulan menurut tanggal pembayaran dalam rentang; sisa pinjaman dan tunggakan = keadaan pada ')
+                . date_id(self::asOfDate($range) ?? date('Y-m-d')) . '.';
+        }
 
         $columns = array_merge(
             [['key' => 'no', 'label' => 'No. Anggota', 'type' => 'text'], ['key' => 'name', 'label' => 'Nama', 'type' => 'text'], ['key' => 'team', 'label' => 'Regu', 'type' => 'text']],
-            self::monthColumns($months),
+            $cols,
             [['key' => 'total', 'label' => 'Jumlah', 'type' => 'money']],
             $key === 'simpanan'
                 ? [['key' => 'savings', 'label' => 'Saldo tabungan', 'type' => 'money']]
@@ -291,9 +457,9 @@ final class ReportService
         foreach ($members as $m) {
             $row = ['no' => $m['member_no'], 'name' => $m['name'], 'team' => $m['team_name'], '_links' => ['name' => '/anggota/' . $m['id']]];
             $total = 0;
-            foreach ($months as $mo) {
-                $v = $pivot[$m['id']][$mo['id']] ?? 0;
-                $row['m' . $mo['id']] = $v;
+            foreach ($cols as $c) {
+                $v = $pivot[$m['id']][$c['key']] ?? 0;
+                $row[$c['key']] = $v;
                 $total += $v;
             }
             $row['total'] = $total;
@@ -306,7 +472,7 @@ final class ReportService
             $rows[] = $row;
         }
         return [
-            'key' => $key, 'title' => $title, 'subtitle' => 'Periode ' . self::periodName($f) . ' · rupiah', 'columns' => $columns, 'rows' => $rows,
+            'key' => $key, 'title' => $title, 'subtitle' => self::periodLabel($f) . ' · rupiah', 'columns' => $columns, 'rows' => $rows,
             'totals' => self::sumRow($columns, $rows, 'Jumlah ' . count($rows) . ' anggota'), 'note' => $note,
         ];
     }
@@ -318,31 +484,53 @@ final class ReportService
      */
     private static function balanceReport(?array $user, array $f): array
     {
-        $months  = self::months($f['period']);
+        $range   = self::rangeOf($f);
         $members = self::members($user, $f);
         $ids     = array_column($members, 'id');
-        $delta   = [];
-        $base    = [];
-        if ($ids !== [] && $months !== []) {
-            $in = implode(',', array_map('intval', $ids));
-            foreach (Database::select(
-                "SELECT l.member_id, l.period_month_id, SUM(l.savings_delta) AS v FROM v_ledger l
-                 WHERE l.member_id IN ({$in}) AND l.period_month_id IN (" . implode(',', array_column($months, 'id')) . ') GROUP BY l.member_id, l.period_month_id'
-            ) as $r) {
-                $delta[(int) $r['member_id']][(int) $r['period_month_id']] = (int) $r['v'];
+        $delta   = [];   // [anggota][kunci kolom] => selisih
+        $base    = [];   // saldo sebelum kolom pertama
+        if ($range === null) {
+            $months = self::months($f['period']);
+            $cols   = array_map(static fn (array $m): array => ['key' => 'm' . $m['id'], 'label' => month_label($m['month']), 'type' => 'money'], $months);
+            if ($ids !== [] && $months !== []) {
+                $in = implode(',', array_map('intval', $ids));
+                foreach (Database::select(
+                    "SELECT l.member_id, l.period_month_id, SUM(l.savings_delta) AS v FROM v_ledger l
+                     WHERE l.member_id IN ({$in}) AND l.period_month_id IN (" . implode(',', array_column($months, 'id')) . ') GROUP BY l.member_id, l.period_month_id'
+                ) as $r) {
+                    $delta[(int) $r['member_id']]['m' . $r['period_month_id']] = (int) $r['v'];
+                }
+                foreach (Database::select(
+                    "SELECT l.member_id, SUM(l.savings_delta) AS v FROM v_ledger l JOIN period_months pm ON pm.id = l.period_month_id
+                     WHERE l.member_id IN ({$in}) AND pm.month_date < ? GROUP BY l.member_id",
+                    [$months[0]['month']]
+                ) as $r) {
+                    $base[(int) $r['member_id']] = (int) $r['v'];
+                }
             }
-            foreach (Database::select(
-                "SELECT l.member_id, SUM(l.savings_delta) AS v FROM v_ledger l JOIN period_months pm ON pm.id = l.period_month_id
-                 WHERE l.member_id IN ({$in}) AND pm.month_date < ? GROUP BY l.member_id",
-                [$months[0]['month']]
-            ) as $r) {
-                $base[(int) $r['member_id']] = (int) $r['v'];
+            $note = 'Saldo tabungan kumulatif (termasuk sebelum periode ini). Porsi = bagian anggota dari total tabungan pada bulan terakhir.';
+        } else {
+            // Rentang bebas: saldo awal = semua sebelum tanggal mulai; lalu saldo akhir tiap bulan kalender (menurut tanggal transaksi).
+            $cols = array_map(static fn (array $c): array => ['key' => $c['key'], 'label' => $c['label'], 'type' => 'money'], self::calendarColumns($range));
+            if ($ids !== []) {
+                $in = implode(',', array_map('intval', $ids));
+                foreach (Database::select(
+                    "SELECT member_id, DATE_FORMAT(trx_date, '%Y%m') AS ym, SUM(savings_delta) AS v FROM v_ledger
+                     WHERE member_id IN ({$in}) AND trx_date BETWEEN ? AND ? GROUP BY member_id, ym",
+                    [$range['from'], $range['to']]
+                ) as $r) {
+                    $delta[(int) $r['member_id']]['c' . $r['ym']] = (int) $r['v'];
+                }
+                foreach (Database::select("SELECT member_id, SUM(savings_delta) AS v FROM v_ledger WHERE member_id IN ({$in}) AND trx_date < ? GROUP BY member_id", [$range['from']]) as $r) {
+                    $base[(int) $r['member_id']] = (int) $r['v'];
+                }
             }
+            $note = 'Saldo tabungan kumulatif: saldo awal = semua transaksi sebelum ' . date_id($range['from']) . ', lalu saldo akhir tiap bulan menurut tanggal transaksi. Porsi = bagian anggota dari total tabungan pada bulan terakhir.';
         }
 
         $columns = array_merge(
             [['key' => 'no', 'label' => 'No. Anggota', 'type' => 'text'], ['key' => 'name', 'label' => 'Nama', 'type' => 'text'], ['key' => 'team', 'label' => 'Regu', 'type' => 'text']],
-            self::monthColumns($months),
+            $cols,
             [['key' => 'share', 'label' => 'Porsi', 'type' => 'pct']]
         );
         $rows = [];
@@ -350,9 +538,9 @@ final class ReportService
         foreach ($members as $m) {
             $row = ['no' => $m['member_no'], 'name' => $m['name'], 'team' => $m['team_name'], '_links' => ['name' => '/anggota/' . $m['id']]];
             $run = $base[$m['id']] ?? 0;
-            foreach ($months as $mo) {
-                $run += $delta[$m['id']][$mo['id']] ?? 0;
-                $row['m' . $mo['id']] = $run;
+            foreach ($cols as $c) {
+                $run += $delta[$m['id']][$c['key']] ?? 0;
+                $row[$c['key']] = $run;
             }
             $last[] = $run;
             $rows[] = $row;
@@ -364,13 +552,13 @@ final class ReportService
         unset($row);
 
         $totals = ['no' => '', 'name' => 'Jumlah ' . count($rows) . ' anggota', 'team' => ''];
-        foreach ($months as $mo) {
-            $totals['m' . $mo['id']] = array_sum(array_column($rows, 'm' . $mo['id']));
+        foreach ($cols as $c) {
+            $totals[$c['key']] = array_sum(array_column($rows, $c['key']));
         }
         $totals['share'] = $grand > 0 ? 10000 : 0;
         return [
-            'key' => 'saldo', 'title' => 'Rekap Saldo', 'subtitle' => 'Periode ' . self::periodName($f) . ' · rupiah, saldo akhir tiap bulan', 'columns' => $columns, 'rows' => $rows,
-            'totals' => $totals, 'note' => 'Saldo tabungan kumulatif (termasuk sebelum periode ini). Porsi = bagian anggota dari total tabungan pada bulan terakhir.',
+            'key' => 'saldo', 'title' => 'Rekap Saldo', 'subtitle' => self::periodLabel($f) . ' · rupiah, saldo akhir tiap bulan', 'columns' => $columns, 'rows' => $rows,
+            'totals' => $totals, 'note' => $note,
         ];
     }
 
@@ -382,8 +570,15 @@ final class ReportService
     private static function loanReport(?array $user, array $f): array
     {
         [$scope, $params] = self::memberCondition($user, 'm.id');
-        $where  = ['pm.period_id = ?', "({$scope})"];
-        $params = array_merge([$f['period']], $params);
+        $range = self::rangeOf($f);
+        if ($range === null) {
+            $where  = ['pm.period_id = ?', "({$scope})"];
+            $params = array_merge([$f['period']], $params);
+        } else {
+            // Rentang bebas: pinjaman yang DICAIRKAN (tanggal transaksi pencairan) dalam rentang, inklusif.
+            $where  = ['t.trx_date BETWEEN ? AND ?', "({$scope})"];
+            $params = array_merge([$range['from'], $range['to']], $params);
+        }
         if ($f['team'] > 0) {
             $where[]  = 'a.team_id = ?';
             $params[] = $f['team'];
@@ -393,7 +588,9 @@ final class ReportService
             $where[]  = "(m.name LIKE ? ESCAPE '\\\\' OR m.member_no LIKE ? ESCAPE '\\\\' OR b.loan_no LIKE ? ESCAPE '\\\\')";
             array_push($params, $like, $like, $like);
         }
-        if (in_array($f['status'], ['AKTIF', 'LUNAS'], true)) {
+        // Status Aktif/Lunas pada rentang yang berakhir di masa lalu mengikuti keadaan pada tanggal akhir, jadi disaring setelah dihitung.
+        $asOf = self::asOfDate($range);
+        if ($asOf === null && in_array($f['status'], ['AKTIF', 'LUNAS'], true)) {
             $where[]  = 'b.loan_status = ?';
             $params[] = $f['status'];
         }
@@ -418,18 +615,31 @@ final class ReportService
             ['key' => 'paid', 'label' => 'Terbayar', 'type' => 'money'], ['key' => 'outstanding', 'label' => 'Sisa', 'type' => 'money'], ['key' => 'overdue', 'label' => 'Tunggakan', 'type' => 'money'],
             ['key' => 'status', 'label' => 'Status', 'type' => 'text'],
         ];
+        $states = $asOf === null ? [] : AsOf::loanStates(array_map(static fn (array $r): int => (int) $r['loan_id'], $rows), $asOf);
         $out = [];
         foreach ($rows as $r) {
+            $paid    = (int) $r['paid'];
+            $overdue = (int) $r['overdue'];
+            if ($asOf !== null) {
+                $paid    = $states[(int) $r['loan_id']]['paid'];
+                $overdue = $states[(int) $r['loan_id']]['overdue'];
+            }
+            $outstanding = (int) $r['total_due'] - $paid;
+            $isPaid      = $outstanding <= 0;
+            if ($asOf !== null && (($f['status'] === 'AKTIF' && $isPaid) || ($f['status'] === 'LUNAS' && !$isPaid))) {
+                continue;
+            }
             $out[] = [
                 'loan_no' => (string) $r['loan_no'], 'name' => $r['name'] . ' (' . $r['member_no'] . ')', 'team' => (string) ($r['team_name'] ?? '-'), 'month' => month_label((string) $r['month_date']),
                 'tenor' => (int) $r['tenor_months'], 'principal' => (int) $r['principal'], 'interest' => (int) $r['total_interest'], 'due' => (int) $r['total_due'],
-                'paid' => (int) $r['paid'], 'outstanding' => (int) $r['outstanding'], 'overdue' => (int) $r['overdue'], 'status' => $r['loan_status'] === 'LUNAS' ? 'Lunas' : 'Aktif',
+                'paid' => $paid, 'outstanding' => $asOf === null ? (int) $r['outstanding'] : $outstanding, 'overdue' => $overdue, 'status' => ($asOf === null ? $r['loan_status'] === 'LUNAS' : $isPaid) ? 'Lunas' : 'Aktif',
                 '_links' => ['loan_no' => '/transaksi/' . (int) $r['transaction_id'], 'name' => '/anggota/' . (int) $r['member_id']],
             ];
         }
+        $stateText = $asOf === null ? 'keadaan sekarang' : 'keadaan pada ' . date_id($asOf);
         return [
-            'key' => 'pinjaman', 'title' => 'Rekap Pinjaman', 'subtitle' => 'Dicairkan pada periode ' . self::periodName($f) . ' · rupiah', 'columns' => $columns, 'rows' => $out,
-            'totals' => self::sumRow($columns, $out, 'Jumlah ' . count($out) . ' pinjaman'), 'note' => 'Hanya pinjaman yang berlaku (disetujui dan belum dibalik). Sisa dan tunggakan = keadaan sekarang.',
+            'key' => 'pinjaman', 'title' => 'Rekap Pinjaman', 'subtitle' => ($range === null ? 'Dicairkan pada periode ' . self::periodName($f) : 'Dicairkan ' . date_id($range['from']) . ' s.d. ' . date_id($range['to'])) . ' · rupiah', 'columns' => $columns, 'rows' => $out,
+            'totals' => self::sumRow($columns, $out, 'Jumlah ' . count($out) . ' pinjaman'), 'note' => 'Hanya pinjaman yang berlaku (disetujui dan belum dibalik). Terbayar, sisa, dan tunggakan = ' . $stateText . '.',
         ];
     }
 
@@ -446,18 +656,29 @@ final class ReportService
             ['key' => 'savings', 'label' => 'Tabungan sekarang', 'type' => 'money'], ['key' => 'outstanding', 'label' => 'Sisa pinjaman', 'type' => 'money'], ['key' => 'overdue', 'label' => 'Tunggakan', 'type' => 'money'],
             ['key' => 'interest', 'label' => 'Total bunga', 'type' => 'money'], ['key' => 'cash', 'label' => 'Arus kas regu', 'type' => 'money'],
         ];
-        $base = ['key' => 'regu', 'title' => 'Laporan Per Ketua Regu', 'subtitle' => 'Periode ' . self::periodName($f) . ' · rupiah', 'columns' => $columns, 'rows' => [], 'totals' => null,
+        $base = ['key' => 'regu', 'title' => 'Laporan Per Ketua Regu', 'subtitle' => self::periodLabel($f) . ' · rupiah', 'columns' => $columns, 'rows' => [], 'totals' => null,
                  'note' => 'Anggota menurut keanggotaan regu saat ini. Setoran, angsuran, dan pencairan = jumlah bersih dalam periode; tabungan, sisa, tunggakan = keadaan sekarang. Total bunga = bunga dibukukan di muka dari pinjaman berlaku. Arus kas regu = setoran + angsuran − pencairan − penarikan atas regu itu (bukan uang fisik); jumlah semua regu berbeda dari kas koperasi sebesar biaya yang belum dibebankan ke regu.'];
         if (self::level($user) !== self::ALL) {
             return $base;
         }
-        $monthIds = array_column(self::months($f['period']), 'id');
-        $members  = self::members($user, ['team' => $f['team'], 'q' => '']);
-        $ids      = array_column($members, 'id');
-        $saved    = self::pivot('SIMPANAN', $ids, $monthIds);
-        $paid     = self::pivot('ANGSURAN', $ids, $monthIds);
-        $lent     = self::pivot('PENCAIRAN_PINJAMAN', $ids, $monthIds);
-        $stand    = self::standing($ids);
+        $range   = self::rangeOf($f);
+        $members = self::members($user, ['team' => $f['team'], 'q' => '']);
+        $ids     = array_column($members, 'id');
+        if ($range === null) {
+            $monthIds = array_column(self::months($f['period']), 'id');
+            $saved    = self::pivot('SIMPANAN', $ids, $monthIds);
+            $paid     = self::pivot('ANGSURAN', $ids, $monthIds);
+            $lent     = self::pivot('PENCAIRAN_PINJAMAN', $ids, $monthIds);
+            $stand    = self::standing($ids);
+        } else {
+            // Rentang bebas: arus menurut tanggal transaksi; tabungan, sisa, tunggakan pada tanggal akhir (Total bunga dan arus kas regu = sekarang).
+            $saved = self::pivotRange('SIMPANAN', $ids, $range);
+            $paid  = self::pivotRange('ANGSURAN', $ids, $range);
+            $lent  = self::pivotRange('PENCAIRAN_PINJAMAN', $ids, $range);
+            $stand = self::standing($ids, self::asOfDate($range));
+            $base['subtitle'] = self::periodLabel($f) . ' · rupiah';
+            $base['note'] .= ' Dengan rentang tanggal: arus menurut tanggal transaksi dalam rentang; tabungan, sisa, dan tunggakan menurut keadaan pada tanggal akhir; total bunga dan arus kas regu tetap keadaan sekarang.';
+        }
 
         $teams = Database::select(
             'SELECT tl.id, tl.name, lm.name AS leader FROM team_leaders tl LEFT JOIN members lm ON lm.id = tl.leader_member_id
@@ -653,7 +874,7 @@ final class ReportService
         $loans = [];
         foreach ($summary['loans'] as $l) {
             $loans[] = $l + ['installments' => Database::select(
-                'SELECT s.seq, s.due_month, s.amount_due, s.paid_amount, s.remaining_amount FROM v_installment_status s
+                'SELECT s.seq, s.due_month, s.due_date, s.amount_due, s.paid_amount, s.remaining_amount FROM v_installment_status s
                  JOIN loans ln ON ln.id = s.loan_id WHERE ln.transaction_id = ? ORDER BY s.seq',
                 [(int) $l['transaction_id']]
             )];

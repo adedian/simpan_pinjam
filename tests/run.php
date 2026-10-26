@@ -431,12 +431,12 @@ check('validator: regex dengan "|" menolak yang salah', Validator::validate(['m'
 // ---- Pengaturan: validasi (tanpa database) ----
 $base = [
     'interest_rate_pct_month' => '2.00', 'loan_tenor_min' => '1', 'loan_tenor_max' => '5', 'loan_max_amount' => '15.000.000',
-    'loan_max_active_per_member' => '0', 'saving_pokok_amount' => '50000', 'profit_share_saver_pct' => '40', 'profit_share_borrower_pct' => '40',
-    'profit_share_shu_pct' => '20', 'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40',
+    'loan_max_active_per_member' => '0', 'saving_pokok_amount' => '50000',
+    'reserve_pct' => '5', 'shu_member_pct' => '60', 'shu_manager_pct' => '40',
 ];
 check('pengaturan: nilai awal valid', SettingsService::validate($base)[0] === []);
 check('pengaturan: bool tak dicentang = 0, dicentang = 1', SettingsService::validate($base)[1]['withdrawals_enabled'] === '0' && SettingsService::validate($base + ['withdrawals_enabled' => '1'])[1]['withdrawals_enabled'] === '1');
-check('pengaturan: bagi hasil 40+40+21 ditolak', isset(SettingsService::validate(['profit_share_shu_pct' => '21'] + $base)[0]['profit_share_shu_pct']));
+check('pengaturan: persentase komponen bunga tidak lagi di Pengaturan (ada di Komponen Bunga)', !isset(SettingsService::DEFINITIONS['profit_share_shu_pct']) && !isset(SettingsService::DEFINITIONS['profit_share_saver_pct']) && !isset(SettingsService::DEFINITIONS['profit_share_borrower_pct']));
 check('pengaturan: SHU 60+39 ditolak', isset(SettingsService::validate(['shu_manager_pct' => '39'] + $base)[0]['shu_manager_pct']));
 check('pengaturan: nominal Rp dinormalkan (15.000.000 -> 15000000)', SettingsService::validate($base)[1]['loan_max_amount'] === '15000000');
 check('pengaturan: cadangan 5 -> "5.00"', SettingsService::validate($base)[1]['reserve_pct'] === '5.00');

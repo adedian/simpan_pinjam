@@ -19,25 +19,28 @@ $exportQuery = http_build_query($query);
         </div>
     </header>
 
-    <form class="toolbar no-print" method="get" action="<?= e(url($basePath)) ?>">
+    <?php if (!empty($filters['range_error'])): ?><div class="alert alert--warning no-print" role="alert"><?= e($filters['range_error']) ?></div><?php endif; ?>
+    <p class="report__period no-print"><span class="badge badge--disetujui"><?= e(\App\Services\ReportService::periodLabel($filters)) ?></span></p>
+
+    <form class="toolbar no-print" method="get" action="<?= e(url($basePath)) ?>" data-range-form>
         <?php foreach ($fields as $fd): $id = 'r_' . $fd['name']; ?>
             <div class="toolbar__field toolbar__field--<?= e($fd['type']) ?>">
-                <label class="sr-only" for="<?= e($id) ?>"><?= e($fd['label']) ?></label>
+                <label class="toolbar__label" for="<?= e($id) ?>"><?= e($fd['label']) ?></label>
                 <?php if ($fd['type'] === 'select'): ?>
-                    <select id="<?= e($id) ?>" class="input" name="<?= e($fd['name']) ?>" title="<?= e($fd['label']) ?>">
+                    <select id="<?= e($id) ?>" class="input" name="<?= e($fd['name']) ?>" title="<?= e($fd['label']) ?>"<?= !empty($fd['preset']) ? ' data-range-preset' : '' ?>>
                         <?php foreach ($fd['options'] as $ov => $ol): ?>
                             <option value="<?= e($ov) ?>"<?= (string) $ov === (string) $fd['value'] ? ' selected' : '' ?>><?= e($ol) ?></option>
                         <?php endforeach; ?>
                     </select>
                 <?php elseif ($fd['type'] === 'date'): ?>
-                    <input id="<?= e($id) ?>" class="input" type="date" name="<?= e($fd['name']) ?>" value="<?= e($fd['value']) ?>" title="<?= e($fd['label']) ?>">
+                    <input id="<?= e($id) ?>" class="input" type="date" name="<?= e($fd['name']) ?>" value="<?= e($fd['value']) ?>" title="<?= e($fd['label']) ?>"<?= $fd['name'] === 'dari' ? ' data-range-from' : ' data-range-to' ?>>
                 <?php else: ?>
                     <input id="<?= e($id) ?>" class="input" type="search" name="<?= e($fd['name']) ?>" value="<?= e($fd['value']) ?>" placeholder="<?= e($fd['placeholder'] ?? $fd['label']) ?>" maxlength="60">
                 <?php endif; ?>
             </div>
         <?php endforeach; ?>
-        <button type="submit" class="btn btn--secondary">Tampilkan</button>
-        <a class="btn btn--link" href="<?= e(url($basePath)) ?>">Atur ulang</a>
+        <button type="submit" class="btn btn--primary">Terapkan Filter</button>
+        <a class="btn btn--link" href="<?= e(url($basePath)) ?>">Reset</a>
     </form>
 
     <?php if ($report['key'] === 'bagihasil'): ?>

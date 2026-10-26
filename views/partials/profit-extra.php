@@ -13,6 +13,33 @@ $meta = $report['meta'] ?? null;
 </div>
 <?php endif; ?>
 
+<?php if (!empty($meta['components'])): $comp = $meta['components']; $compSum = (int) array_sum(array_column($comp, 'amount')); $showAmount = !empty($meta['global']); ?>
+<div class="components">
+    <h3 class="components__title">Komponen pembagian bunga</h3>
+    <div class="table-wrap">
+        <table class="table table--compact">
+            <thead><tr><th>Komponen</th><th class="num">Persentase</th><?php if ($showAmount): ?><th class="num">Nominal</th><?php endif; ?></tr></thead>
+            <tbody>
+            <?php foreach ($comp as $c): ?>
+                <tr>
+                    <td><?= e($c['name']) ?><?php if ($c['kind'] === 'DANA'): ?> <span class="muted">dana</span><?php endif; ?></td>
+                    <td class="num"><?= e($c['pct']) ?></td>
+                    <?php if ($showAmount): ?><td class="num"><?= e(money((int) $c['amount'])) ?></td><?php endif; ?>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+            <?php if ($showAmount): ?><tfoot><tr><th>Jumlah</th><th class="num">100%</th><th class="num"><?= e(money($compSum)) ?></th></tr></tfoot><?php endif; ?>
+        </table>
+    </div>
+    <?php if ($showAmount): ?>
+    <p class="muted">Total sumber (bunga yang diterima pada bulan yang dihitung): <strong><?= e(money((int) $meta['total_interest'])) ?></strong>
+        <?= $compSum === (int) $meta['total_interest'] ? '· seimbang dengan jumlah komponen.' : '· TIDAK sama dengan jumlah komponen, periksa data.' ?>
+        Selisih pembulatan ditanggung Kas SHU.
+        <?php if (\App\Core\Gate::allows(\App\Services\Auth::user(), 'settings.manage')): ?><a class="no-print" href="<?= e(url('/sistem/pembagian-bunga')) ?>">Atur komponen</a><?php endif; ?></p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if ($meta !== null): ?>
 <p class="report__status">
     <span class="badge <?= $meta['source'] === 'snapshot' ? ($meta['voided'] === null ? 'badge--disetujui' : 'badge--ditolak') : 'badge--menunggu-validasi' ?>"><?= e($meta['status']) ?></span>
