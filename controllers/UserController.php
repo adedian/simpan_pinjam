@@ -34,7 +34,7 @@ final class UserController extends BaseController
     public function store(Request $request, array $params = []): Response
     {
         $input = $this->read($request);
-        $errors = $this->validateBasics($input, true);
+        $errors = $this->validateBasics($input, null);
         if ($errors === []) {
             try {
                 $result = UserService::create($input['username'], $input['name'], $input['roles'], $input['member_no'] ?: null, null, $request, Auth::user());
@@ -62,15 +62,18 @@ final class UserController extends BaseController
     public function update(Request $request, array $params = []): Response
     {
         $id = (int) $params['id'];
-        if (User::findForAdmin($id) === null) {
+        $account = User::findForAdmin($id);
+        if ($account === null) {
             $this->abort(404);
         }
         $input  = $this->read($request);
-        $errors = $this->validateBasics($input, false);
+        $errors = $this->validateBasics($input, (string) $account['username']);
         if ($errors === []) {
             try {
-                UserService::update($request, Auth::user(), $id, $input['name'], $input['roles'], $input['member_no'] ?: null, $request->str('_version'));
-                Session::flash('success', 'Data pengguna disimpan.');
+                UserService::update($request, Auth::user(), $id, $input['username'], $input['name'], $input['roles'], $input['member_no'] ?: null, $request->str('_version'));
+                Session::flash('success', $input['username'] !== (string) $account['username']
+                    ? 'Data pengguna disimpan. Nama pengguna kini ' . $input['username'] . '; sampaikan ke pemilik akun untuk masuk berikutnya.'
+                    : 'Data pengguna disimpan.');
                 return $this->redirect('/master/pengguna');
             } catch (\InvalidArgumentException $e) {
                 $errors = ['_form' => $e->getMessage()];
@@ -138,10 +141,10 @@ final class UserController extends BaseController
      * @param array{username:string,name:string,roles:array<int,string>,member_no:string} $in
      * @return array<string,string>
      */
-    private function validateBasics(array $in, bool $creating): array
+    private function validateBasics(array $in, ?string $currentUsername): array
     {
         $errors = [];
-        if ($creating && preg_match('/^[a-z0-9][a-z0-9._-]{2,29}$/', $in['username']) !== 1) {
+        if ($in['username'] !== $currentUsername && preg_match('/^[a-z0-9][a-z0-9._-]{2,29}$/', $in['username']) !== 1) {
             $errors['username'] = 'Nama pengguna 3-30 karakter: huruf kecil, angka, titik, garis bawah atau strip.';
         }
         if ($in['name'] === '' || mb_strlen($in['name']) > 100) {

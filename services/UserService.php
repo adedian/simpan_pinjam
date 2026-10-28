@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Database;
+use App\Core\Gate;
 use App\Core\Request;
 
 /**
@@ -74,19 +75,35 @@ final class UserService
     }
 
     /**
-     * Ubah nama, peran, dan tautan anggota. Nama pengguna tidak bisa diubah.
+     * Ubah nama pengguna, nama, peran, dan tautan anggota. Hanya pemegang izin user.manage (Superadmin) yang boleh
+     * mengganti nama pengguna; Admin dan Anggota hanya bisa mengganti kata sandi sendiri (Profil).
      * @param array<int,string> $roleCodes
      * @param array{id:int,username:string,roles:array<int,string>} $actor
      */
-    public static function update(Request $request, array $actor, int $id, string $name, array $roleCodes, ?string $memberNo, string $version): void
+    public static function update(Request $request, array $actor, int $id, string $username, string $name, array $roleCodes, ?string $memberNo, string $version): void
     {
-        $name = clean_text($name);
+        $username = strtolower(trim($username));
+        $name     = clean_text($name);
         if ($name === '' || mb_strlen($name) > 100) {
             throw new \InvalidArgumentException('Nama wajib diisi (maksimal 100 karakter).');
         }
 
-        Database::transaction(static function (\PDO $pdo) use ($request, $actor, $id, $name, $roleCodes, $memberNo, $version): void {
+        Database::transaction(static function (\PDO $pdo) use ($request, $actor, $id, $username, $name, $roleCodes, $memberNo, $version): void {
             $row = self::lock($pdo, $id, $version);
+            $usernameChanged = $username !== (string) $row['username'];
+            if ($usernameChanged) {
+                if (preg_match(self::USERNAME_PATTERN, $username) !== 1) {
+                    throw new \InvalidArgumentException('Nama pengguna 3-30 karakter: huruf kecil, angka, titik, garis bawah atau strip.');
+                }
+                if (!Gate::allows($actor, 'user.manage')) {
+                    throw new \InvalidArgumentException('Hanya Superadmin yang bisa mengganti nama pengguna.');
+                }
+                $taken = $pdo->prepare('SELECT 1 FROM users WHERE username = ? AND id <> ? LIMIT 1');
+                $taken->execute([$username, $id]);
+                if ($taken->fetchColumn() !== false) {
+                    throw new \InvalidArgumentException('Nama pengguna sudah dipakai akun lain.');
+                }
+            }
             $oldRoles = self::rolesOf($pdo, $id);
             $newRoles = array_values(array_unique($roleCodes));
             $roleIds  = self::resolveRoles($pdo, $newRoles);
@@ -102,10 +119,10 @@ final class UserService
             }
 
             try {
-                $pdo->prepare('UPDATE users SET name = ?, member_id = ? WHERE id = ?')->execute([$name, $memberId, $id]);
+                $pdo->prepare('UPDATE users SET username = ?, name = ?, member_id = ? WHERE id = ?')->execute([$username, $name, $memberId, $id]);
             } catch (\PDOException $e) {
                 if ($e->getCode() === '23000') {
-                    throw new \InvalidArgumentException('Anggota ini sudah punya akun lain.');
+                    throw new \InvalidArgumentException(str_contains($e->getMessage(), 'uq_users_username') ? 'Nama pengguna sudah dipakai akun lain.' : 'Anggota ini sudah punya akun lain.');
                 }
                 throw $e;
             }
@@ -117,8 +134,8 @@ final class UserService
             }
 
             $oldMemberNo = self::memberNoOf($pdo, $row['member_id'] === null ? null : (int) $row['member_id']);
-            $before = ['name' => $row['name'], 'roles' => $oldRoles, 'member_no' => $oldMemberNo];
-            $after  = ['name' => $name, 'roles' => $newRoles, 'member_no' => $memberNo];
+            $before = ['username' => $row['username'], 'name' => $row['name'], 'roles' => $oldRoles, 'member_no' => $oldMemberNo];
+            $after  = ['username' => $username, 'name' => $name, 'roles' => $newRoles, 'member_no' => $memberNo];
             if ($before !== $after) {
                 AuditLog::record($request, $actor, 'USER_UPDATED', 'user', $id, (string) $row['username'], $before, $after, $pdo);
             }

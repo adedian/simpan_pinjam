@@ -175,7 +175,7 @@ $pdo->exec("UPDATE members SET status = 'NONAKTIF' WHERE member_no = 'AGT-001'")
 $ver = (string) $pdo->query("SELECT updated_at FROM users WHERE id = {$uid}")->fetchColumn();
 $err = null;
 try {
-    UserService::update(new App\Core\Request('POST', '/x', [], [], ['REMOTE_ADDR' => '10.1.1.1']), ['id' => 1, 'username' => 'kepala', 'roles' => ['HEAD']], $uid, 'Ketua Alfa Baru', ['KETUA_REGU'], 'AGT-001', $ver);
+    UserService::update(new App\Core\Request('POST', '/x', [], [], ['REMOTE_ADDR' => '10.1.1.1']), ['id' => 1, 'username' => 'kepala', 'roles' => ['HEAD']], $uid, 'alfa', 'Ketua Alfa Baru', ['KETUA_REGU'], 'AGT-001', $ver);
 } catch (InvalidArgumentException $e) {
     $err = $e->getMessage();
 }

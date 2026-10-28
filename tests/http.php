@@ -586,6 +586,29 @@ $hd->post('/master/pengguna/' . $meId . '/status', ['active' => '0', '_version' 
 check('master/pengguna: menonaktifkan akun sendiri ditolak', $has($hd->get('/master/pengguna'), 'menonaktifkan akun Anda sendiri') && $hd->get('/')['status'] === 200);
 check('master/pengguna: aksi pengubah via GET tidak ada (405/404)', in_array($hd->get('/master/pengguna/' . $betaId . '/status')['status'], [404, 405], true) && in_array($hd->get('/master/pengguna/' . $betaId . '/reset-password')['status'], [404, 405], true));
 
+// ganti nama pengguna: hanya Superadmin; Admin (ketua regu) dan Anggota tidak bisa, mereka hanya mengganti kata sandi sendiri
+$buId   = $count("SELECT id FROM users WHERE username = 'bu.edit'");
+$buVer  = fn (): string => (string) Database::pdo()->query("SELECT updated_at FROM users WHERE id = {$buId}")->fetchColumn();
+$buForm = $hd->get('/master/pengguna/' . $buId . '/ubah');
+check('master/pengguna/ubah: Superadmin melihat kolom nama pengguna yang bisa diisi', $buForm['status'] === 200 && $has($buForm, 'name="username"') && $has($buForm, 'value="bu.edit"') && !$has($buForm, 'Tidak bisa diubah'));
+$buPost = fn (string $username): array => $hd->post('/master/pengguna/' . $buId, ['username' => $username, 'name' => 'Bu Edit', 'roles' => ['ANGGOTA'], 'member_no' => 'AGT-005', '_version' => $buVer()]);
+$hd->get('/master/pengguna/' . $buId . '/ubah');
+$buPost('kepala');
+check('master/pengguna/ubah: nama pengguna yang sudah dipakai ditolak, nama lama utuh', $has($hd->get('/master/pengguna/' . $buId . '/ubah'), 'sudah dipakai') && $count("SELECT COUNT(*) FROM users WHERE username = 'bu.edit'") === 1);
+$hd->get('/master/pengguna/' . $buId . '/ubah');
+$buPost('Nama Ngawur!');
+check('master/pengguna/ubah: format nama pengguna salah ditolak', $has($hd->get('/master/pengguna/' . $buId . '/ubah'), 'Nama pengguna 3-30') && $count("SELECT COUNT(*) FROM users WHERE username = 'bu.edit'") === 1);
+$hd->get('/master/pengguna/' . $buId . '/ubah');
+$buOk = $buPost('bu.edit.baru');
+check('master/pengguna/ubah: Superadmin mengganti nama pengguna, dialihkan ke daftar dengan pemberitahuan', $buOk['status'] === 302 && $loc($buOk) === '/master/pengguna' && $count("SELECT COUNT(*) FROM users WHERE username = 'bu.edit.baru'") === 1 && $has($hd->get('/master/pengguna'), 'Nama pengguna kini bu.edit.baru'));
+check('master/pengguna/ubah: masuk dengan nama baru berhasil, nama lama tidak', (new Browser())->login('bu.edit.baru', (string) $temp)['status'] === 302 && $has((function () use ($temp) { $b = new Browser(); $b->login('bu.edit', (string) $temp); return $b->get('/login'); })(), 'Nama pengguna atau kata sandi salah.'));
+$ka->get('/master/anggota');
+check('master/pengguna/ubah: Admin (ketua regu) tidak bisa membuka maupun mengirim perubahan nama pengguna (403)', $ka->get('/master/pengguna/' . $buId . '/ubah')['status'] === 403 && $ka->post('/master/pengguna/' . $buId, ['username' => 'diganti.admin', 'name' => 'Bu Edit', 'roles' => ['ANGGOTA'], 'member_no' => 'AGT-005', '_version' => $buVer()])['status'] === 403 && $count("SELECT COUNT(*) FROM users WHERE username = 'diganti.admin'") === 0);
+$nb2 = new Browser();
+$nb2->login('bu.edit.baru', (string) $temp);
+check('master/pengguna/ubah: Anggota tidak bisa membuka formulir maupun mengirim perubahan nama pengguna (403)', $nb2->get('/master/pengguna/' . $buId . '/ubah')['status'] === 403 && $nb2->post('/master/pengguna/' . $buId, ['username' => 'diganti.anggota', 'name' => 'Bu Edit', 'roles' => ['ANGGOTA'], 'member_no' => 'AGT-005', '_version' => $buVer()])['status'] === 403 && $count("SELECT COUNT(*) FROM users WHERE username = 'diganti.anggota'") === 0);
+check('master/pengguna/ubah: Admin dan Anggota tetap bisa mengganti kata sandi sendiri (halaman tersedia)', $ka->get('/profil/password')['status'] === 200 && $nb2->get('/profil/password')['status'] === 200);
+
 // ---- 12e. Head: pengaturan ----
 $st = $hd->get('/sistem/pengaturan');
 check('pengaturan: halaman tampil dengan nominal berformat', $st['status'] === 200 && $has($st, 'value="15.000.000"') && $has($st, 'Bunga per bulan'));
@@ -2008,6 +2031,39 @@ check('anggota/form: simpan dengan teks nama saja (tanpa id) ditolak server', (f
     $r = $sa->post('/transaksi/simpanan', ['member_id' => 'Anggota Alfa Dua', 'amount' => '50.000', 'kind' => 'SUKARELA', 'trx_date' => date('Y-m-d'), 'period_month_id' => '1']);
     return $count('SELECT COUNT(*) FROM transactions') === $before && $r['status'] !== 500;
 })());
+
+// ---- 13y. Anggota hanya melihat data dirinya: isi halaman (bukan hanya kode status) tidak memuat orang atau transaksi lain ----
+$ownTeamIds  = array_map('intval', array_column(Database::select('SELECT member_id FROM member_team_assignments WHERE valid_to IS NULL AND team_id = (SELECT team_id FROM member_team_assignments WHERE member_id = ? AND valid_to IS NULL LIMIT 1)', [$mid(4)]), 'member_id'));
+$otherNames  = array_column(Database::select('SELECT name FROM members WHERE id NOT IN (' . implode(',', $ownTeamIds ?: [0]) . ') AND deleted_at IS NULL'), 'name');
+$otherDocs   = array_column(Database::select('SELECT doc_no FROM transactions WHERE member_id <> ? AND doc_no IS NOT NULL', [$mid(4)]), 'doc_no');
+$anggotaPages = ['/', '/profil', '/transaksi/simpanan', '/transaksi/pinjaman', '/transaksi/angsuran', '/transaksi/angsuran/tagihan', '/transaksi/angsuran/tunggakan', '/transaksi/riwayat',
+    '/laporan/simpanan', '/laporan/pinjaman', '/laporan/angsuran', '/laporan/saldo', '/laporan/transaksi', '/laporan/bagihasil', '/anggota/' . $mid(4),
+    // saringan yang mencoba melompat ke orang atau regu lain tidak boleh menembus cakupan
+    '/transaksi/riwayat?anggota=' . $mid(2), '/transaksi/riwayat?anggota=' . $mid(1) . '&regu=1', '/transaksi/simpanan?q=Alfa', '/transaksi/pinjaman?anggota=' . $mid(2),
+    '/transaksi/angsuran/tunggakan?anggota=' . $mid(2) . '&regu=1', '/laporan/simpanan?anggota=' . $mid(2) . '&regu=1', '/laporan/transaksi?anggota=' . $mid(2), '/laporan/bagihasil?regu=1&anggota=' . $mid(2)];
+$leaks = [];
+foreach ($anggotaPages as $path) {
+    $sm->get('/profil');
+    $page = $sm->get($path);
+    if ($page['status'] !== 200) {
+        $leaks[] = "{$path} status {$page['status']}";
+        continue;
+    }
+    $text = html_entity_decode(strip_tags((string) preg_replace('#<(script|style)\b.*?</\1>#s', '', $page['body'])), ENT_QUOTES);
+    foreach ($otherNames as $nm) {
+        if ($nm !== '' && str_contains($text, $nm)) {
+            $leaks[] = "{$path} memuat nama \"{$nm}\"";
+        }
+    }
+    foreach ($otherDocs as $dn) {
+        if (str_contains($text, (string) $dn)) {
+            $leaks[] = "{$path} memuat dokumen {$dn}";
+        }
+    }
+}
+check('anggota/isi: ' . count($anggotaPages) . ' halaman (termasuk saringan yang mencoba menembus) tidak memuat nama anggota lain atau nomor dokumen orang lain' . ($leaks ? ' [' . implode('; ', array_slice($leaks, 0, 5)) . ']' : ''), $leaks === []);
+$sm->get('/profil');
+check('anggota/isi: detail transaksi orang lain = 404', $otherDocs !== [] && array_reduce(array_column(Database::select('SELECT id FROM transactions WHERE member_id <> ?', [$mid(4)]), 'id'), static fn (bool $ok, $tid) => $ok && $sm->get('/transaksi/' . $tid)['status'] === 404, true));
 
 // ---- 14. Matriks peran dan cakupan route (Phase 17) ----
 // Matriks ditulis dari ATURAN di prompt master §5 (bukan disalin dari config/permissions.php), jadi bila izin berubah tanpa

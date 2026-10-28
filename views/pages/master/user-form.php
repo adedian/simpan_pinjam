@@ -11,11 +11,7 @@ $checked = (array) ($values['roles'] ?? []);
         <?= csrf_field() ?>
         <?php if ($isEdit): ?><input type="hidden" name="_version" value="<?= e($version) ?>"><?php endif; ?>
 
-        <?php if ($isEdit): ?>
-            <div class="field"><label>Nama pengguna</label><div class="static"><?= e($account['username']) ?></div><small class="field__hint">Tidak bisa diubah.</small></div>
-        <?php else: ?>
-            <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'username', 'label' => 'Nama pengguna', 'value' => $values['username'] ?? '', 'error' => $errors['username'] ?? null, 'required' => true, 'maxlength' => 30, 'hint' => 'Huruf kecil, angka, titik, garis bawah atau strip. Tidak bisa diubah nanti.']]) ?>
-        <?php endif; ?>
+        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'username', 'label' => 'Nama pengguna', 'value' => $values['username'] ?? '', 'error' => $errors['username'] ?? null, 'required' => true, 'maxlength' => 30, 'hint' => $isEdit ? 'Hanya Superadmin yang bisa mengganti nama pengguna. Pemilik akun perlu diberi tahu agar bisa masuk dengan nama baru.' : 'Huruf kecil, angka, titik, garis bawah atau strip. Bisa diganti Superadmin nanti.']]) ?>
         <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'name', 'label' => 'Nama', 'value' => $values['name'] ?? '', 'error' => $errors['name'] ?? null, 'required' => true, 'maxlength' => 100]]) ?>
 
         <fieldset class="fieldset<?= !empty($errors['roles']) ? ' fieldset--error' : '' ?>">

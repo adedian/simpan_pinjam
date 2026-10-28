@@ -219,19 +219,31 @@ check('pengguna: pilihan anggota hanya yang belum punya akun', !in_array('AGT-00
 check('pengguna: pilihan anggota menyertakan yang sedang diedit', in_array('AGT-002', array_column(User::memberOptions(2), 'member_no'), true));
 $uv = fn (int $id) => (string) one('SELECT updated_at FROM users WHERE id = ?', [$id]);
 
-check('pengguna/ubah: peran sendiri tidak boleh diubah', str_contains(violation(fn () => UserService::update(req(), $actor, $head['id'], 'Kepala', ['HEAD', 'KETUA_REGU'], null, $uv($head['id'])))['_form'] ?? '', 'akun Anda sendiri'));
+check('pengguna/ubah: peran sendiri tidak boleh diubah', str_contains(violation(fn () => UserService::update(req(), $actor, $head['id'], 'kepala', 'Kepala', ['HEAD', 'KETUA_REGU'], null, $uv($head['id'])))['_form'] ?? '', 'akun Anda sendiri'));
 check('pengguna/ubah: Head terakhir tidak bisa dicopot oleh siapa pun', (function () use ($actor, $head, $uv, $pdo): bool {
     // actor pura-pura admin lain (id berbeda) mencoba mencopot satu-satunya Head
     $other = ['id' => 9999, 'username' => 'x', 'roles' => ['HEAD']];
-    $v = violation(fn () => UserService::update(req(), $other, $head['id'], 'Kepala', ['ANGGOTA'], 'AGT-004', $uv($head['id'])));
+    $v = violation(fn () => UserService::update(req(), $other, $head['id'], 'kepala', 'Kepala', ['ANGGOTA'], 'AGT-004', $uv($head['id'])));
     return $v !== null && str_contains($v['_form'], 'minimal satu Superadmin');
 })());
-check('pengguna/ubah: versi basi ditolak', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'Baru', ['ANGGOTA'], 'AGT-002', '2000-01-01 00:00:00'))['_form'] ?? '', 'pengguna lain'));
-UserService::update(req(), $actor, $ang['id'], 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']));
+check('pengguna/ubah: versi basi ditolak', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'anggota2', 'Baru', ['ANGGOTA'], 'AGT-002', '2000-01-01 00:00:00'))['_form'] ?? '', 'pengguna lain'));
+UserService::update(req(), $actor, $ang['id'], 'anggota2', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']));
 check('pengguna/ubah: nama berubah + audit sebelum/sesudah', User::findForAdmin($ang['id'])['roles'] === ['ANGGOTA'] && lastAudit('USER_UPDATED')['before']['name'] === 'Anggota Alfa' && lastAudit('USER_UPDATED')['after']['name'] === 'Anggota Alfa Dua');
-check('pengguna/ubah: peran PEMERIKSA yang sudah dihapus ditolak saat ubah', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'X', ['ANGGOTA', 'PEMERIKSA'], 'AGT-002', $uv($ang['id'])))['_form'] ?? '', 'Peran tidak dikenal'));
+check('pengguna/ubah: peran PEMERIKSA yang sudah dihapus ditolak saat ubah', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'anggota2', 'X', ['ANGGOTA', 'PEMERIKSA'], 'AGT-002', $uv($ang['id'])))['_form'] ?? '', 'Peran tidak dikenal'));
 $head2 = UserService::create('kepala2', 'Kepala Dua', ['HEAD'], null, 'Contoh-Uji-2026');
-check('pengguna/ubah: Head boleh dicopot bila masih ada Head lain', violation(fn () => UserService::update(req(), $actor, $head2['id'], 'Kepala Dua', ['ANGGOTA'], 'AGT-005', $uv($head2['id']))) === null);
+check('pengguna/ubah: Head boleh dicopot bila masih ada Head lain', violation(fn () => UserService::update(req(), $actor, $head2['id'], 'kepala2', 'Kepala Dua', ['ANGGOTA'], 'AGT-005', $uv($head2['id']))) === null);
+
+// ganti nama pengguna: hanya Superadmin (izin user.manage); Admin dan Anggota hanya bisa mengganti kata sandi sendiri
+$adminActor = ['id' => 9998, 'username' => 'admin.uji', 'roles' => ['KETUA_REGU']];
+check('pengguna/nama-pengguna: bukan Superadmin ditolak mengganti, nama lama utuh', str_contains(violation(fn () => UserService::update(req(), $adminActor, $ang['id'], 'anggota2.baru', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id'])))['_form'] ?? '', 'Hanya Superadmin') && (string) one('SELECT username FROM users WHERE id = ?', [$ang['id']]) === 'anggota2');
+check('pengguna/nama-pengguna: bukan Superadmin tetap bisa menyimpan tanpa mengganti nama pengguna', violation(fn () => UserService::update(req(), $adminActor, $ang['id'], 'anggota2', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']))) === null);
+check('pengguna/nama-pengguna: format salah ditolak', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'A B', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id'])))['_form'] ?? '', '3-30 karakter'));
+check('pengguna/nama-pengguna: nama yang sudah dipakai akun lain ditolak', str_contains(violation(fn () => UserService::update(req(), $actor, $ang['id'], 'kepala', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id'])))['_form'] ?? '', 'sudah dipakai'));
+check('pengguna/nama-pengguna: nama yang sama dengan huruf besar-kecil berbeda dianggap sama (dinormalkan, tanpa perubahan)', violation(fn () => UserService::update(req(), $actor, $ang['id'], ' ANGGOTA2 ', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']))) === null && (string) one('SELECT username FROM users WHERE id = ?', [$ang['id']]) === 'anggota2');
+UserService::update(req(), $actor, $ang['id'], 'Anggota2.Baru', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']));
+check('pengguna/nama-pengguna: Superadmin berhasil mengganti (huruf kecil) + audit sebelum/sesudah', (string) one('SELECT username FROM users WHERE id = ?', [$ang['id']]) === 'anggota2.baru' && lastAudit('USER_UPDATED')['before']['username'] === 'anggota2' && lastAudit('USER_UPDATED')['after']['username'] === 'anggota2.baru');
+check('pengguna/nama-pengguna: masuk memakai nama baru berhasil, nama lama tidak', Auth::attempt(req(), 'anggota2.baru', 'Contoh-Uji-2026')['ok'] === true && Auth::attempt(req(), 'anggota2', 'Contoh-Uji-2026')['ok'] === false);
+UserService::update(req(), $actor, $ang['id'], 'anggota2', 'Anggota Alfa Dua', ['ANGGOTA'], 'AGT-002', $uv($ang['id']));   // pulihkan agar tes berikutnya memakai nama semula
 
 check('pengguna/status: akun sendiri tidak boleh dinonaktifkan', str_contains(violation(fn () => UserService::setActive(req(), $actor, $head['id'], false, $uv($head['id'])))['_form'] ?? '', 'sendiri'));
 UserService::setActive(req(), $actor, $pem['id'], false, $uv($pem['id']));
