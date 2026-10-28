@@ -2,7 +2,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="<?= e(asset('img/favicon-32.png')) ?>">
     <link rel="apple-touch-icon" href="<?= e(asset('img/apple-touch-icon.png')) ?>">
     <link rel="manifest" href="<?= e(url('/manifest.webmanifest')) ?>">
-    <meta name="theme-color" content="#1b7a4a">
+    <meta name="theme-color" content="#115e84">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="<?= e(config('app.short')) ?>">

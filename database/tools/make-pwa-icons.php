@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * Membuat semua ikon aplikasi dari satu gambar sumber (database/tools/logo-source.jpg: logo "AA" + tangan + dompet,
- * ubin hijau membulat di atas latar hijau tua) dengan GD. Jalankan sekali bila logo berubah:
+ * ubin biru laut membulat di atas latar biru laut tua) dengan GD. Jalankan sekali bila logo berubah:
  *   C:\xampp\php\php.exe database\tools\make-pwa-icons.php
  *
  *   logo.png (256) / logo-64.png / favicon-32.png   tanda merek (sidebar, tab peramban): logo utuh, sudut membulat
@@ -20,10 +20,10 @@ if (!extension_loaded('gd')) {
     exit(1);
 }
 
-const TILE_X = 66;      // ubin hijau pada gambar sumber 1254x1254 (tepi cahaya dibuang agar tak ada sisa latar gelap)
+const TILE_X = 66;      // ubin biru laut pada gambar sumber 1254x1254 (tepi cahaya dibuang agar tak ada sisa latar gelap)
 const TILE_Y = 66;
 const TILE_W = 1122;
-const BG     = [1, 64, 15];   // warna latar hijau tua gambar sumber (untuk ikon maskable)
+const BG     = [1, 45, 65];   // warna latar biru laut tua gambar sumber (untuk ikon maskable)
 
 $dir = dirname(__DIR__, 2) . '/public/assets/img/';
 $src = imagecreatefromjpeg(__DIR__ . '/logo-source.jpg');
@@ -79,7 +79,7 @@ foreach ([["logo.png", 256], ["logo-64.png", 64], ["favicon-32.png", 32], ["appl
     save(crop($src, TILE_X, TILE_Y, TILE_W, $size, $round), $dir . $name);
 }
 
-// Ikon maskable: ubin utuh dikecilkan ke 76% di atas latar hijau tua (zona aman lingkaran ±40% dari tengah).
+// Ikon maskable: ubin utuh dikecilkan ke 76% di atas latar biru laut tua (zona aman lingkaran ±40% dari tengah).
 $size = 512;
 $im   = imagecreatetruecolor($size, $size);
 imagefill($im, 0, 0, imagecolorallocate($im, BG[0], BG[1], BG[2]));

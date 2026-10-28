@@ -1,4 +1,4 @@
-<?php /** Hiasan sisi kanan kartu masuk: dua bidang hijau bertepi awan di atas dan bawah. Murni dekoratif. */ ?>
+<?php /** Hiasan sisi kanan kartu masuk: dua bidang biru laut bertepi awan di atas dan bawah. Murni dekoratif. */ ?>
 <svg class="auth__art" viewBox="0 0 600 600" preserveAspectRatio="none" aria-hidden="true" focusable="false">
     <defs>
         <linearGradient id="authTop" x1="0" y1="0" x2="1" y2="1">

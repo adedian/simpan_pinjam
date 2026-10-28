@@ -15,8 +15,8 @@ use App\Core\View;
  */
 final class PwaController
 {
-    private const THEME      = '#1b7a4a';   // --brand-700
-    private const BACKGROUND = '#e6f1ea';   // --bg
+    private const THEME      = '#115e84';   // --brand-700
+    private const BACKGROUND = '#e5f0f2';   // --bg
 
     /** @param array<string,string> $params */
     public function manifest(Request $request, array $params = []): Response
