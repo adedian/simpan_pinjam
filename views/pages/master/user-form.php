@@ -1,9 +1,5 @@
 <?php
 $isEdit = $account !== null;
-$memberOptions = ['' => 'Tidak ditautkan'];
-foreach ($members as $m) {
-    $memberOptions[$m['member_no']] = $m['name'] . ' (' . $m['member_no'] . ')' . ($m['leads_team'] ? ' · ketua regu' : '');
-}
 $checked = (array) ($values['roles'] ?? []);
 ?>
 <section class="card">
@@ -40,7 +36,7 @@ $checked = (array) ($values['roles'] ?? []);
             <?php if (!empty($errors['roles'])): ?><small class="field__error"><?= e($errors['roles']) ?></small><?php endif; ?>
         </fieldset>
 
-        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'member_no', 'label' => 'Tautkan ke anggota', 'type' => 'select', 'options' => $memberOptions, 'value' => $values['member_no'] ?? '', 'error' => $errors['member_no'] ?? null,
+        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'member_no', 'label' => 'Tautkan ke anggota', 'type' => 'member', 'context' => 'akun', 'include' => (int) ($account['member_id'] ?? 0), 'placeholder' => 'Tidak ditautkan (ketik untuk mencari anggota)', 'value' => $values['member_no'] ?? '', 'error' => $errors['member_no'] ?? null,
             'hint' => 'Hanya anggota aktif yang belum punya akun.']]) ?>
 
         <?php if (!$isEdit): ?><p class="muted">Kata sandi sementara dibuat otomatis dan ditampilkan satu kali setelah akun dibuat.</p><?php endif; ?>

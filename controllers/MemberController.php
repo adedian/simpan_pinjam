@@ -26,6 +26,7 @@ final class MemberController extends BaseController
         $user    = Auth::user();
         $filters = [
             'q'      => clean_text($request->query['q'] ?? ''),
+            'member' => max(0, (int) $request->queryStr('anggota')),
             'team'   => (int) ($request->query['team'] ?? 0),
             'status' => $request->queryStr('status'),
         ];

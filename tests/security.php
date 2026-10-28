@@ -52,6 +52,7 @@ $sqlReviewed = [
     'models/Audit.php' => ['$w', 'implode'],            // implode: deretan "?" sebanyak daftar kode (array_fill)
     'models/Dashboard.php' => ['$cond', '$scope', '$limit'],
     'models/Member.php' => ['$where', '$whereSql', '$from', '$pager'],
+    'services/MemberLookup.php' => ['implode', '$order'],   // $where = potongan tetap berparameter "?"; $order = konstanta (nilai pengguna lewat parameter); LIMIT/OFFSET = bilangan bulat hasil penjepitan
     'models/Transaction.php' => ['$scope', '$from', '$baseWhere', '$whereSql', '$pager', '$sql', '$alias'],   // $alias konstanta pemanggil dan divalidasi lagi oleh Scope; $sql keluaran Scope
     'models/Validation.php' => ['$from', '$whereSql', '$pager'],
     'services/ExcelImporter.php' => ['$table'],           // daftar tabel konstan, hanya CLI

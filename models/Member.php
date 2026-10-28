@@ -71,7 +71,7 @@ final class Member
      * Daftar anggota dalam cakupan pengguna, dengan pencarian dan filter.
      *
      * @param array{roles?:array<int,string>,member_id?:?int,team_id?:?int}|null $user
-     * @param array{q?:string,team?:int,status?:string} $filters
+     * @param array{q?:string,member?:int,team?:int,status?:string} $filters
      * @return array{rows:array<int,array<string,mixed>>,pager:array<string,int>}
      */
     public static function search(?array $user, array $filters, int $page): array
@@ -84,6 +84,10 @@ final class Member
             $like = '%' . Pagination::likeEscape($q) . '%';
             $where[] = "(m.name LIKE ? ESCAPE '\\\\' OR m.member_no LIKE ? ESCAPE '\\\\' OR m.address_block LIKE ? ESCAPE '\\\\')";
             array_push($params, $like, $like, $like);
+        }
+        if (!empty($filters['member'])) {
+            $where[] = 'm.id = ?';
+            $params[] = (int) $filters['member'];
         }
         if (!empty($filters['team'])) {
             $where[] = 'a.team_id = ?';

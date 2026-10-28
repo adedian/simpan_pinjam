@@ -82,7 +82,6 @@ final class TeamController extends BaseController
             'title'      => $team === null ? 'Tambah Regu' : 'Ubah Regu',
             'team'       => $team,
             'values'     => $old !== [] ? $old : $defaults,
-            'candidates' => Team::leaderCandidates($team === null ? null : (int) $team['id']),
             'action'     => $team === null ? url('/master/ketua-regu') : url('/master/ketua-regu/' . (int) $team['id']),
             'version'    => $team['updated_at'] ?? '',
         ]);

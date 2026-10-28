@@ -6,9 +6,10 @@
     <p class="muted">Keputusan yang diambil lewat aplikasi. Data impor Excel tidak melalui validator, jadi tidak tampil di sini.</p>
 
     <form class="toolbar" method="get" action="<?= e(url('/validasi/riwayat')) ?>">
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['member']]]) ?>
         <div class="toolbar__search">
-            <label class="sr-only" for="q">Cari</label>
-            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari anggota, nomor dokumen, atau validator" maxlength="60">
+            <label class="sr-only" for="q">Nomor dokumen atau validator</label>
+            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Nomor dokumen atau validator" maxlength="60">
         </div>
         <div>
             <label class="sr-only" for="keputusan">Keputusan</label>

@@ -2,7 +2,7 @@
     <div class="card__head">
         <h2 class="card__title">Laporan per anggota <span class="muted">· <?= (int) $pager['total'] ?></span></h2>
         <div class="actions">
-            <?php $keep = http_build_query(array_filter(['q' => $filters['q'], 'regu' => $filters['team'] > 0 ? (string) $filters['team'] : ''], static fn (string $v): bool => $v !== '')); ?>
+            <?php $keep = http_build_query(array_filter(['q' => $filters['q'], 'anggota' => $filters['anggota'] > 0 ? (string) $filters['anggota'] : '', 'regu' => $filters['team'] > 0 ? (string) $filters['team'] : ''], static fn (string $v): bool => $v !== '')); ?>
             <a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/cetak/pinjaman' . ($keep !== '' ? '?' . $keep : ''))) ?>">Cetak semua formulir pinjaman</a>
             <a class="btn btn--secondary btn--sm" href="<?= e(url('/laporan/anggota/cetak/tabungan' . ($keep !== '' ? '?' . $keep : ''))) ?>">Cetak semua formulir tabungan</a>
             <?php if ($canExport): ?><a class="btn btn--primary btn--sm" href="<?= e(url('/laporan/anggota/unduh' . ($keep !== '' ? '?' . $keep : ''))) ?>">Unduh Excel semua formulir</a><?php endif; ?>
@@ -11,10 +11,7 @@
     <p class="muted">Pilih anggota untuk membuka kartu anggota: tabungan per bulan, pinjaman beserta jadwal cicilan, dan seluruh transaksinya. Siap dicetak.</p>
 
     <form class="toolbar" method="get" action="<?= e(url('/laporan/anggota')) ?>">
-        <div class="toolbar__search">
-            <label class="sr-only" for="q">Cari</label>
-            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari nama atau nomor anggota" maxlength="60">
-        </div>
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['anggota']]]) ?>
         <?php if ($teams !== []): ?>
         <div>
             <label class="sr-only" for="regu">Regu</label>
@@ -25,7 +22,7 @@
         </div>
         <?php endif; ?>
         <button type="submit" class="btn btn--secondary">Cari</button>
-        <?php if ($filters['q'] !== '' || $filters['team'] > 0): ?><a class="btn btn--link" href="<?= e(url('/laporan/anggota')) ?>">Atur ulang</a><?php endif; ?>
+        <?php if ($filters['anggota'] > 0 || $filters['q'] !== '' || $filters['team'] > 0): ?><a class="btn btn--link" href="<?= e(url('/laporan/anggota')) ?>">Atur ulang</a><?php endif; ?>
     </form>
 
     <?php if ($rows === []): ?>

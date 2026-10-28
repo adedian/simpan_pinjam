@@ -1,9 +1,5 @@
 <?php
 $isEdit = $team !== null;
-$options = ['' => 'Pilih ketua regu'];
-foreach ($candidates as $c) {
-    $options[$c['id']] = $c['name'] . ' (' . $c['member_no'] . ')';
-}
 ?>
 <section class="card">
     <h2 class="card__title"><?= $isEdit ? 'Ubah regu' : 'Regu baru' ?></h2>
@@ -15,7 +11,7 @@ foreach ($candidates as $c) {
         <?php if ($isEdit): ?><input type="hidden" name="_version" value="<?= e($version) ?>"><?php endif; ?>
 
         <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'name', 'label' => 'Nama regu', 'value' => $values['name'] ?? '', 'error' => $errors['name'] ?? null, 'required' => true, 'maxlength' => 100, 'hint' => 'Mis. "Regu Bu Yanti".']]) ?>
-        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'leader_member_id', 'label' => 'Ketua regu', 'type' => 'select', 'options' => $options, 'value' => $values['leader_member_id'] ?? '', 'error' => $errors['leader_member_id'] ?? null, 'required' => true,
+        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'leader_member_id', 'label' => 'Ketua regu', 'type' => 'member', 'context' => 'ketua', 'team' => $isEdit ? (int) $team['id'] : 0, 'value' => $values['leader_member_id'] ?? '', 'error' => $errors['leader_member_id'] ?? null, 'required' => true,
             'hint' => $isEdit ? 'Hanya anggota regu ini yang bisa dipilih. Pindahkan dulu lewat Data Anggota bila perlu.' : 'Ketua otomatis menjadi anggota regu yang baru dibuat.']]) ?>
 
         <?php if ($isEdit): ?>

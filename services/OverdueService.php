@@ -24,7 +24,7 @@ final class OverdueService
     /**
      * Semua cicilan yang menunggak dalam cakupan pengguna, terlama dulu.
      * @param array<string,mixed>|null $user
-     * @param array{team?:int,q?:string,asof?:string} $f team hanya berlaku untuk cakupan seluruh koperasi; asof = tanggal pemeriksaan (Y-m-d) di masa lalu
+     * @param array{team?:int,q?:string,anggota?:int,asof?:string} $f team hanya berlaku untuk cakupan seluruh koperasi; asof = tanggal pemeriksaan (Y-m-d) di masa lalu
      * @return array<int,array<string,mixed>>
      */
     public static function items(?array $user, array $f = []): array
@@ -34,6 +34,10 @@ final class OverdueService
         if (Scope::level($user, 'transaction') === Scope::ALL && (int) ($f['team'] ?? 0) > 0) {
             $where[]  = 'a.team_id = ?';
             $params[] = (int) $f['team'];
+        }
+        if ((int) ($f['anggota'] ?? 0) > 0) {
+            $where[]  = 'm.id = ?';
+            $params[] = (int) $f['anggota'];
         }
         $q = trim((string) ($f['q'] ?? ''));
         if ($q !== '') {

@@ -32,6 +32,8 @@ $exportQuery = http_build_query($query);
                             <option value="<?= e($ov) ?>"<?= (string) $ov === (string) $fd['value'] ? ' selected' : '' ?>><?= e($ol) ?></option>
                         <?php endforeach; ?>
                     </select>
+                <?php elseif ($fd['type'] === 'member'): ?>
+                    <?= View::include('partials/member-picker', ['p' => ['id' => $id, 'name' => $fd['name'], 'context' => 'lihat', 'value' => $fd['value'], 'clearable' => true, 'placeholder' => 'Cari anggota…']]) ?>
                 <?php elseif ($fd['type'] === 'date'): ?>
                     <input id="<?= e($id) ?>" class="input" type="date" name="<?= e($fd['name']) ?>" value="<?= e($fd['value']) ?>" title="<?= e($fd['label']) ?>"<?= $fd['name'] === 'dari' ? ' data-range-from' : ' data-range-to' ?>>
                 <?php else: ?>

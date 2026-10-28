@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="<?= e(asset('css/app.css')) ?>">
     <?php /* app.js lebih dulu: ia mencatat HTML asli wilayah live sebelum grafik menggambar ke canvas */ ?>
     <script src="<?= e(asset('js/app.js')) ?>" defer></script>
+    <script src="<?= e(asset('js/member-picker.js')) ?>" defer></script>
     <?php foreach ((array) ($scripts ?? []) as $extraScript): ?>
         <script src="<?= e(asset($extraScript)) ?>" defer></script>
     <?php endforeach; ?>

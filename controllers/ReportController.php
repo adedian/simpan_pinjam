@@ -277,7 +277,7 @@ final class ReportController extends BaseController
     private function sheetView(Request $request, string $kind, array $sheets, ?array $single, array $filters, array $teams): Response
     {
         $label = $kind === 'pinjaman' ? 'Rekap Pinjaman' : 'Tabungan Hari Raya';
-        $keep  = array_filter(['regu' => $filters['team'] > 0 ? (string) $filters['team'] : '', 'q' => $filters['q']], static fn (string $v): bool => $v !== '');
+        $keep  = array_filter(['regu' => $filters['team'] > 0 ? (string) $filters['team'] : '', 'anggota' => ($filters['anggota'] ?? 0) > 0 ? (string) $filters['anggota'] : '', 'q' => $filters['q']], static fn (string $v): bool => $v !== '');
         return $this->view($request, 'laporan/lembar', [
             'title'   => $label . ($single !== null ? ' · ' . $single['member']['name'] : ' · semua anggota'),
             'canExport' => Gate::allows(Auth::user(), 'report.export'),
@@ -349,7 +349,13 @@ final class ReportController extends BaseController
             $out[] = ['name' => 'regu', 'label' => 'Regu', 'type' => 'select', 'options' => $teams, 'value' => (string) $f['team']];
         }
         if ($key === 'simpanan' || $key === 'angsuran' || $key === 'saldo' || $key === 'pinjaman' || $key === 'transaksi' || $key === 'bagihasil') {
-            $out[] = ['name' => 'q', 'label' => 'Cari', 'type' => 'text', 'value' => $f['q'], 'placeholder' => $key === 'transaksi' ? 'Anggota atau nomor dokumen' : 'Nama atau nomor anggota'];
+            // Anggota dipilih dari daftar (id); teks bebas hanya tersisa untuk nomor dokumen / nomor pinjaman.
+            if (\App\Services\MemberLookup::allowed(Auth::user(), 'lihat')) {
+                $out[] = ['name' => 'anggota', 'label' => 'Anggota', 'type' => 'member', 'value' => (string) ($f['anggota'] > 0 ? $f['anggota'] : '')];
+            }
+            if ($key === 'transaksi' || $key === 'pinjaman') {
+                $out[] = ['name' => 'q', 'label' => $key === 'pinjaman' ? 'Nomor pinjaman' : 'Nomor dokumen', 'type' => 'text', 'value' => $f['q'], 'placeholder' => $key === 'pinjaman' ? 'Nomor pinjaman' : 'Nomor dokumen'];
+            }
         }
         if ($key === 'bagihasil') {
             $opts = ['0' => 'Perhitungan langsung (perkiraan)'];

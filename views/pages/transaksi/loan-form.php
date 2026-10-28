@@ -14,7 +14,7 @@
         <?= csrf_field() ?>
         <?php if ($isEdit): ?><input type="hidden" name="_version" value="<?= e($version) ?>"><?php else: ?><input type="hidden" name="_form_id" value="<?= e($formId) ?>"><?php endif; ?>
 
-        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'member_id', 'label' => 'Peminjam', 'type' => 'select', 'options' => $memberOptions, 'value' => $v('member_id'), 'error' => $errors['member_id'] ?? null, 'required' => true,
+        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'member_id', 'label' => 'Peminjam', 'type' => 'member', 'context' => 'catat', 'value' => $v('member_id'), 'error' => $errors['member_id'] ?? null, 'required' => true,
             'hint' => 'Hanya anggota aktif di regu Anda.']]) ?>
 
         <div class="form__row">

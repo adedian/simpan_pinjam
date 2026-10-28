@@ -438,7 +438,7 @@
         var busy = function () {
             var a = document.activeElement;
             if (a && region.contains(a) && a.matches('input:not([type=button]):not([type=submit]):not([type=checkbox]):not([type=radio]), textarea, select, .ss__btn')) { return true; }
-            if (region.querySelector('.ss.is-open')) { return true; }
+            if (region.querySelector('.ss.is-open, .mp.is-open')) { return true; }
             var dirty = false;
             region.querySelectorAll('input, textarea').forEach(function (f) {
                 if (f.type === 'hidden' || f.type === 'submit' || f.type === 'button') { return; }

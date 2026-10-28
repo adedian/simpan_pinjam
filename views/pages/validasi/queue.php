@@ -13,9 +13,10 @@
     </div>
 
     <form class="toolbar" method="get" action="<?= e(url('/validasi')) ?>">
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['member']]]) ?>
         <div class="toolbar__search">
-            <label class="sr-only" for="q">Cari</label>
-            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari anggota atau nomor dokumen" maxlength="60">
+            <label class="sr-only" for="q">Nomor dokumen</label>
+            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari nomor dokumen" maxlength="60">
         </div>
         <div>
             <label class="sr-only" for="jenis">Jenis</label>

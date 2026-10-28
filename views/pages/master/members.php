@@ -5,9 +5,10 @@
     </div>
 
     <form class="toolbar" method="get" action="<?= e(url('/master/anggota')) ?>">
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['member']]]) ?>
         <div class="toolbar__search">
-            <label class="sr-only" for="q">Cari</label>
-            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari nama, nomor, atau blok" maxlength="60">
+            <label class="sr-only" for="q">Blok atau alamat</label>
+            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari blok / alamat" maxlength="60">
         </div>
         <?php if (count($teams) > 1): ?>
         <div>
@@ -29,7 +30,7 @@
             </select>
         </div>
         <button type="submit" class="btn btn--secondary">Cari</button>
-        <?php if ($filters['q'] !== '' || $filters['team'] || $filters['status'] !== ''): ?>
+        <?php if ($filters['q'] !== '' || $filters['member'] || $filters['team'] || $filters['status'] !== ''): ?>
             <a class="btn btn--link" href="<?= e(url('/master/anggota')) ?>">Atur ulang</a>
         <?php endif; ?>
     </form>

@@ -8,6 +8,7 @@ use App\Controllers\HealthController;
 use App\Controllers\HomeController;
 use App\Controllers\LiveController;
 use App\Controllers\MemberController;
+use App\Controllers\MemberLookupController;
 use App\Controllers\PayoutController;
 use App\Controllers\ProfitConfigController;
 use App\Controllers\ProfileController;
@@ -149,6 +150,9 @@ return static function (Router $r): void {
     // Pengaturan koperasi
     $r->get('/sistem/pengaturan', [SettingController::class, 'index'], ['auth', 'can:settings.manage']);
     $r->post('/sistem/pengaturan', [SettingController::class, 'update'], ['auth', 'can:settings.manage']);
+
+    // Pencarian anggota untuk kotak pilih anggota. Hak akses per konteks ditegakkan di MemberLookup (SQL); izin di sini hanya pintu masuk.
+    $r->get('/api/anggota', [MemberLookupController::class, 'search'], ['auth', 'can:transaction.create|member.view.all|member.view.team|member.view.self|team_leader.manage|user.manage']);
 
     // Denyut pembaruan langsung: hanya angka penanda perubahan, jadi cukup login (tanpa izin khusus).
     $r->get('/live/tick', [LiveController::class, 'tick'], ['auth']);

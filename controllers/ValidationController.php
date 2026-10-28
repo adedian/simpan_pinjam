@@ -23,7 +23,7 @@ final class ValidationController extends BaseController
     public function queue(Request $request, array $params = []): Response
     {
         $user    = Auth::user();
-        $filters = ['type' => $request->queryStr('jenis'), 'q' => clean_text($request->query['q'] ?? '')];
+        $filters = ['type' => $request->queryStr('jenis'), 'member' => max(0, (int) $request->queryStr('anggota')), 'q' => clean_text($request->query['q'] ?? '')];
         $result  = Validation::queue($user, $filters, (int) ($request->query['page'] ?? 1));
 
         return $this->view($request, 'validasi/queue', [
@@ -43,6 +43,7 @@ final class ValidationController extends BaseController
         $filters = [
             'decision' => $request->queryStr('keputusan'),
             'type'     => $request->queryStr('jenis'),
+            'member'   => max(0, (int) $request->queryStr('anggota')),
             'q'        => clean_text($request->query['q'] ?? ''),
         ];
         $result = Validation::decisions($filters, (int) ($request->query['page'] ?? 1));

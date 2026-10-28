@@ -165,7 +165,6 @@ final class UserController extends BaseController
             'account' => $user,
             'values'  => $old !== [] ? $old : $defaults,
             'labels'  => (array) Config::get('permissions.labels', []),
-            'members' => User::memberOptions($user['member_id'] ?? null),
             'action'  => $user === null ? url('/master/pengguna') : url('/master/pengguna/' . (int) $user['id']),
             'version' => $user['updated_at'] ?? '',
             'isSelf'  => $user !== null && (int) $user['id'] === Auth::user()['id'],

@@ -278,7 +278,7 @@ final class ReportService
     /**
      * Anggota dalam cakupan pengguna, terurut regu lalu nama.
      * @param array<string,mixed>|null $user
-     * @param array{team:int,q:string} $f
+     * @param array{team:int,q:string,anggota?:int} $f anggota: bila > 0, hanya anggota itu (bila masih dalam cakupan)
      * @return array<int,array{id:int,member_no:string,name:string,status:string,team_id:?int,team_name:string}>
      */
     public static function members(?array $user, array $f): array
@@ -288,6 +288,10 @@ final class ReportService
         if ($f['team'] > 0) {
             $where[]  = 'a.team_id = ?';
             $params[] = $f['team'];
+        }
+        if ((int) ($f['anggota'] ?? 0) > 0) {
+            $where[]  = 'm.id = ?';
+            $params[] = (int) $f['anggota'];
         }
         if ($f['q'] !== '') {
             $like     = '%' . Pagination::likeEscape($f['q']) . '%';
@@ -582,6 +586,10 @@ final class ReportService
         if ($f['team'] > 0) {
             $where[]  = 'a.team_id = ?';
             $params[] = $f['team'];
+        }
+        if ($f['anggota'] > 0) {
+            $where[]  = 'b.member_id = ?';
+            $params[] = $f['anggota'];
         }
         if ($f['q'] !== '') {
             $like     = '%' . Pagination::likeEscape($f['q']) . '%';

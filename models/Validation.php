@@ -17,7 +17,7 @@ final class Validation
      * Transaksi yang menunggu validasi (terlama dulu), beserta penilaian kewenangan pengguna ini per baris.
      *
      * @param array{id?:int,roles?:array<int,string>,member_id?:?int} $user
-     * @param array{type?:string,q?:string} $filters
+     * @param array{type?:string,member?:int,q?:string} $filters
      * @return array{rows:array<int,array<string,mixed>>,pager:array<string,int>,byType:array<string,array{n:int,sum:int}>}
      */
     public static function queue(array $user, array $filters, int $page): array
@@ -29,6 +29,10 @@ final class Validation
         if (isset(Transaction::TYPE_LABELS[$filters['type'] ?? ''])) {
             $where[]  = 't.type = ?';
             $params[] = $filters['type'];
+        }
+        if ((int) ($filters['member'] ?? 0) > 0) {
+            $where[]  = 't.member_id = ?';
+            $params[] = (int) $filters['member'];
         }
         $q = trim((string) ($filters['q'] ?? ''));
         if ($q !== '') {
@@ -76,7 +80,7 @@ final class Validation
      * Keputusan validasi yang diambil lewat aplikasi (setuju/tolak), terbaru dulu. Data impor Excel (tanpa
      * validator) sengaja tidak ikut.
      *
-     * @param array{decision?:string,type?:string,q?:string} $filters
+     * @param array{decision?:string,type?:string,member?:int,q?:string} $filters
      * @return array{rows:array<int,array<string,mixed>>,pager:array<string,int>}
      */
     public static function decisions(array $filters, int $page): array
@@ -90,6 +94,10 @@ final class Validation
         if (isset(Transaction::TYPE_LABELS[$filters['type'] ?? ''])) {
             $where[]  = 't.type = ?';
             $params[] = $filters['type'];
+        }
+        if ((int) ($filters['member'] ?? 0) > 0) {
+            $where[]  = 't.member_id = ?';
+            $params[] = (int) $filters['member'];
         }
         $q = trim((string) ($filters['q'] ?? ''));
         if ($q !== '') {

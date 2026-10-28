@@ -29,10 +29,7 @@ $other   = $kind === 'pinjaman' ? 'tabungan' : 'pinjaman';
     <p class="muted">Ukuran A4 tegak. Pada kotak cetak peramban, matikan "Header dan footer" dan nyalakan "Background graphics" agar warna kepala tabel ikut tercetak.</p>
     <?php if ($single === null): ?>
     <form class="toolbar" method="get" action="<?= e(url('/laporan/anggota/cetak/' . $kind)) ?>">
-        <div class="toolbar__search">
-            <label class="sr-only" for="q">Cari</label>
-            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari nama atau nomor anggota" maxlength="60">
-        </div>
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['anggota']]]) ?>
         <?php if ($teams !== []): ?>
         <div>
             <label class="sr-only" for="regu">Regu</label>
@@ -43,7 +40,7 @@ $other   = $kind === 'pinjaman' ? 'tabungan' : 'pinjaman';
         </div>
         <?php endif; ?>
         <button type="submit" class="btn btn--secondary">Terapkan</button>
-        <?php if ($filters['q'] !== '' || $filters['team'] > 0): ?><a class="btn btn--link" href="<?= e(url('/laporan/anggota/cetak/' . $kind)) ?>">Atur ulang</a><?php endif; ?>
+        <?php if ($filters['anggota'] > 0 || $filters['q'] !== '' || $filters['team'] > 0): ?><a class="btn btn--link" href="<?= e(url('/laporan/anggota/cetak/' . $kind)) ?>">Atur ulang</a><?php endif; ?>
     </form>
     <?php endif; ?>
 </section>

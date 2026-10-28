@@ -90,7 +90,7 @@ final class UserService
             $oldRoles = self::rolesOf($pdo, $id);
             $newRoles = array_values(array_unique($roleCodes));
             $roleIds  = self::resolveRoles($pdo, $newRoles);
-            $memberId = self::resolveMember($pdo, $memberNo);
+            $memberId = self::resolveMember($pdo, $memberNo, $row['member_id'] === null ? null : (int) $row['member_id']);
 
             $rolesChanged = array_diff($oldRoles, $newRoles) !== [] || array_diff($newRoles, $oldRoles) !== [];
             if ($id === $actor['id'] && $rolesChanged) {
@@ -269,18 +269,22 @@ final class UserService
         return $ids;
     }
 
-    private static function resolveMember(\PDO $pdo, ?string $memberNo): ?int
+    /** Anggota yang ditautkan harus ada dan aktif; tautan yang sudah ada ($keepId) boleh tetap meski anggotanya kini nonaktif. */
+    private static function resolveMember(\PDO $pdo, ?string $memberNo, ?int $keepId = null): ?int
     {
         if ($memberNo === null || $memberNo === '') {
             return null;
         }
-        $stmt = $pdo->prepare('SELECT id FROM members WHERE member_no = ? AND deleted_at IS NULL');
+        $stmt = $pdo->prepare('SELECT id, status FROM members WHERE member_no = ? AND deleted_at IS NULL');
         $stmt->execute([$memberNo]);
-        $id = $stmt->fetchColumn();
-        if ($id === false) {
+        $row = $stmt->fetch();
+        if ($row === false) {
             throw new \InvalidArgumentException("Anggota {$memberNo} tidak ditemukan.");
         }
-        return (int) $id;
+        if ($row['status'] !== 'AKTIF' && (int) $row['id'] !== $keepId) {
+            throw new \InvalidArgumentException("Anggota {$memberNo} tidak aktif, jadi tidak bisa ditautkan ke akun.");
+        }
+        return (int) $row['id'];
     }
 
     private static function memberNoOf(\PDO $pdo, ?int $memberId): ?string

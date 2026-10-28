@@ -1,7 +1,7 @@
 <?php
 /**
  * Satu field formulir. Parameter ($f):
- *   name, label, type (text|select|textarea|month|date|checkbox|number), value, min/max (khusus date), options (select: nilai => label),
+ *   name, label, type (text|select|member|textarea|month|date|checkbox|number), value, context/team/include (khusus member: lihat partials/member-picker), min/max (khusus date), options (select: nilai => label),
  *   error, hint, placeholder, maxlength, required, disabled, autocomplete, inputmode, suffix
  */
 $type  = $f['type'] ?? 'text';
@@ -36,6 +36,12 @@ $attrs = ''
                     <option value="<?= e($optValue) ?>"<?= (string) $optValue === (string) $value ? ' selected' : '' ?>><?= e($optLabel) ?></option>
                 <?php endforeach; ?>
             </select>
+        <?php elseif ($type === 'member'): ?>
+            <?= \App\Core\View::include('partials/member-picker', ['p' => [
+                'id' => $id, 'name' => $name, 'context' => $f['context'] ?? 'lihat', 'value' => $value, 'required' => !empty($f['required']), 'disabled' => !empty($f['disabled']),
+                'placeholder' => $f['placeholder'] ?? null, 'team' => $f['team'] ?? 0, 'include' => $f['include'] ?? 0, 'clearable' => $f['clearable'] ?? null,
+                'invalid' => (bool) $error, 'describedby' => $error ? $id . '_err' : null,
+            ]]) ?>
         <?php elseif ($type === 'textarea'): ?>
             <textarea id="<?= e($id) ?>" name="<?= e($name) ?>" class="input" rows="3"<?= $attrs ?>><?= e($value) ?></textarea>
         <?php else: ?>

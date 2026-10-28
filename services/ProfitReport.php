@@ -199,7 +199,7 @@ final class ProfitReport
         }
         $reservePct = (float) $data['reserve_pct'];
         $rows = [];
-        foreach (ReportService::members($user, ['team' => (int) $f['team'], 'q' => (string) $f['q']]) as $m) {
+        foreach (ReportService::members($user, ['team' => (int) $f['team'], 'q' => (string) $f['q'], 'anggota' => (int) ($f['anggota'] ?? 0)]) as $m) {
             $d = $data['members'][$m['id']] ?? null;
             $row = [
                 'no' => $m['member_no'], 'name' => $m['name'], 'team' => $m['team_name'], 'leader' => $m['team_id'] === null ? '-' : ($leaders[$m['team_id']] ?? '-'),

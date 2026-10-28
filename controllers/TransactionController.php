@@ -169,7 +169,7 @@ final class TransactionController extends BaseController
         $per     = $request->queryStr('per');
         $perDate = \DateTime::createFromFormat('!Y-m-d', $per);
         $per     = $perDate !== false && $perDate->format('Y-m-d') === $per && $per < date('Y-m-d') ? $per : '';   // hanya tanggal pemeriksaan yang sudah lewat; kosong = sekarang
-        $filters = ['q' => mb_substr(clean_text($request->query['q'] ?? ''), 0, 60), 'team' => $level === \App\Services\Scope::ALL ? max(0, (int) ($request->query['regu'] ?? 0)) : 0, 'asof' => $per];
+        $filters = ['q' => mb_substr(clean_text($request->query['q'] ?? ''), 0, 60), 'anggota' => max(0, (int) $request->queryStr('anggota')), 'team' => $level === \App\Services\Scope::ALL ? max(0, (int) ($request->query['regu'] ?? 0)) : 0, 'asof' => $per];
         $items   = \App\Services\OverdueService::items($user, $filters);
         return $this->view($request, 'transaksi/overdue', [
             'title'    => 'Tunggakan Pinjaman',
@@ -553,10 +553,6 @@ final class TransactionController extends BaseController
         $old    = Session::get('_old', []);   // dibaca tanpa dihapus: view() menariknya untuk galat
         $values = $old !== [] ? $old : $defaults;
 
-        $memberOptions = ['' => 'Pilih anggota'];
-        foreach (Transaction::teamMembers((int) $user['team_id']) as $m) {
-            $memberOptions[$m['id']] = $m['member_no'] . ' · ' . $m['name'];
-        }
         $monthOptions = ['' => 'Pilih bulan'];
         foreach (Transaction::recordableMonths() as $mo) {
             $monthOptions[$mo['id']] = month_label((string) $mo['month_date']);
@@ -566,7 +562,6 @@ final class TransactionController extends BaseController
             'title'         => $trx === null ? 'Catat Simpanan' : 'Ubah Draft ' . $trx['doc_no'],
             'trx'           => $trx,
             'values'        => $values,
-            'memberOptions' => $memberOptions,
             'monthOptions'  => $monthOptions,
             'kinds'         => SavingService::KINDS,
             'action'        => $trx === null ? url('/transaksi/simpanan') : url('/transaksi/simpanan/' . (int) $trx['id']),
@@ -586,10 +581,6 @@ final class TransactionController extends BaseController
         $old    = Session::get('_old', []);
         $values = $old !== [] ? $old : $defaults;
 
-        $memberOptions = ['' => 'Pilih anggota'];
-        foreach (Transaction::teamMembers((int) $user['team_id']) as $m) {
-            $memberOptions[$m['id']] = $m['member_no'] . ' · ' . $m['name'];
-        }
         $monthOptions = ['' => 'Pilih bulan'];
         foreach (Transaction::recordableMonths() as $mo) {
             $monthOptions[$mo['id']] = month_label((string) $mo['month_date']);
@@ -599,7 +590,6 @@ final class TransactionController extends BaseController
             'title'         => $trx === null ? 'Catat Pinjaman' : 'Ubah Draft ' . $trx['doc_no'],
             'trx'           => $trx,
             'values'        => $values,
-            'memberOptions' => $memberOptions,
             'monthOptions'  => $monthOptions,
             'action'        => $trx === null ? url('/transaksi/pinjaman') : url('/transaksi/pinjaman/' . (int) $trx['id']),
             'version'       => $trx['updated_at'] ?? '',
@@ -622,10 +612,6 @@ final class TransactionController extends BaseController
         $old    = Session::get('_old', []);
         $values = $old !== [] ? $old : $defaults;
 
-        $memberOptions = ['' => 'Pilih anggota'];
-        foreach (Transaction::teamMembers((int) $user['team_id']) as $m) {
-            $memberOptions[$m['id']] = $m['member_no'] . ' · ' . $m['name'];
-        }
         $monthOptions = ['' => 'Pilih bulan'];
         foreach (Transaction::recordableMonths() as $mo) {
             $monthOptions[$mo['id']] = month_label((string) $mo['month_date']);
@@ -635,7 +621,6 @@ final class TransactionController extends BaseController
             'title'         => $trx === null ? 'Catat Angsuran' : 'Ubah Draft ' . $trx['doc_no'],
             'trx'           => $trx,
             'values'        => $values,
-            'memberOptions' => $memberOptions,
             'monthOptions'  => $monthOptions,
             'action'        => $trx === null ? url('/transaksi/angsuran') : url('/transaksi/angsuran/' . (int) $trx['id']),
             'version'       => $trx['updated_at'] ?? '',

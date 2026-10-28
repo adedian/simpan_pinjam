@@ -10,10 +10,10 @@
     <?= \App\Core\View::include('partials/transaction-summary', ['totals' => $totals]) ?>
 
     <form class="toolbar" method="get" action="<?= e(url('/transaksi/pinjaman')) ?>">
-        <?php if ($filters['member'] > 0): ?><input type="hidden" name="anggota" value="<?= (int) $filters['member'] ?>"><?php endif; ?>
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['member']]]) ?>
         <div class="toolbar__search">
-            <label class="sr-only" for="q">Cari</label>
-            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari anggota atau nomor dokumen" maxlength="60">
+            <label class="sr-only" for="q">Nomor dokumen</label>
+            <input id="q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari nomor dokumen" maxlength="60">
         </div>
         <div>
             <label class="sr-only" for="bulan">Bulan</label>

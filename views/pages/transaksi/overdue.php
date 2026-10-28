@@ -13,9 +13,10 @@
     </p>
 
     <form class="toolbar no-print" method="get" action="<?= e(url('/transaksi/angsuran/tunggakan')) ?>">
+        <?= \App\Core\View::include('partials/member-filter', ['p' => ['value' => (int) $filters['anggota']]]) ?>
         <div class="toolbar__field toolbar__field--text">
-            <label class="sr-only" for="t_q">Cari</label>
-            <input id="t_q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Nama, nomor anggota, atau nomor pinjaman" maxlength="60">
+            <label class="sr-only" for="t_q">Nomor pinjaman</label>
+            <input id="t_q" class="input" type="search" name="q" value="<?= e($filters['q']) ?>" placeholder="Cari nomor pinjaman" maxlength="60">
         </div>
         <?php if ($teams !== []): ?>
         <div class="toolbar__field toolbar__field--select">

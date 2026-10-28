@@ -221,6 +221,12 @@ $count = fn (string $sql, array $p = []): int => (function () use ($sql, $p): in
 })();
 $mid = fn (int $n): int => $count('SELECT id FROM members WHERE member_no = ?', [sprintf('AGT-%03d', $n)]);
 $loc = fn (array $r): string => (string) preg_replace('#^https?://[^/]+#', '', (string) $r['location']);
+/** Hasil JSON /api/anggota: [status, nomor anggota hasilnya]. */
+$lookup = function (Browser $b, string $query) {
+    $r = $b->get('/api/anggota?' . $query);
+    $d = json_decode($r['body'], true);
+    return [$r['status'], is_array($d) && isset($d['items']) ? array_column($d['items'], 'member_no') : null, $d];
+};
 
 // ---------- 0. server hidup ----------
 $b = new Browser();
@@ -480,8 +486,12 @@ check('privasi: Head melihat catatan tersebut', $has($hd->get('/anggota/2'), 'ra
 // ---- 12c. Head: regu ----
 $tl = $hd->get('/master/ketua-regu');
 check('master/regu: daftar regu dengan ketua dan jumlah anggota', $tl['status'] === 200 && $has($tl, 'Regu Alfa') && $has($tl, 'Regu Beta') && $has($tl, 'Ketua Regu Alfa'));
+check('master/regu: calon ketua (API) hanya anggota yang belum memimpin', (function () use ($hd, $lookup): bool {
+    [$st, $nos] = $lookup($hd, 'konteks=ketua&q=AGT');
+    return $st === 200 && in_array('AGT-002', $nos, true) && !in_array('AGT-001', $nos, true) && !in_array('AGT-003', $nos, true);
+})());
 $tf = $hd->get('/master/ketua-regu/baru');
-check('master/regu: calon ketua hanya anggota yang belum memimpin', $has($tf, 'Anggota Alfa Dua') && !$has($tf, '>Ketua Regu Alfa (') && !$has($tf, '>Ketua Regu Beta ('));
+check('master/regu: kolom ketua memakai kotak pilih anggota (konteks ketua), daftar tidak dimuat di halaman', $has($tf, 'data-member-picker') && $has($tf, 'data-context="ketua"') && $has($tf, 'name="leader_member_id"') && !$has($tf, 'Anggota Alfa Dua'));
 $r1 = $hd->post('/master/ketua-regu', ['name' => 'Regu Gamma', 'leader_member_id' => (string) $newId]);
 check('master/regu: buat regu berhasil', $r1['status'] === 302 && $loc($r1) === '/master/ketua-regu' && $has($hd->get('/master/ketua-regu'), 'Regu Gamma'));
 $hd->get('/master/ketua-regu/baru');
@@ -635,7 +645,7 @@ check('simpanan/csrf: POST catat tanpa token = 419', $sa->post('/transaksi/simpa
 
 // formulir
 $f = $sa->get('/transaksi/simpanan/baru');
-check('simpanan/formulir: tampil dengan token sekali pakai dan anggota regunya', $f['status'] === 200 && $tokenOf($f) !== '' && $has($f, 'Anggota Alfa Dua') && $has($f, 'Ketua Regu Alfa'));
+check('simpanan/formulir: tampil dengan token sekali pakai dan kotak pilih anggota (daftar dari API, tidak dimuat di halaman)', $f['status'] === 200 && $tokenOf($f) !== '' && $has($f, 'data-member-picker') && $has($f, 'data-context="catat"') && $has($f, 'name="member_id"') && !$has($f, 'Anggota Alfa Dua'));
 check('simpanan/formulir: anggota regu lain TIDAK ada di pilihan', !$has($f, 'Anggota Beta Dua') && !$has($f, 'Ketua Regu Beta'));
 check('simpanan/formulir: bulan tersedia berlabel Indonesia', $has($f, 'Maret 2026'));
 
@@ -788,7 +798,7 @@ check('pinjaman/simulasi: tidak menyimpan apa pun', $count('SELECT COUNT(*) FROM
 
 // formulir
 $f = $sa->get('/transaksi/pinjaman/baru');
-check('pinjaman/formulir: tampil dengan token, tarif, rentang tenor, dan anggota regunya saja', $f['status'] === 200 && $tokenOf($f) !== '' && $has($f, '2,00% per bulan') && $has($f, 'Tenor 1–5 bulan') && $has($f, 'Anggota Alfa Dua') && !$has($f, 'Anggota Beta Dua'));
+check('pinjaman/formulir: tampil dengan token, tarif, rentang tenor, dan kotak pilih anggota', $f['status'] === 200 && $tokenOf($f) !== '' && $has($f, '2,00% per bulan') && $has($f, 'Tenor 1–5 bulan') && $has($f, 'data-context="catat"') && !$has($f, 'Anggota Alfa Dua') && !$has($f, 'Anggota Beta Dua'));
 
 // simpan draft
 $r = $putLoan($sa, ['description' => 'Modal <b>warung</b>']);
@@ -912,7 +922,7 @@ check('angsuran/tagihan: ketua B tidak melihat anggota regu A; Head melihat; Ang
 
 // formulir
 $f = $sa->get('/transaksi/angsuran/baru?anggota=' . $mid(2) . '&nominal=1766666');
-check('angsuran/formulir: terisi dari tagihan (anggota terpilih, jumlah 1.766.666), token, hanya anggota regunya', $f['status'] === 200 && $tokenOf($f) !== '' && $has($f, 'value="1.766.666"') && (bool) preg_match('/<option value="' . $mid(2) . '" selected>/', $f['body']) && !$has($f, 'Anggota Beta Dua'));
+check('angsuran/formulir: terisi dari tagihan (anggota terpilih, jumlah 1.766.666), token, hanya anggota regunya', $f['status'] === 200 && $tokenOf($f) !== '' && $has($f, 'value="1.766.666"') && (bool) preg_match('/name="member_id" value="' . $mid(2) . '"/', $f['body']) && $has($f, 'Anggota Alfa Dua (AGT-002)') && !$has($f, 'Anggota Beta Dua'));
 check('angsuran/formulir: masukan ?anggota=/nominal= ngawur tidak membuat error', $sa->get('/transaksi/angsuran/baru?anggota=abc&nominal=-5')['status'] === 200 && $sa->get('/transaksi/angsuran/baru?anggota=' . $mid(4))['status'] === 200);
 
 // simpan draft
@@ -1281,7 +1291,7 @@ $simM = $sm->get('/laporan/simpanan');
 check('laporan/simpanan: Anggota hanya dirinya, tanpa filter regu', $has($simM, 'Anggota Beta Dua') && !$has($simM, 'Anggota Alfa Dua') && !$has($simM, 'Ketua Regu') && !$has($simM, 'name="regu"'));
 check('laporan/saringan: pemilihan regu hanya untuk Head; Ketua Regu tidak memaksa regu lain lewat URL', $has($simH, 'name="regu"') && !$has($simA, 'name="regu"') && !$has($sa->get('/laporan/simpanan?regu=' . $count("SELECT id FROM team_leaders WHERE name = 'Regu Beta'")), 'Anggota Beta Dua'));
 check('laporan/saringan: nilai ngawur aman (periode, halaman, status, tanggal) dan pencarian tidak menjadi wildcard', $sh->get('/laporan/simpanan?periode=999&page=-5&status=zzz&dari=bukan-tanggal')['status'] === 200 && $sh->get('/laporan/transaksi?page=9999&jenis=x')['status'] === 200 && $has($sh->get('/laporan/simpanan?q=%25'), 'Tidak ada data') && $has($sh->get("/laporan/simpanan?q=%27%20OR%20%271%27%3D%271"), 'Tidak ada data'));
-check('laporan/saringan: isian pencarian dipantulkan sebagai teks (XSS)', !$has($sh->get('/laporan/simpanan?q=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)') && $has($sh->last, '&lt;script&gt;alert(1)&lt;/script&gt;'));
+check('laporan/saringan: isian pencarian dipantulkan sebagai teks (XSS)', !$has($sh->get('/laporan/transaksi?q=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)') && $has($sh->last, '&lt;script&gt;alert(1)&lt;/script&gt;'));
 check('laporan/transaksi: default hanya Disetujui; filter jenis dan tanggal; memuat simpanan yang disetujui', $has($sh->get('/laporan/transaksi'), 'Laporan Transaksi') && $has($sh->last, 'Disetujui') && !$has($sh->last, '<td>Menunggu Validasi</td>') && $has($sh->get('/laporan/transaksi?jenis=SIMPANAN&dari=2026-01-01&sampai=2099-01-01&status='), 'Simpanan'));
 check('laporan/pinjaman dan regu: memuat pinjaman yang berlaku dan ringkasan per regu', $has($sh->get('/laporan/pinjaman'), 'Rekap Pinjaman') && $has($sh->get('/laporan/regu'), 'Regu Alfa') && $has($sh->last, 'Regu Beta') && $has($sh->last, 'Ketua regu'));
 
@@ -1302,7 +1312,7 @@ check('laporan/formulir: jenis formulir ngawur 404; tamu dialihkan ke login; Ang
 check('laporan/formulir: cetak massal Head memuat semua regu, Ketua Regu Alfa hanya regunya, saringan nama berlaku', $has($sh->get('/laporan/anggota/cetak/tabungan'), 'Anggota Alfa Dua') && $has($sh->last, 'Anggota Beta Dua') && $has($sa->get('/laporan/anggota/cetak/pinjaman'), 'Anggota Alfa Dua') && !$has($sa->last, 'Anggota Beta Dua') && !$has($sh->get('/laporan/anggota/cetak/tabungan?q=Alfa'), 'Anggota Beta Dua') && $has($sh->get('/laporan/anggota/cetak/pinjaman?q=zzzz-tidak-ada'), 'Tidak ada anggota yang cocok'));
 check('laporan/formulir: kartu anggota dan daftar anggota menautkan ke formulir; menu "Laporan Per Anggota" tetap menyala', $has($kartuH, '/pinjaman"') && $has($kartuH, '/tabungan"') && $has($sh->get('/laporan/anggota'), '/laporan/anggota/cetak/pinjaman') && $has($sh->last, '/laporan/anggota/cetak/tabungan') && $has($sh->get('/laporan/anggota/cetak/pinjaman'), 'aria-current="page"'));
 check('laporan/formulir: tombol Unduh Excel hanya untuk pemilik report.export (Head ya, Ketua Regu tidak) di daftar, kartu, dan halaman cetak', $has($sh->get('/laporan/anggota'), 'Unduh Excel semua formulir') && $has($sh->get('/laporan/anggota/' . $mid(2)), 'Unduh Excel (formulir)') && $has($sh->get('/laporan/anggota/' . $mid(2) . '/tabungan'), '/laporan/anggota/unduh?anggota=' . $mid(2)) && !$has($sa->get('/laporan/anggota'), 'Unduh Excel') && !$has($sa->get('/laporan/anggota/' . $mid(2)), 'Unduh Excel') && !$has($sa->get('/laporan/anggota/cetak/tabungan'), 'Unduh Excel'));
-check('laporan/formulir: nama anggota dan isian pencarian diloloskan (XSS)', !$has($sh->get('/laporan/anggota/cetak/tabungan?q=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)') && $has($sh->last, '&lt;script&gt;alert(1)&lt;/script&gt;'));
+check('laporan/formulir: nama anggota dan isian pencarian diloloskan (XSS)', !$has($sh->get('/laporan/anggota/cetak/tabungan?q=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)') && !$has($sh->get('/laporan/anggota/cetak/tabungan?anggota=' . rawurlencode('<script>alert(1)</script>')), '<script>alert(1)'));
 
 // unduhan Excel (.xlsx)
 require_once __DIR__ . '/xlsx_reader.php';
@@ -1948,6 +1958,56 @@ foreach (['/', '/profil', '/master/pengguna', '/sistem/audit', '/anggota/' . $mi
     $authBody .= $sh->get($p)['body'];
 }
 check('keamanan/bocor: tak ada hash kata sandi, token CSRF di URL, atau kredensial di halaman yang tampil', !str_contains($authBody, '$2y$') && !preg_match('/href="[^"]*_token=/', $authBody) && !preg_match('/(DB_PASS|DB_ADMIN_PASS|password_hash)/i', $authBody));
+
+// ---- 13z. Kotak pilih anggota: API pencarian, hak akses, dan saringan ?anggota= ----
+$guest = new Browser();
+check('anggota/api: tamu mendapat 401 JSON', $guest->request('GET', '/api/anggota?konteks=lihat', [], ['Accept: application/json', 'X-Requested-With: XMLHttpRequest'])['status'] === 401);
+[$st, $nos] = $lookup($sa, 'konteks=catat');
+check('anggota/api: Ketua Alfa (catat) hanya anggota regunya', $st === 200 && in_array('AGT-001', $nos, true) && in_array('AGT-002', $nos, true) && !in_array('AGT-003', $nos, true) && !in_array('AGT-004', $nos, true));
+check('anggota/api: respons tidak disimpan cache', str_contains($sa->last['headers']['cache-control'] ?? '', 'no-store') && str_contains($sa->last['headers']['content-type'] ?? '', 'application/json'));
+check('anggota/api: mencari nama anggota regu lain -> kosong (tidak bocor)', $lookup($sa, 'konteks=catat&q=Beta')[1] === [] && $lookup($sa, 'konteks=catat&q=AGT-004')[1] === []);
+check('anggota/api: parameter regu/termasuk buatan klien tidak memperluas hasil', !in_array('AGT-004', $lookup($sa, 'konteks=catat&regu=2&termasuk=' . $mid(4))[1], true));
+check('anggota/api: pencarian nama dan nomor', $lookup($sa, 'konteks=catat&q=' . rawurlencode('regu alfa'))[1] === ['AGT-001'] && $lookup($sa, 'konteks=catat&q=AGT-002')[1] === ['AGT-002']);
+check('anggota/api: Ketua Alfa tidak boleh konteks ketua/akun', $lookup($sa, 'konteks=ketua')[0] === 403 && $lookup($sa, 'konteks=akun')[0] === 403);
+check('anggota/api: Superadmin tanpa regu tidak boleh konteks catat (hanya Ketua Regu mencatat)', $lookup($sh, 'konteks=catat')[0] === 403);
+check('anggota/api: Superadmin (lihat) melihat anggota semua regu', (function () use ($sh, $lookup): bool {
+    [$st, $nos] = $lookup($sh, 'konteks=lihat&q=AGT');
+    return $st === 200 && in_array('AGT-001', $nos, true) && in_array('AGT-004', $nos, true);
+})());
+check('anggota/api: Ketua Beta (lihat) tidak melihat anggota Alfa', (function () use ($sb, $lookup): bool {
+    [$st, $nos] = $lookup($sb, 'konteks=lihat&q=AGT');
+    return $st === 200 && in_array('AGT-004', $nos, true) && !in_array('AGT-002', $nos, true) && !in_array('AGT-001', $nos, true);
+})());
+check('anggota/api: Anggota biasa ditolak untuk semua konteks', $lookup($sm, 'konteks=lihat')[0] === 403 && $lookup($sm, 'konteks=catat')[0] === 403 && $lookup($sm, 'konteks=ketua')[0] === 403 && $lookup($sm, 'konteks=akun')[0] === 403);
+check('anggota/api: konteks tak dikenal / kosong ditolak; q berupa larik tidak menjatuhkan server', $lookup($sh, 'konteks=semua')[0] === 403 && $lookup($sh, '')[0] === 403 && $lookup($sh, 'konteks=lihat&q[]=x&offset=abc&limit=-3')[0] === 200);
+check('anggota/api: akun menyertakan anggota yang belum punya akun', in_array('AGT-004', $lookup($sh, 'konteks=akun&q=AGT-004')[1], true) === ($count('SELECT COUNT(*) FROM users WHERE member_id = ?', [$mid(4)]) === 0));
+
+$listA = $sa->get('/transaksi/simpanan');
+check('anggota/saringan: daftar simpanan Ketua Regu memuat kotak pilih anggota (saringan) dan kolom nomor dokumen', $has($listA, 'data-context="lihat"') && $has($listA, 'name="anggota"') && $has($listA, 'name="q"') && $has($listA, 'Cari nomor dokumen'));
+check('anggota/saringan: Anggota biasa tidak mendapat kotak pilih anggota', !$has($sm->get('/transaksi/simpanan'), 'data-member-picker'));
+check('anggota/saringan: ?anggota= menampilkan anggota terpilih sebagai pilihan awal', $has($sa->get('/transaksi/simpanan?anggota=' . $mid(2)), 'name="anggota" value="' . $mid(2) . '"') && $has($sa->last, '&lt;img src=x onerror=alert(7)&gt;Nama (AGT-002)') && !$has($sa->last, '<img src=x onerror'));
+check('anggota/saringan: ?anggota= anggota regu lain tidak dipilih dan namanya tidak bocor', !$has($sa->get('/transaksi/simpanan?anggota=' . $mid(4)), 'Anggota Beta Dua') && !$has($sa->last, 'name="anggota" value="' . $mid(4) . '"'));
+check('anggota/saringan: semua daftar memakai kotak pilih anggota', (function () use ($sh, $has): bool {
+    foreach (['/transaksi/pinjaman', '/transaksi/angsuran', '/transaksi/riwayat', '/transaksi/angsuran/tunggakan', '/validasi', '/validasi/riwayat', '/master/anggota', '/laporan/anggota', '/laporan/anggota/cetak/tabungan',
+              '/laporan/simpanan', '/laporan/pinjaman', '/laporan/angsuran', '/laporan/saldo', '/laporan/transaksi', '/laporan/bagihasil'] as $path) {
+        $r = $sh->get($path);
+        if ($r['status'] !== 200 || !$has($r, 'data-context="lihat"') || !$has($r, 'name="anggota"')) {
+            echo "    (tanpa kotak pilih anggota: {$path})\n";
+            return false;
+        }
+    }
+    return true;
+})());
+check('anggota/saringan: laporan simpanan per anggota hanya memuat anggota terpilih', $has($sh->get('/laporan/simpanan?anggota=' . $mid(4)), 'Anggota Beta Dua') && !$has($sh->last, 'Ketua Regu Alfa'));
+check('anggota/saringan: Ketua Alfa + anggota regu lain -> laporan kosong, bukan bocor', !$has($sa->get('/laporan/simpanan?anggota=' . $mid(4)), 'Anggota Beta Dua'));
+check('anggota/saringan: daftar anggota master dengan ?anggota=', $has($sh->get('/master/anggota?anggota=' . $mid(4)), 'Anggota Beta Dua') && !$has($sh->last, 'Ketua Regu Alfa') && !$has($sa->get('/master/anggota?anggota=' . $mid(4)), 'Anggota Beta Dua'));
+check('anggota/form: halaman catat tanpa JS tetap memuat pesan, script pemilih dimuat', $has($sa->get('/transaksi/simpanan/baru'), 'js/member-picker.js') && $has($sa->last, 'Aktifkan JavaScript'));
+check('anggota/form: simpan dengan teks nama saja (tanpa id) ditolak server', (function () use ($sa, $count): bool {
+    $before = $count('SELECT COUNT(*) FROM transactions');
+    $sa->get('/transaksi/simpanan/baru');
+    $r = $sa->post('/transaksi/simpanan', ['member_id' => 'Anggota Alfa Dua', 'amount' => '50.000', 'kind' => 'SUKARELA', 'trx_date' => date('Y-m-d'), 'period_month_id' => '1']);
+    return $count('SELECT COUNT(*) FROM transactions') === $before && $r['status'] !== 500;
+})());
 
 // ---- 14. Matriks peran dan cakupan route (Phase 17) ----
 // Matriks ditulis dari ATURAN di prompt master §5 (bukan disalin dari config/permissions.php), jadi bila izin berubah tanpa
