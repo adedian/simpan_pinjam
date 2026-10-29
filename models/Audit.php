@@ -50,6 +50,7 @@ final class Audit
         'MEMBER_CREATED'      => ['Anggota ditambah', 'master'],
         'MEMBER_UPDATED'      => ['Data anggota diubah', 'master'],
         'MEMBER_TEAM_CHANGED' => ['Anggota pindah regu', 'master'],
+        'MEMBER_DELETED' => ['Anggota dihapus', 'master'],
         'TEAM_CREATED'        => ['Regu ditambah', 'master'],
         'TEAM_UPDATED'        => ['Regu diubah', 'master'],
         'USER_CREATED'        => ['Pengguna dibuat', 'master'],
