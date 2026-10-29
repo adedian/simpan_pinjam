@@ -362,5 +362,24 @@ TeamService::update(req(), $actor, $noLeader, TeamService::parse(['name' => 'Reg
 check('regu/ubah: ketua boleh dikosongkan lagi', one('SELECT leader_member_id FROM team_leaders WHERE id = ?', [$noLeader]) === null);
 check('regu/nonaktif: regu tanpa ketua tapi punya anggota ditolak', str_contains(violation(fn () => TeamService::update(req(), $actor, $noLeader, TeamService::parse(['name' => 'Regu Tanpa Ketua', 'is_active' => 0])[1], $nv()))['is_active'] ?? '', '2 anggota'));
 
+// hapus anggota (soft delete): hanya yang belum punya jejak keuangan
+$gone = MemberService::create(req(), $actor, data(['name' => 'Salah Input', 'address_block' => 'Q - 9', 'team_id' => 1]));
+$gv = fn (int $id) => (string) one('SELECT updated_at FROM members WHERE id = ?', [$id]);
+check('anggota/hapus: versi basi ditolak', str_contains(violation(fn () => MemberService::delete(req(), $actor, $gone, '2000-01-01 00:00:00'))['_form'] ?? '', 'diubah oleh pengguna lain'));
+check('anggota/hapus: ketua regu ditolak', str_contains(violation(fn () => MemberService::delete(req(), $actor, 1, $gv(1)))['_form'] ?? '', 'ketua regu'));
+check('anggota/hapus: anggota berpinjaman ditolak', str_contains(violation(fn () => MemberService::delete(req(), $actor, 5, $gv(5)))['_form'] ?? '', 'transaksi atau pinjaman'));
+check('anggota/hapus: id tidak ada ditolak', isset(violation(fn () => MemberService::delete(req(), $actor, 99999, '2026-01-01 00:00:00'))['_form']));
+check('anggota/hapus: penolakan tidak mengubah apa pun', audits('MEMBER_DELETED') === 0 && Member::exists(1) && Member::exists(5));
+$goneNo = (string) one('SELECT member_no FROM members WHERE id = ?', [$gone]);
+MemberService::delete(req(), $actor, $gone, $gv($gone));
+check('anggota/hapus: anggota hilang dari pencarian dan detail', !Member::exists($gone) && Member::findScoped($actor, $gone) === null
+    && array_filter(Member::search($actor, ['q' => 'Salah Input', 'team' => 0, 'status' => '', 'member' => 0], 1)['rows'], fn ($r) => (int) $r['id'] === $gone) === []);
+check('anggota/hapus: baris tetap ada dengan deleted_at (soft delete)', one('SELECT deleted_at FROM members WHERE id = ?', [$gone]) !== null);
+check('anggota/hapus: penugasan regu dibersihkan', (int) one('SELECT COUNT(*) FROM member_team_assignments WHERE member_id = ?', [$gone]) === 0);
+check('anggota/hapus: audit MEMBER_DELETED mencatat nomor dan data', audits('MEMBER_DELETED') === 1 && lastAudit('MEMBER_DELETED')['reference_no'] === $goneNo && lastAudit('MEMBER_DELETED')['before']['name'] === 'Salah Input' && lastAudit('MEMBER_DELETED')['before']['team_id'] === 1);
+check('anggota/hapus: tidak bisa dihapus dua kali', isset(violation(fn () => MemberService::delete(req(), $actor, $gone, '2026-01-01 00:00:00'))['_form']));
+check('anggota/hapus: nama dan blok yang sama boleh dipakai lagi', MemberService::create(req(), $actor, data(['name' => 'Salah Input', 'address_block' => 'Q - 9'])) > 0);
+check('anggota/hapus: nomor anggota tidak dipakai ulang', (string) one('SELECT member_no FROM members WHERE name = ? AND deleted_at IS NULL', ['Salah Input']) !== $goneNo);
+
 echo "\n{$passed} lulus, " . count($failed) . " gagal\n";
 exit($failed === [] ? 0 : 1);

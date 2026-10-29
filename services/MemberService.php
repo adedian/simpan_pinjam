@@ -140,6 +140,61 @@ final class MemberService
     }
 
     /**
+     * Hapus anggota (soft delete: baris tetap ada dengan deleted_at, nomor anggota tidak dipakai ulang).
+     * Hanya untuk anggota yang belum punya jejak keuangan; yang sudah pernah bertransaksi cukup dinonaktifkan.
+     *
+     * @param array{id:int,username:string,roles:array<int,string>} $actor
+     * @param string $version nilai updated_at saat halaman dibuka (deteksi edit bersamaan)
+     */
+    public static function delete(Request $request, array $actor, int $id, string $version): void
+    {
+        Database::transaction(static function (\PDO $pdo) use ($request, $actor, $id, $version): void {
+            $stmt = $pdo->prepare('SELECT * FROM members WHERE id = ? AND deleted_at IS NULL FOR UPDATE');
+            $stmt->execute([$id]);
+            $row = $stmt->fetch();
+            if ($row === false) {
+                throw RuleViolation::field('_form', 'Anggota tidak ditemukan.');
+            }
+            if ((string) $row['updated_at'] !== $version) {
+                throw RuleViolation::field('_form', 'Data ini baru saja diubah oleh pengguna lain. Muat ulang halaman lalu ulangi.');
+            }
+
+            $reasons = [];
+            if (self::count($pdo, 'SELECT COUNT(*) FROM team_leaders WHERE leader_member_id = ?', $id) > 0) {
+                $reasons[] = 'masih tercatat sebagai ketua regu (ganti ketua regunya dulu)';
+            }
+            if (self::count($pdo, 'SELECT COUNT(*) FROM users WHERE member_id = ? AND deleted_at IS NULL', $id) > 0) {
+                $reasons[] = 'terhubung ke akun pengguna';
+            }
+            if (self::count($pdo, 'SELECT COUNT(*) FROM transactions WHERE member_id = ? AND deleted_at IS NULL', $id) > 0
+                || self::count($pdo, 'SELECT COUNT(*) FROM loans WHERE member_id = ?', $id) > 0) {
+                $reasons[] = 'sudah punya transaksi atau pinjaman';
+            }
+            if (self::count($pdo, 'SELECT COUNT(*) FROM profit_share_lines WHERE member_id = ?', $id) > 0
+                || self::count($pdo, 'SELECT COUNT(*) FROM final_payout_lines WHERE member_id = ?', $id) > 0) {
+                $reasons[] = 'tercantum di pembagian bunga atau pencairan akhir';
+            }
+            if ($reasons !== []) {
+                throw RuleViolation::field('_form', 'Anggota tidak bisa dihapus karena ' . implode(', ', $reasons) . '. Bila sudah tidak aktif, ubah statusnya menjadi Nonaktif.');
+            }
+
+            $team = self::currentTeamId($pdo, $id);
+            $pdo->prepare('DELETE FROM member_team_assignments WHERE member_id = ?')->execute([$id]);
+            $pdo->prepare('UPDATE members SET deleted_at = NOW() WHERE id = ?')->execute([$id]);
+
+            AuditLog::record($request, $actor, 'MEMBER_DELETED', 'member', $id, (string) $row['member_no'],
+                ['name' => $row['name'], 'address_block' => $row['address_block'], 'status' => $row['status'], 'team_id' => $team], null, $pdo);
+        });
+    }
+
+    private static function count(\PDO $pdo, string $sql, int $memberId): int
+    {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$memberId]);
+        return (int) $stmt->fetchColumn();
+    }
+
+    /**
      * Pindahkan anggota ke regu lain mulai tanggal $effective, dengan riwayat utuh.
      * Pindah di hari yang sama dengan penugasan sebelumnya dianggap koreksi (baris yang sama diubah).
      */

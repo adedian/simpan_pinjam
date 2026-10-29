@@ -48,7 +48,8 @@ return static function (Router $r): void {
     $r->post('/master/anggota', [MemberController::class, 'store'], ['auth', 'can:member.manage']);
     $r->get('/master/anggota/{id:\d+}/ubah', [MemberController::class, 'edit'], ['auth', 'can:member.manage']);
     $r->post('/master/anggota/{id:\d+}', [MemberController::class, 'update'], ['auth', 'can:member.manage']);
-    $r->get('/anggota/{id:\d+}', [MemberController::class, 'show'], ['auth', 'can:member.view.all|member.view.team|member.view.self']);
+    $r->post('/master/anggota/{id:\d+}/hapus', [MemberController::class, 'destroy'], ['auth', 'can:member.manage']);
+    $r->get('/anggota/{id:\d+}',[MemberController::class, 'show'], ['auth', 'can:member.view.all|member.view.team|member.view.self']);
 
     // Master data: regu
     $r->get('/master/ketua-regu', [TeamController::class, 'index'], ['auth', 'can:team_leader.manage']);

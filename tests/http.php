@@ -483,6 +483,26 @@ $kaDetail = $ka2->get('/anggota/2');
 check('privasi: ketua regu tidak melihat catatan dan status cadangan anggota', $kaDetail['status'] === 200 && !$has($kaDetail, 'rahasia pengelola') && !$has($kaDetail, 'Dikecualikan'));
 check('privasi: Head melihat catatan tersebut', $has($hd->get('/anggota/2'), 'rahasia pengelola') && $has($hd->last, 'Dikecualikan'));
 
+// hapus anggota: tombol hanya untuk Head; anggota yang punya jejak keuangan ditolak; yang bersih terhapus
+check('hapus: ketua regu tidak melihat tombol Hapus di detail', !$has($kaDetail, '/hapus'));
+$ka2->get('/anggota/2');
+check('hapus: ketua regu -> POST hapus anggota = 403, anggota utuh', $ka2->post('/master/anggota/2/hapus', ['_version' => 'x'])['status'] === 403 && $count('SELECT COUNT(*) FROM members WHERE id = 2 AND deleted_at IS NULL') === 1);
+$hd->get('/anggota/1');
+$blocked = $hd->post('/master/anggota/1/hapus', ['_version' => (string) $pdo->query('SELECT updated_at FROM members WHERE id = 1')->fetchColumn()]);
+check('hapus: ketua regu (anggota 1) ditolak dengan pesan, data utuh', $blocked['status'] === 302 && $loc($blocked) === '/anggota/1' && $has($hd->get('/anggota/1'), 'tidak bisa dihapus') && $count('SELECT COUNT(*) FROM members WHERE id = 1 AND deleted_at IS NULL') === 1);
+$hd->get('/master/anggota/baru');
+$tmp = $hd->post('/master/anggota', ['name' => 'Salah Ketik', 'address_block' => 'W - 1', 'team_id' => '1', 'active_from' => '2026-04']);
+preg_match('#^/anggota/(\d+)$#', $loc($tmp), $tm);
+$tmpId = (int) ($tm[1] ?? 0);
+$tmpDetail = $hd->get('/anggota/' . $tmpId);
+check('hapus: Head melihat tombol Hapus dengan token CSRF', $has($tmpDetail, '/master/anggota/' . $tmpId . '/hapus') && $has($tmpDetail, 'data-confirm="Hapus anggota Salah Ketik'));
+preg_match('#/hapus"[^>]*>\s*<input[^>]*name="_token"[^>]*>\s*<input type="hidden" name="_version" value="([^"]+)"#', $tmpDetail['body'], $tv);
+check('hapus: POST tanpa token CSRF = 419', $hd->post('/master/anggota/' . $tmpId . '/hapus', ['_version' => $tv[1] ?? ''], false)['status'] === 419);
+$hd->get('/anggota/' . $tmpId);
+$del = $hd->post('/master/anggota/' . $tmpId . '/hapus', ['_version' => $tv[1] ?? '']);
+check('hapus: Head berhasil -> kembali ke daftar, anggota hilang', $del['status'] === 302 && $loc($del) === '/master/anggota' && !$has($hd->get('/master/anggota'), 'Salah Ketik') && $hd->get('/anggota/' . $tmpId)['status'] === 404);
+check('hapus: tercatat di audit', $audits('MEMBER_DELETED') === 1);
+
 // ---- 12c. Head: regu ----
 $tl = $hd->get('/master/ketua-regu');
 check('master/regu: daftar regu dengan ketua dan jumlah anggota', $tl['status'] === 200 && $has($tl, 'Regu Alfa') && $has($tl, 'Regu Beta') && $has($tl, 'Ketua Regu Alfa'));

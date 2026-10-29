@@ -4,6 +4,12 @@
         <div class="actions">
             <?php if (!empty($canTransactions)): ?><a class="btn btn--secondary" href="<?= e(url('/transaksi/riwayat?anggota=' . (int) $member['id'])) ?>">Riwayat transaksi</a><?php endif; ?>
             <?php if (!empty($canManage)): ?><a class="btn btn--secondary" href="<?= e(url('/master/anggota/' . (int) $member['id'] . '/ubah')) ?>">Ubah</a><?php endif; ?>
+            <?php if (!empty($canManage)): ?>
+                <form method="post" action="<?= e(url('/master/anggota/' . (int) $member['id'] . '/hapus')) ?>">
+                    <?= csrf_field() ?><input type="hidden" name="_version" value="<?= e($member['updated_at']) ?>">
+                    <button type="submit" class="btn btn--danger" data-confirm="Hapus anggota <?= e($member['name']) ?> (<?= e($member['member_no']) ?>)? Tindakan ini tidak bisa diurungkan. Hanya anggota yang belum punya transaksi yang bisa dihapus.">Hapus</button>
+                </form>
+            <?php endif; ?>
         </div>
     </div>
     <dl class="dl">

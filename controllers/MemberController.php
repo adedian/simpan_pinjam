@@ -135,6 +135,24 @@ final class MemberController extends BaseController
         return $this->backWithErrors($back, $errors, $request->post);
     }
 
+    /** @param array<string,string> $params */
+    public function destroy(Request $request, array $params = []): Response
+    {
+        $id = (int) $params['id'];
+        if (Member::findScoped(Auth::user(), $id) === null) {
+            $this->abort(404);
+        }
+
+        try {
+            MemberService::delete($request, Auth::user(), $id, $request->str('_version'));
+        } catch (RuleViolation $e) {
+            Session::flash('danger', implode(' ', $e->errors));
+            return $this->redirect('/anggota/' . $id);
+        }
+        Session::flash('success', 'Anggota dihapus.');
+        return $this->redirect('/master/anggota');
+    }
+
     /**
      * @param array<string,mixed>|null $member
      * @param array<string,mixed> $defaults nilai awal bila belum ada isian lama
