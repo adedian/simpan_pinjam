@@ -149,7 +149,7 @@ final class MemberLookup
                 $team     = (int) ($opts['team'] ?? 0);
                 $where[]  = "m.status = 'AKTIF'";
                 if ($team > 0) {
-                    $where[]  = 'a.team_id = ?';
+                    $where[]  = '(a.team_id = ? OR a.team_id IS NULL)';
                     $params[] = $team;
                 }
                 $where[]  = 'NOT EXISTS (SELECT 1 FROM team_leaders t WHERE t.leader_member_id = m.id AND t.id <> ?)';

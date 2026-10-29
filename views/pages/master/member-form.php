@@ -1,4 +1,4 @@
-<?php $isEdit = $member !== null; $teamOptions = ['' => 'Pilih regu']; foreach ($teams as $t) { $teamOptions[$t['id']] = $t['name']; } ?>
+<?php $isEdit = $member !== null; $hasTeam = $isEdit && !empty($member['team_id']); $teamOptions = $hasTeam ? [] : ['' => 'Belum ada regu']; foreach ($teams as $t) { $teamOptions[$t['id']] = $t['name']; } ?>
 <section class="card">
     <h2 class="card__title"><?= $isEdit ? 'Ubah ' . e($member['name']) . ' · ' . e($member['member_no']) : 'Anggota baru' ?></h2>
 
@@ -12,8 +12,8 @@
         <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'address_block', 'label' => 'Blok / alamat', 'value' => $values['address_block'] ?? '', 'error' => $errors['address_block'] ?? null, 'maxlength' => 40, 'hint' => 'Mis. E - 08A. Kosongkan bila tidak ada.']]) ?>
 
         <div class="form__row">
-            <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'team_id', 'label' => 'Regu', 'type' => 'select', 'options' => $teamOptions, 'value' => $values['team_id'] ?? '', 'error' => $errors['team_id'] ?? null, 'required' => true,
-                'hint' => $isEdit ? 'Pindah regu dicatat dengan tanggal hari ini; riwayatnya tersimpan.' : null]]) ?>
+            <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'team_id', 'label' => 'Regu', 'type' => 'select', 'options' => $teamOptions, 'value' => $values['team_id'] ?? '', 'error' => $errors['team_id'] ?? null,
+                'hint' => $hasTeam ? 'Pindah regu dicatat dengan tanggal hari ini; riwayatnya tersimpan.' : 'Boleh dikosongkan dulu; regu bisa dipilih belakangan lewat Ubah anggota.']]) ?>
             <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'active_from', 'label' => 'Aktif sejak', 'type' => 'month', 'value' => $values['active_from'] ?? '', 'error' => $errors['active_from'] ?? null, 'required' => true]]) ?>
         </div>
 

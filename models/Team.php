@@ -19,7 +19,7 @@ final class Team
                     COALESCE(SUM(s.savings_balance), 0) AS savings_total,
                     COALESCE(SUM(lb.outstanding), 0) AS outstanding_total
              FROM team_leaders tl
-             JOIN members lm ON lm.id = tl.leader_member_id
+             LEFT JOIN members lm ON lm.id = tl.leader_member_id
              LEFT JOIN member_team_assignments a ON a.team_id = tl.id AND a.valid_to IS NULL
              LEFT JOIN v_member_savings s ON s.member_id = a.member_id
              LEFT JOIN (SELECT member_id, SUM(outstanding) AS outstanding FROM v_loan_balances GROUP BY member_id) lb ON lb.member_id = a.member_id
@@ -43,7 +43,7 @@ final class Team
 
     /**
      * Calon ketua. Saat membuat regu baru: anggota aktif yang belum memimpin regu.
-     * Saat mengubah regu: anggota yang saat ini berada di regu itu dan tidak memimpin regu lain.
+     * Saat mengubah regu: anggota yang saat ini berada di regu itu atau belum punya regu, dan tidak memimpin regu lain.
      * @return array<int,array{id:int,name:string,member_no:string}>
      */
     public static function leaderCandidates(?int $teamId): array
@@ -58,8 +58,8 @@ final class Team
         }
         return Database::select(
             "SELECT m.id, m.name, m.member_no FROM members m
-             JOIN member_team_assignments a ON a.member_id = m.id AND a.valid_to IS NULL AND a.team_id = ?
-             WHERE m.status = 'AKTIF' AND m.deleted_at IS NULL
+             LEFT JOIN member_team_assignments a ON a.member_id = m.id AND a.valid_to IS NULL
+             WHERE m.status = 'AKTIF' AND m.deleted_at IS NULL AND (a.team_id = ? OR a.team_id IS NULL)
                AND NOT EXISTS (SELECT 1 FROM team_leaders t WHERE t.leader_member_id = m.id AND t.id <> ?)
              ORDER BY m.name",
             [$teamId, $teamId]

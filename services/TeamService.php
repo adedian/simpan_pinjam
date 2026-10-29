@@ -21,10 +21,8 @@ final class TeamService
             'leader_member_id' => (int) ($in['leader_member_id'] ?? 0),
             'is_active'        => array_key_exists('is_active', $in) ? (empty($in['is_active']) ? 0 : 1) : 1,
         ];
+        // Ketua boleh kosong: regu dibuat dulu, anggota menyusul, ketua dipilih belakangan.
         $errors = Validator::validate(['name' => $data['name']], ['name' => 'required|max:100'], ['name' => 'Nama regu']);
-        if ($data['leader_member_id'] <= 0) {
-            $errors['leader_member_id'] = 'Ketua regu wajib dipilih.';
-        }
         return [$errors, $data];
     }
 
@@ -33,15 +31,17 @@ final class TeamService
     {
         return (int) Database::transaction(static function (\PDO $pdo) use ($request, $actor, $data): int {
             self::assertNameFree($pdo, $data['name'], null);
-            $leader = self::assertLeaderEligible($pdo, (int) $data['leader_member_id']);
+            $leader = (int) $data['leader_member_id'] > 0 ? self::assertLeaderEligible($pdo, (int) $data['leader_member_id']) : null;
 
-            $pdo->prepare('INSERT INTO team_leaders (name, leader_member_id) VALUES (?, ?)')->execute([$data['name'], $leader['id']]);
+            $pdo->prepare('INSERT INTO team_leaders (name, leader_member_id) VALUES (?, ?)')->execute([$data['name'], $leader['id'] ?? null]);
             $id = (int) $pdo->lastInsertId();
             // Ketua regu otomatis menjadi anggota regunya sendiri (sama seperti data Excel).
-            MemberService::assignTeam($pdo, (int) $leader['id'], $id, date('Y-m-d'));
+            if ($leader !== null) {
+                MemberService::assignTeam($pdo, $leader['id'], $id, date('Y-m-d'));
+            }
 
             AuditLog::record($request, $actor, 'TEAM_CREATED', 'team', $id, $data['name'], null,
-                ['name' => $data['name'], 'leader_member_id' => (int) $leader['id'], 'leader' => $leader['member_no']], $pdo);
+                ['name' => $data['name'], 'leader_member_id' => $leader['id'] ?? null, 'leader' => $leader['member_no'] ?? null], $pdo);
             return $id;
         });
     }
@@ -63,12 +63,17 @@ final class TeamService
                 throw RuleViolation::field('_form', 'Data ini baru saja diubah oleh pengguna lain. Muat ulang halaman lalu ulangi perubahan Anda.');
             }
 
-            $newLeader = (int) $data['leader_member_id'];
-            if ($newLeader !== (int) $row['leader_member_id']) {
+            $oldLeader = $row['leader_member_id'] === null ? null : (int) $row['leader_member_id'];
+            $newLeader = (int) $data['leader_member_id'] > 0 ? (int) $data['leader_member_id'] : null;
+            if ($newLeader !== null && $newLeader !== $oldLeader) {
                 $m = self::assertLeaderEligible($pdo, $newLeader, $id);
-                // Ketua baru harus sudah menjadi anggota regu ini (tidak memindahkan orang diam-diam).
-                if (MemberService::currentTeamId($pdo, $newLeader) !== $id) {
-                    throw RuleViolation::field('leader_member_id', "{$m['name']} belum menjadi anggota regu ini. Pindahkan dulu lewat Data Anggota.");
+                // Ketua baru harus sudah anggota regu ini, atau belum punya regu (otomatis dimasukkan ke regu ini).
+                // Anggota regu lain tidak dipindahkan diam-diam.
+                $current = MemberService::currentTeamId($pdo, $newLeader);
+                if ($current === null) {
+                    MemberService::assignTeam($pdo, $newLeader, $id, date('Y-m-d'));
+                } elseif ($current !== $id) {
+                    throw RuleViolation::field('leader_member_id', "{$m['name']} masih anggota regu lain. Pindahkan dulu lewat Data Anggota.");
                 }
             }
             if ($data['name'] !== $row['name']) {
@@ -76,7 +81,7 @@ final class TeamService
             }
             if ((int) $row['is_active'] === 1 && (int) $data['is_active'] === 0) {
                 $stmt = $pdo->prepare('SELECT COUNT(*) FROM member_team_assignments WHERE team_id = ? AND valid_to IS NULL AND member_id <> ?');
-                $stmt->execute([$id, $row['leader_member_id']]);
+                $stmt->execute([$id, $oldLeader ?? 0]);
                 $others = (int) $stmt->fetchColumn();
                 if ($others > 0) {
                     throw RuleViolation::field('is_active', "Regu masih punya {$others} anggota selain ketua. Pindahkan mereka dulu.");
@@ -85,8 +90,12 @@ final class TeamService
 
             $before = [];
             $after  = [];
-            foreach (['name' => $row['name'], 'leader_member_id' => (int) $row['leader_member_id'], 'is_active' => (int) $row['is_active']] as $field => $old) {
-                $new = $field === 'name' ? $data['name'] : (int) $data[$field];
+            foreach (['name' => $row['name'], 'leader_member_id' => $oldLeader, 'is_active' => (int) $row['is_active']] as $field => $old) {
+                $new = match ($field) {
+                    'name'             => $data['name'],
+                    'leader_member_id' => $newLeader,
+                    default            => (int) $data[$field],
+                };
                 if ($new !== $old) {
                     $before[$field] = $old;
                     $after[$field]  = $new;

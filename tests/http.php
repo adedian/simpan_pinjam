@@ -448,7 +448,7 @@ $hd->get('/master/anggota/baru');
 $bad = $hd->post('/master/anggota', ['name' => '', 'address_block' => 'Q - 77', 'team_id' => '', 'active_from' => '2026-13']);
 check('master/head: isian salah dialihkan kembali ke formulir (PRG)', $bad['status'] === 302 && $loc($bad) === '/master/anggota/baru');
 $page = $hd->get('/master/anggota/baru');
-check('master/head: galat per field tampil', $has($page, 'Nama wajib diisi') && $has($page, 'Regu wajib dipilih') && $has($page, 'Aktif sejak tidak valid'));
+check('master/head: galat per field tampil', $has($page, 'Nama wajib diisi') && !$has($page, 'Regu wajib dipilih') && $has($page, 'Aktif sejak tidak valid'));
 check('master/head: isian lama (yang valid) dipertahankan', $has($page, 'value="Q - 77"'));
 $hd->get('/master/anggota/baru');
 $xss = $hd->post('/master/anggota', ['name' => '<img src=x onerror=alert(1)>', 'address_block' => 'X - 1', 'team_id' => '1', 'active_from' => '2026-04']);

@@ -122,7 +122,7 @@ $actor = ['id' => $head['id'], 'username' => 'kepala', 'roles' => ['HEAD']];
 
 // ======================= ANGGOTA =======================
 [$e] = MemberService::parse(['name' => '', 'active_from' => '2026-13', 'status' => 'X', 'team_id' => 0]);
-check('anggota/parse: nama kosong, bulan salah, status salah, regu kosong -> galat semua', isset($e['name'], $e['active_from'], $e['status'], $e['team_id']));
+check('anggota/parse: nama kosong, bulan salah, status salah -> galat; regu kosong boleh', isset($e['name'], $e['active_from'], $e['status']) && !isset($e['team_id']));
 [$e, $d] = MemberService::parse(['name' => "  Bu   Spasi \t Ganda  ", 'active_from' => '2026-05', 'team_id' => 1]);
 check('anggota/parse: spasi dirapikan dan bulan menjadi tanggal 1', $e === [] && $d['name'] === 'Bu Spasi Ganda' && $d['active_from'] === '2026-05-01');
 check('anggota/parse: nama 101 karakter ditolak', isset(MemberService::parse(['name' => str_repeat('a', 101), 'active_from' => '2026-05', 'team_id' => 1])[0]['name']));
@@ -179,7 +179,7 @@ check('anggota/nonaktif: anggota tanpa pinjaman bisa dinonaktifkan', one('SELECT
 
 // ======================= REGU =======================
 [$e] = TeamService::parse(['name' => '', 'leader_member_id' => 0]);
-check('regu/parse: nama dan ketua wajib', isset($e['name'], $e['leader_member_id']));
+check('regu/parse: nama wajib, ketua boleh kosong', isset($e['name']) && !isset($e['leader_member_id']));
 $mk = fn (array $o = []) => TeamService::parse($o + ['name' => 'Regu Gamma', 'leader_member_id' => $id1])[1];
 check('regu/buat: ketua yang sudah memimpin regu ditolak', str_contains(violation(fn () => TeamService::create(req(), $actor, $mk(['leader_member_id' => 1])))['leader_member_id'] ?? '', 'sudah menjadi ketua'));
 check('regu/buat: ketua nonaktif ditolak', isset(violation(fn () => TeamService::create(req(), $actor, $mk(['leader_member_id' => $id2])))['leader_member_id']));
@@ -192,7 +192,7 @@ check('regu/calon ketua (baru): yang sudah memimpin tidak muncul', !in_array('AG
 $tv = fn (int $id) => (string) one('SELECT updated_at FROM team_leaders WHERE id = ?', [$id]);
 $tdata = fn (array $o = []) => TeamService::parse($o + ['name' => 'Regu Gamma', 'leader_member_id' => $id1, 'is_active' => 1])[1];
 check('regu/ubah: versi basi ditolak', isset(violation(fn () => TeamService::update(req(), $actor, $tid, $tdata(), '2000-01-01 00:00:00'))['_form']));
-check('regu/ubah: ketua baru harus anggota regu ini', str_contains(violation(fn () => TeamService::update(req(), $actor, $tid, $tdata(['leader_member_id' => 4]), $tv($tid)))['leader_member_id'] ?? '', 'belum menjadi anggota'));
+check('regu/ubah: ketua baru dari regu lain ditolak (tidak dipindah diam-diam)', str_contains(violation(fn () => TeamService::update(req(), $actor, $tid, $tdata(['leader_member_id' => 4]), $tv($tid)))['leader_member_id'] ?? '', 'masih anggota regu lain'));
 check('regu/ubah: calon ketua (ubah) hanya anggota regu itu', array_column(Team::leaderCandidates($tid), 'member_no') === ['AGT-006']);
 TeamService::update(req(), $actor, $tid, $tdata(['name' => 'Regu Gamma Baru']), $tv($tid));
 check('regu/ubah: nama berubah + audit sebelum/sesudah', one('SELECT name FROM team_leaders WHERE id = ?', [$tid]) === 'Regu Gamma Baru' && lastAudit('TEAM_UPDATED')['before'] === ['name' => 'Regu Gamma'] && lastAudit('TEAM_UPDATED')['after'] === ['name' => 'Regu Gamma Baru']);
@@ -337,6 +337,30 @@ $p2 = Member::search($headU, [], 2);
 check('paginasi: 37 anggota -> 2 halaman, 25 + 12', $p1['pager']['pages'] === 2 && count($p1['rows']) === 25 && count($p2['rows']) === 12 && $p2['pager']['from'] === 26 && $p2['pager']['to'] === 37);
 check('paginasi: halaman di luar batas dijepit', Member::search($headU, [], 99)['pager']['page'] === 2 && Member::search($headU, [], -5)['pager']['page'] === 1);
 check('paginasi: tanpa tumpang tindih', array_intersect(array_column($p1['rows'], 'id'), array_column($p2['rows'], 'id')) === []);
+
+// ======================= URUTAN INPUT BEBAS (di akhir agar hitungan paginasi di atas tidak bergeser) =======================
+// regu tanpa ketua + anggota tanpa regu (urutan input bebas: anggota dulu, regu dulu, ketua belakangan)
+$noLeader = TeamService::create(req(), $actor, TeamService::parse(['name' => 'Regu Tanpa Ketua'])[1]);
+check('regu/buat tanpa ketua: tersimpan dengan ketua kosong', $noLeader > 0 && one('SELECT leader_member_id FROM team_leaders WHERE id = ?', [$noLeader]) === null);
+check('regu/buat tanpa ketua: audit mencatat ketua kosong', lastAudit('TEAM_CREATED')['after']['leader_member_id'] === null);
+check('regu/daftar: regu tanpa ketua tetap tampil', count(array_filter(Team::all(), fn ($t) => (int) $t['id'] === $noLeader && $t['leader_member_id'] === null && $t['leader_name'] === null)) === 1);
+$free = MemberService::create(req(), $actor, data(['name' => 'Belum Beregu', 'address_block' => 'Q - 1', 'team_id' => 0]));
+check('anggota/buat tanpa regu: tersimpan tanpa penugasan', $free > 0 && (int) one('SELECT COUNT(*) FROM member_team_assignments WHERE member_id = ?', [$free]) === 0);
+check('anggota/buat tanpa regu: tetap muncul di daftar Superadmin', array_filter(Member::search($actor, ['q' => 'Belum Beregu', 'team' => 0, 'status' => '', 'member' => 0], 1)['rows'], fn ($r) => (int) $r['id'] === $free) !== []);
+check('regu/calon ketua (ubah): anggota tanpa regu ikut jadi calon', in_array(one('SELECT member_no FROM members WHERE id = ?', [$free]), array_column(Team::leaderCandidates($noLeader), 'member_no'), true));
+$sv = fn () => (string) one('SELECT updated_at FROM members WHERE id = ?', [$free]);
+MemberService::update(req(), $actor, $free, data(['name' => 'Belum Beregu', 'address_block' => 'Q - 1', 'team_id' => $noLeader]), $sv());
+check('anggota/ubah: anggota tanpa regu bisa dimasukkan ke regu', MemberService::currentTeamId($pdo, $free) === $noLeader && lastAudit('MEMBER_TEAM_CHANGED')['before']['team_id'] === null);
+check('anggota/ubah: anggota yang sudah beregu tidak bisa dikosongkan', isset(violation(fn () => MemberService::update(req(), $actor, $free, data(['name' => 'Belum Beregu', 'address_block' => 'Q - 1', 'team_id' => 0]), $sv()))['team_id']));
+TeamService::update(req(), $actor, $noLeader, TeamService::parse(['name' => 'Regu Tanpa Ketua', 'leader_member_id' => $free, 'is_active' => 1])[1], (string) one('SELECT updated_at FROM team_leaders WHERE id = ?', [$noLeader]));
+check('regu/ubah: ketua dipilih belakangan', (int) one('SELECT leader_member_id FROM team_leaders WHERE id = ?', [$noLeader]) === $free);
+$free2 = MemberService::create(req(), $actor, data(['name' => 'Belum Beregu Dua', 'address_block' => 'Q - 2', 'team_id' => 0]));
+$nv = fn () => (string) one('SELECT updated_at FROM team_leaders WHERE id = ?', [$noLeader]);
+TeamService::update(req(), $actor, $noLeader, TeamService::parse(['name' => 'Regu Tanpa Ketua', 'leader_member_id' => $free2, 'is_active' => 1])[1], $nv());
+check('regu/ubah: ketua dari anggota tanpa regu otomatis masuk regu itu', MemberService::currentTeamId($pdo, $free2) === $noLeader);
+TeamService::update(req(), $actor, $noLeader, TeamService::parse(['name' => 'Regu Tanpa Ketua', 'is_active' => 1])[1], $nv());
+check('regu/ubah: ketua boleh dikosongkan lagi', one('SELECT leader_member_id FROM team_leaders WHERE id = ?', [$noLeader]) === null);
+check('regu/nonaktif: regu tanpa ketua tapi punya anggota ditolak', str_contains(violation(fn () => TeamService::update(req(), $actor, $noLeader, TeamService::parse(['name' => 'Regu Tanpa Ketua', 'is_active' => 0])[1], $nv()))['is_active'] ?? '', '2 anggota'));
 
 echo "\n{$passed} lulus, " . count($failed) . " gagal\n";
 exit($failed === [] ? 0 : 1);

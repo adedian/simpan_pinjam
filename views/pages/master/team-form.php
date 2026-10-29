@@ -11,8 +11,8 @@ $isEdit = $team !== null;
         <?php if ($isEdit): ?><input type="hidden" name="_version" value="<?= e($version) ?>"><?php endif; ?>
 
         <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'name', 'label' => 'Nama regu', 'value' => $values['name'] ?? '', 'error' => $errors['name'] ?? null, 'required' => true, 'maxlength' => 100, 'hint' => 'Mis. "Regu Bu Yanti".']]) ?>
-        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'leader_member_id', 'label' => 'Ketua regu', 'type' => 'member', 'context' => 'ketua', 'team' => $isEdit ? (int) $team['id'] : 0, 'value' => $values['leader_member_id'] ?? '', 'error' => $errors['leader_member_id'] ?? null, 'required' => true,
-            'hint' => $isEdit ? 'Hanya anggota regu ini yang bisa dipilih. Pindahkan dulu lewat Data Anggota bila perlu.' : 'Ketua otomatis menjadi anggota regu yang baru dibuat.']]) ?>
+        <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'leader_member_id', 'label' => 'Ketua regu', 'type' => 'member', 'context' => 'ketua', 'team' => $isEdit ? (int) $team['id'] : 0, 'value' => $values['leader_member_id'] ?? '', 'error' => $errors['leader_member_id'] ?? null,
+            'hint' => $isEdit ? 'Boleh dikosongkan. Yang bisa dipilih: anggota regu ini atau anggota yang belum punya regu. Pindahkan dulu lewat Data Anggota bila perlu.' : 'Boleh dikosongkan; anggota dan ketuanya bisa menyusul. Bila diisi, ketua otomatis menjadi anggota regu yang baru dibuat.']]) ?>
 
         <?php if ($isEdit): ?>
             <?= \App\Core\View::include('partials/field', ['f' => ['name' => 'is_active', 'type' => 'checkbox', 'label' => 'Regu aktif', 'value' => $values['is_active'] ?? 1, 'error' => $errors['is_active'] ?? null,

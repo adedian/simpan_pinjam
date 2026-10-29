@@ -14,7 +14,13 @@
             <?php foreach ($teams as $t): ?>
                 <tr>
                     <td data-label="Regu"><strong><?= e($t['name']) ?></strong></td>
-                    <td data-label="Ketua"><a href="<?= e(url('/anggota/' . (int) $t['leader_member_id'])) ?>"><?= e($t['leader_name']) ?></a> <span class="muted"><?= e($t['leader_no']) ?></span></td>
+                    <td data-label="Ketua">
+                        <?php if ($t['leader_member_id'] === null): ?>
+                            <span class="muted">Belum ada ketua</span>
+                        <?php else: ?>
+                            <a href="<?= e(url('/anggota/' . (int) $t['leader_member_id'])) ?>"><?= e($t['leader_name']) ?></a> <span class="muted"><?= e($t['leader_no']) ?></span>
+                        <?php endif; ?>
+                    </td>
                     <td data-label="Anggota" class="num"><?= (int) $t['member_count'] ?></td>
                     <td data-label="Saldo tabungan" class="num"><?= e(money((int) $t['savings_total'])) ?></td>
                     <td data-label="Sisa pinjaman" class="num"><?= e(money((int) $t['outstanding_total'])) ?></td>

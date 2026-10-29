@@ -45,9 +45,7 @@ final class MemberService
             ],
             ['name' => 'Nama', 'address_block' => 'Blok / alamat', 'active_from' => 'Aktif sejak', 'status' => 'Status', 'notes' => 'Catatan'],
         );
-        if ($data['team_id'] <= 0) {
-            $errors['team_id'] = 'Regu wajib dipilih.';
-        }
+        // Regu boleh kosong saat anggota dibuat; dipilih belakangan lewat Ubah anggota.
         if (!isset($errors['active_from'])) {
             $data['active_from'] .= '-01';
         }
@@ -58,15 +56,19 @@ final class MemberService
     public static function create(Request $request, array $actor, array $data): int
     {
         return (int) Database::transaction(static function (\PDO $pdo) use ($request, $actor, $data): int {
-            self::assertTeamActive($pdo, (int) $data['team_id']);
+            if ((int) $data['team_id'] > 0) {
+                self::assertTeamActive($pdo, (int) $data['team_id']);
+            }
             self::assertNotDuplicate($pdo, $data, null);
 
             $memberNo = NumberSequence::nextMemberNo($pdo);
             $pdo->prepare('INSERT INTO members (member_no, name, address_block, active_from, status, is_manager, reserve_exempt, notes) VALUES (?,?,?,?,?,?,?,?)')
                 ->execute([$memberNo, $data['name'], $data['address_block'], $data['active_from'], $data['status'], $data['is_manager'], $data['reserve_exempt'], $data['notes']]);
             $id = (int) $pdo->lastInsertId();
-            $pdo->prepare('INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (?,?,?)')
-                ->execute([$id, $data['team_id'], $data['active_from']]);
+            if ((int) $data['team_id'] > 0) {
+                $pdo->prepare('INSERT INTO member_team_assignments (member_id, team_id, valid_from) VALUES (?,?,?)')
+                    ->execute([$id, $data['team_id'], $data['active_from']]);
+            }
 
             AuditLog::record($request, $actor, 'MEMBER_CREATED', 'member', $id, $memberNo, null, $data + ['member_no' => $memberNo], $pdo);
             return $id;
@@ -92,9 +94,13 @@ final class MemberService
             }
 
             $currentTeam = self::currentTeamId($pdo, $id);
-            $teamChanged = $currentTeam !== (int) $data['team_id'];
+            $newTeam = (int) $data['team_id'] > 0 ? (int) $data['team_id'] : null;
+            if ($newTeam === null && $currentTeam !== null) {
+                throw RuleViolation::field('team_id', 'Anggota yang sudah punya regu tidak bisa dikosongkan. Pindahkan ke regu lain.');
+            }
+            $teamChanged = $newTeam !== null && $newTeam !== $currentTeam;
             if ($teamChanged) {
-                self::assertTeamActive($pdo, (int) $data['team_id']);
+                self::assertTeamActive($pdo, $newTeam);
                 if (self::leadsActiveTeam($pdo, $id)) {
                     throw RuleViolation::field('team_id', 'Ketua regu tidak bisa dipindahkan. Ganti ketua regunya dulu di Data Ketua Regu.');
                 }

@@ -48,7 +48,7 @@ final class TeamController extends BaseController
         if ($team === null) {
             $this->abort(404);
         }
-        return $this->form($request, $team, ['name' => $team['name'], 'leader_member_id' => (string) $team['leader_member_id'], 'is_active' => (int) $team['is_active']]);
+        return $this->form($request, $team, ['name' => $team['name'], 'leader_member_id' => (string) ($team['leader_member_id'] ?? ''), 'is_active' => (int) $team['is_active']]);
     }
 
     /** @param array<string,string> $params */
