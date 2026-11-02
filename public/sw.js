@@ -1,4 +1,4 @@
-/* Service worker Adem Ayem (PWA).
+/* Service worker Dana Gemilang (PWA).
  *
  * Prinsip: ini aplikasi keuangan, jadi HALAMAN TIDAK PERNAH DISIMPAN. Yang disimpan hanya berkas statis
  * (CSS, JS, gambar di /assets/) dan satu halaman /offline tanpa data. Semua halaman lain, termasuk login,
@@ -10,7 +10,7 @@
  */
 'use strict';
 
-var VERSION = 'adem-ayem-v2';
+var VERSION = 'adem-ayem-v3';
 var BASE = new URL(self.registration.scope).pathname;     // mis. "/simpan_pinjam/"
 var OFFLINE = BASE + 'offline';
 var ASSETS = BASE + 'assets/';

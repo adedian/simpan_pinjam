@@ -4,9 +4,9 @@ declare(strict_types=1);
 use App\Core\Env;
 
 return [
-    'name'      => 'Sistem Simpan Pinjam Adem Ayem',
-    'short'     => 'Adem Ayem',
-    'tagline'   => 'yo nabung, yo ngutang',
+    'name'      => 'Sistem Simpan Pinjam Dana Gemilang',
+    'short'     => 'Dana Gemilang',
+    'tagline'   => '',
     'env'       => (string) Env::get('APP_ENV', 'production'),
     'debug'     => (bool) Env::get('APP_DEBUG', false),
     'timezone'  => 'Asia/Jakarta',

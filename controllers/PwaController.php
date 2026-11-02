@@ -25,7 +25,7 @@ final class PwaController
             'id'               => url('/'),
             'name'             => (string) config('app.name'),
             'short_name'       => (string) config('app.short'),
-            'description'      => 'Catatan simpanan, pinjaman, dan angsuran koperasi PKK ("' . config('app.tagline') . '").',
+            'description'      => 'Catatan simpanan, pinjaman, dan angsuran koperasi PKK ' . config('app.short') . '.',
             'lang'             => 'id',
             'dir'              => 'ltr',
             'start_url'        => url('/'),

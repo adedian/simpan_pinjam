@@ -1,4 +1,4 @@
-/* Sistem Simpan Pinjam Adem Ayem — skrip dasar. Tanpa dependensi, tanpa inline script (CSP). */
+/* Sistem Simpan Pinjam Dana Gemilang — skrip dasar. Tanpa dependensi, tanpa inline script (CSP). */
 (function () {
     'use strict';
 

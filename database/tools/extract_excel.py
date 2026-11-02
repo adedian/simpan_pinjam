@@ -164,7 +164,7 @@ def main(xlsx, out):
 
     data = {
         "source": {"file": Path(xlsx).name, "sha256": sha, "extracted_at": datetime.datetime.now().isoformat(timespec="seconds")},
-        "period": {"name": "THR Adem Ayem 2026-2027", "start": "2026-03-01", "end": "2027-02-28"},
+        "period": {"name": "THR Dana Gemilang 2026-2027", "start": "2026-03-01", "end": "2027-02-28"},
         "rate_pct_month": 2,
         "months": months, "teams": teams, "members": members,
         "monthly": monthly, "expenses": expenses, "checks": checks,

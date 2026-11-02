@@ -1,4 +1,4 @@
-/* Sistem Simpan Pinjam Adem Ayem — kotak pilih anggota (dropdown yang bisa dicari). Tanpa dependensi, tanpa inline script (CSP).
+/* Sistem Simpan Pinjam Dana Gemilang — kotak pilih anggota (dropdown yang bisa dicari). Tanpa dependensi, tanpa inline script (CSP).
  *
  * Markup dari views/partials/member-picker.php:
  *   <div class="mp" data-member-picker data-endpoint data-context data-team data-include>

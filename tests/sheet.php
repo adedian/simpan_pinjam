@@ -191,14 +191,14 @@ $wb  = xlsx_read(SheetWorkbook::build([$sheetA, $sheetB]));
 $lp  = $wb['sheets']['Rekap Pinjaman'] ?? [];
 $tb  = $wb['sheets']['Tabungan Hari Raya'] ?? [];
 check('excel formulir: berkas sah dengan dua lembar, bernama seperti formulir', $wb['ok'] && array_keys($wb['sheets']) === ['Rekap Pinjaman', 'Tabungan Hari Raya']);
-check('excel pinjaman: judul, identitas (NO. URUT / NAMA / ALAMAT), dan kepala tabel biru', xlsx_v($lp, 'A1') === 'REKAP PINJAMAN "ADEM AYEM"' && xlsx_v($lp, 'A2') === 'NO. URUT' && xlsx_v($lp, 'D2') === 1.0 && xlsx_v($lp, 'D3') === 'Bu Alfa' && xlsx_v($lp, 'D4') === 'E - 08A'
+check('excel pinjaman: judul, identitas (NO. URUT / NAMA / ALAMAT), dan kepala tabel biru', xlsx_v($lp, 'A1') === 'REKAP PINJAMAN "DANA GEMILANG"' && xlsx_v($lp, 'A2') === 'NO. URUT' && xlsx_v($lp, 'D2') === 1.0 && xlsx_v($lp, 'D3') === 'Bu Alfa' && xlsx_v($lp, 'D4') === 'E - 08A'
     && xlsx_v($lp, 'A5') === 'NO' && xlsx_v($lp, 'C5') === "PINJAMAN
 POKOK" && xlsx_v($lp, 'E5') === "BAYAR ANGSURAN
 + BUNGA" && xlsx_v($lp, 'G5') === 'Keterangan' && in_array('A1:G1', $lp['merges'], true));
 check('excel pinjaman: baris bulan (tanggal asli Excel, pokok, bunga, bayar, sisa, keterangan) dan SISA PINJAMAN', xlsx_v($lp, 'B6') === 46086.0 && xlsx_v($lp, 'C6') === 1000000.0 && xlsx_v($lp, 'D6') === 40000.0 && xlsx_v($lp, 'F6') === 1040000.0 && xlsx_v($lp, 'G6') === 'Tenor 2 bulan'
     && xlsx_v($lp, 'E7') === 520000.0 && xlsx_v($lp, 'F7') === 520000.0 && xlsx_v($lp, 'G7') === 'Cicilan ke-1' && xlsx_v($lp, 'A10') === 'SISA PINJAMAN' && xlsx_v($lp, 'F10') === 520000.0);
-check('excel pinjaman: formulir kedua (anggota B) menyusul di bawah dengan satu baris kosong', xlsx_v($lp, 'A12') === 'REKAP PINJAMAN "ADEM AYEM"' && xlsx_v($lp, 'D13') === 2.0 && xlsx_v($lp, 'D14') === 'Bu Beta' && xlsx_v($lp, 'D15') === 'Non JH' && xlsx_v($lp, 'A11') === null);
-check('excel tabungan: judul, identitas, "Aktif Per", kepala tabel', xlsx_v($tb, 'A1') === 'Tabungan Hari Raya  "Adem Ayem"' && xlsx_v($tb, 'A2') === 'NO. URUT' && xlsx_v($tb, 'C2') === 1.0 && xlsx_v($tb, 'C3') === 'Bu Alfa' && xlsx_v($tb, 'A4') === 'DAWIS / BLOK' && xlsx_v($tb, 'C4') === 'E - 08A'
+check('excel pinjaman: formulir kedua (anggota B) menyusul di bawah dengan satu baris kosong', xlsx_v($lp, 'A12') === 'REKAP PINJAMAN "DANA GEMILANG"' && xlsx_v($lp, 'D13') === 2.0 && xlsx_v($lp, 'D14') === 'Bu Beta' && xlsx_v($lp, 'D15') === 'Non JH' && xlsx_v($lp, 'A11') === null);
+check('excel tabungan: judul, identitas, "Aktif Per", kepala tabel', xlsx_v($tb, 'A1') === 'Tabungan Hari Raya  "Dana Gemilang"' && xlsx_v($tb, 'A2') === 'NO. URUT' && xlsx_v($tb, 'C2') === 1.0 && xlsx_v($tb, 'C3') === 'Bu Alfa' && xlsx_v($tb, 'A4') === 'DAWIS / BLOK' && xlsx_v($tb, 'C4') === 'E - 08A'
     && xlsx_v($tb, 'D5') === 'Aktif Per' && xlsx_v($tb, 'E5') === 'Maret 2026' && xlsx_v($tb, 'E6') === "TOTAL
 TABUNGAN");
 check('excel tabungan: masuk, keluar kosong, total berjalan, dan ringkasan (total, bagi hasil, total pinjaman, total di terima)', xlsx_v($tb, 'C7') === 100000.0 && xlsx_v($tb, 'E7') === 100000.0 && xlsx_v($tb, 'E8') === 200000.0 && ($tb['cells']['D7']['type'] ?? '') === 'empty'

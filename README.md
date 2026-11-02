@@ -1,7 +1,6 @@
-# Sistem Simpan Pinjam Adem Ayem
+# Sistem Simpan Pinjam Dana Gemilang
 
-*"yo nabung, yo ngutang"* — aplikasi web simpan pinjam untuk program THR Adem Ayem
-(PKK RT 01 / RW 04). PHP native + PDO + MySQL/MariaDB, tanpa framework.
+Aplikasi web simpan pinjam untuk program THR Dana Gemilang (PKK RT 01 / RW 04). PHP native + PDO + MySQL/MariaDB, tanpa framework.
 
 Alur utama: **Transaksi → Validasi → Saldo → Rekap → Laporan.**
 Saldo tidak pernah disimpan sebagai angka: selalu dihitung dari transaksi berstatus

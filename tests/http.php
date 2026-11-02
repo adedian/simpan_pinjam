@@ -1375,10 +1375,10 @@ check('laporan/unduh: Superadmin kedua mengunduh keenam laporan sebagai Excel sa
 $xlK = $sh->get('/laporan/anggota/unduh?anggota=' . $mid(2));
 $xlKr = xlsx_read($xlK['body']);
 check('laporan/unduh: satu anggota = formulir template (lembar Rekap Pinjaman dan Tabungan Hari Raya); nama berkas memuat nomor anggota', $xlK['status'] === 200 && str_contains($xlK['headers']['content-disposition'] ?? '', 'formulir-AGT-002-') && $xlKr['ok'] && array_keys($xlKr['sheets']) === ['Rekap Pinjaman', 'Tabungan Hari Raya']
-    && xlsx_v($xlKr['sheets']['Rekap Pinjaman'], 'D3') === 'Anggota Alfa Dua' && xlsx_v($xlKr['sheets']['Tabungan Hari Raya'], 'C3') === 'Anggota Alfa Dua' && xlsx_v($xlKr['sheets']['Rekap Pinjaman'], 'A1') === 'REKAP PINJAMAN "ADEM AYEM"');
+    && xlsx_v($xlKr['sheets']['Rekap Pinjaman'], 'D3') === 'Anggota Alfa Dua' && xlsx_v($xlKr['sheets']['Tabungan Hari Raya'], 'C3') === 'Anggota Alfa Dua' && xlsx_v($xlKr['sheets']['Rekap Pinjaman'], 'A1') === 'REKAP PINJAMAN "DANA GEMILANG"');
 $xlAll = $sh->get('/laporan/anggota/unduh');
 $xlAllr = xlsx_read($xlAll['body']);
-$titles = count(array_filter($xlAllr['sheets']['Rekap Pinjaman']['cells'] ?? [], static fn (array $c): bool => $c['v'] === 'REKAP PINJAMAN "ADEM AYEM"'));
+$titles = count(array_filter($xlAllr['sheets']['Rekap Pinjaman']['cells'] ?? [], static fn (array $c): bool => $c['v'] === 'REKAP PINJAMAN "DANA GEMILANG"'));
 check('laporan/unduh: tanpa ?anggota= = formulir SEMUA anggota (satu formulir per anggota, nama berkas formulir-semua-anggota), tercatat anggota-semua', $xlAll['status'] === 200 && str_contains($xlAll['headers']['content-disposition'] ?? '', 'formulir-semua-anggota-') && $titles === $count('SELECT COUNT(*) FROM members WHERE deleted_at IS NULL')
     && $count("SELECT COUNT(*) FROM audit_logs WHERE action = 'REPORT_EXPORTED' AND reference_no = 'anggota-semua'") === 1);
 $xlReg = $sh->get('/laporan/anggota/unduh?regu=' . $count("SELECT id FROM team_leaders WHERE name = 'Regu Beta'"));
@@ -2181,7 +2181,7 @@ foreach ($mj['icons'] ?? [] as $ic) {
     $purposes[$ic['purpose']][$ic['sizes']] = true;
     $iconOk = $iconOk && is_file($file) && (getimagesize($file)['mime'] ?? '') === 'image/png' && (getimagesize($file)[0] . 'x' . getimagesize($file)[1]) === $ic['sizes'];
 }
-check('pwa/manifest: standalone, start_url dan scope di dalam aplikasi, nama, warna, bahasa', is_array($mj) && $mj['display'] === 'standalone' && $mj['start_url'] === '/' && $mj['scope'] === '/' && $mj['short_name'] === 'Adem Ayem'
+check('pwa/manifest: standalone, start_url dan scope di dalam aplikasi, nama, warna, bahasa', is_array($mj) && $mj['display'] === 'standalone' && $mj['start_url'] === '/' && $mj['scope'] === '/' && $mj['short_name'] === 'Dana Gemilang'
     && preg_match('/^#[0-9a-f]{6}$/i', (string) $mj['theme_color']) === 1 && $mj['lang'] === 'id');
 check('pwa/manifest: ikon 192 dan 512 (any) plus 512 maskable, semuanya PNG sungguhan berukuran sesuai', $iconOk && isset($purposes['any']['192x192'], $purposes['any']['512x512'], $purposes['maskable']['512x512']));
 $offAnon = (new Browser())->get('/offline');
