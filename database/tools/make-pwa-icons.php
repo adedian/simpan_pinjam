@@ -2,8 +2,8 @@
 declare(strict_types=1);
 
 /**
- * Membuat semua ikon aplikasi dari satu gambar sumber (database/tools/logo-source.jpg: logo "AA" + tangan + dompet,
- * ubin biru laut membulat di atas latar biru laut tua) dengan GD. Jalankan sekali bila logo berubah:
+ * Membuat semua ikon aplikasi dari satu gambar sumber (database/tools/logo-source.png 1200x720: papan merek
+ * Dana Gemilang, ubin biru "DG" + uang + panah simpan-pinjam di sisi kiri) dengan GD. Jalankan sekali bila logo berubah:
  *   C:\xampp\php\php.exe database\tools\make-pwa-icons.php
  *
  *   logo.png (256) / logo-64.png / favicon-32.png   tanda merek (sidebar, tab peramban): logo utuh, sudut membulat
@@ -20,15 +20,15 @@ if (!extension_loaded('gd')) {
     exit(1);
 }
 
-const TILE_X = 66;      // ubin biru laut pada gambar sumber 1254x1254 (tepi cahaya dibuang agar tak ada sisa latar gelap)
-const TILE_Y = 66;
-const TILE_W = 1122;
-const BG     = [1, 45, 65];   // warna latar biru laut tua gambar sumber (untuk ikon maskable)
+const TILE_X = 102;     // ubin biru pada gambar sumber (x 96..515, y 150..569); garis tepi terang 3 px dibuang
+const TILE_Y = 156;
+const TILE_W = 408;
+const BG     = [9, 38, 57];   // warna latar biru laut tua gambar sumber (untuk ikon maskable)
 
 $dir = dirname(__DIR__, 2) . '/public/assets/img/';
-$src = imagecreatefromjpeg(__DIR__ . '/logo-source.jpg');
+$src = imagecreatefrompng(__DIR__ . '/logo-source.png');
 if ($src === false) {
-    fwrite(STDERR, "logo-source.jpg tidak terbaca.\n");
+    fwrite(STDERR, "logo-source.png tidak terbaca.\n");
     exit(1);
 }
 
@@ -74,16 +74,17 @@ function save(\GdImage $im, string $path): void
 
 $round = 0.225;
 
-// Logo utuh (dengan tulisan) pada semua ukuran.
+// Ubin utuh pada semua ukuran.
 foreach ([["logo.png", 256], ["logo-64.png", 64], ["favicon-32.png", 32], ["apple-touch-icon.png", 180], ["pwa-192.png", 192], ["pwa-512.png", 512]] as [$name, $size]) {
     save(crop($src, TILE_X, TILE_Y, TILE_W, $size, $round), $dir . $name);
 }
 
-// Ikon maskable: ubin utuh dikecilkan ke 76% di atas latar biru laut tua (zona aman lingkaran ±40% dari tengah).
-$size = 512;
-$im   = imagecreatetruecolor($size, $size);
+// Ikon maskable: ubin membulat dikecilkan ke 76% di atas latar biru laut tua (zona aman lingkaran ±40% dari tengah).
+$size  = 512;
+$im    = imagecreatetruecolor($size, $size);
 imagefill($im, 0, 0, imagecolorallocate($im, BG[0], BG[1], BG[2]));
 $inner = (int) round($size * 0.76);
 $off   = (int) round(($size - $inner) / 2);
-imagecopyresampled($im, $src, $off, $off, 0, 0, $inner, $inner, imagesx($src), imagesy($src));
+imagealphablending($im, true);
+imagecopy($im, crop($src, TILE_X, TILE_Y, TILE_W, $inner, $round), $off, $off, 0, 0, $inner, $inner);
 save($im, $dir . 'pwa-maskable-512.png');
