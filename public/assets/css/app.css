@@ -345,7 +345,7 @@ textarea.input { resize: vertical; min-height: 84px; }
 .auth { min-height: 100vh; display: grid; place-items: center; padding: 28px 16px; }
 
 .auth__card {
-    position: relative; width: min(100%, 1000px); min-height: 560px; overflow: hidden;
+    position: relative; width: min(100%, 1000px); min-height: 600px; overflow: hidden;
     display: grid; grid-template-columns: 1fr 1fr; background: #fff; border-radius: 28px;
     box-shadow: 0 30px 60px -20px rgba(17, 94, 132, .28), 0 8px 20px rgba(17, 94, 132, .08);
 }
@@ -402,7 +402,18 @@ textarea.input { resize: vertical; min-height: 84px; }
 .auth__note .icon { margin-top: 2px; }
 
 .auth__aside { position: relative; z-index: 1; display: grid; align-content: center; justify-items: center; gap: 16px; padding: 48px 48px 48px 24px; text-align: center; }
-.auth__welcome { font-size: 30px; line-height: 1.2; font-weight: 750; letter-spacing: -.015em; }
+/* Logo dan nama aplikasi jadi pusat perhatian sisi kanan; sambutan di bawahnya lebih kecil. */
+.auth__brand { display: grid; justify-items: center; gap: 12px; margin-bottom: 4px; }
+.auth__logo {
+    display: block; width: 116px; height: 116px; border-radius: 28px;
+    box-shadow: 0 0 0 6px #fff, 0 0 0 8px var(--brand-200), 0 22px 40px -12px rgba(17, 94, 132, .55);
+}
+.auth__name {
+    font-size: 40px; line-height: 1.1; font-weight: 800; letter-spacing: -.02em; color: var(--brand-700);
+    background: linear-gradient(135deg, #2792c0, var(--brand-700) 55%, var(--brand-900));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.auth__welcome { font-size: 22px; line-height: 1.25; font-weight: 700; letter-spacing: -.01em; color: var(--ink-2); }
 .auth__lead { max-width: 340px; color: var(--ink-2); line-height: 1.8; }
 
 /* ---------- Responsif ---------- */
@@ -478,9 +489,10 @@ textarea.input { resize: vertical; min-height: 84px; }
         background: linear-gradient(135deg, #2792c0, var(--brand-700) 60%, var(--brand-900));
         border-radius: 0 0 50% 50% / 0 0 34px 34px;
     }
-    .auth__aside .brand__text strong { color: #fff; }
-    .auth__aside .brand__text small { color: rgba(255, 255, 255, .8); }
-    .auth__welcome { font-size: 22px; }
+    .auth__brand { gap: 10px; margin-bottom: 2px; }
+    .auth__logo { width: 92px; height: 92px; border-radius: 24px; box-shadow: 0 0 0 4px rgba(255, 255, 255, .35), 0 16px 30px -10px rgba(0, 0, 0, .55); }
+    .auth__name { font-size: 32px; color: #fff; background: none; -webkit-text-fill-color: currentColor; text-shadow: 0 2px 10px rgba(0, 0, 0, .25); }
+    .auth__welcome { font-size: 18px; color: #fff; }
     .auth__lead { color: rgba(255, 255, 255, .88); font-size: 14px; line-height: 1.6; }
     .auth__main { padding: 32px 20px 40px; place-items: start center; }
     .auth__hello { font-size: 32px; }

@@ -50,7 +50,10 @@
         </section>
 
         <aside class="auth__aside">
-            <?= \App\Core\View::include('partials/brand', []) ?>
+            <div class="auth__brand">
+                <img class="auth__logo" src="<?= e(asset('img/logo.png')) ?>" width="128" height="128" alt="" decoding="async">
+                <p class="auth__name"><?= e(config('app.short')) ?></p>
+            </div>
             <h2 class="auth__welcome">Selamat datang kembali</h2>
             <p class="auth__lead">Catat simpanan, pinjaman, dan angsuran dengan tenang. Saldo baru bertambah setelah transaksi divalidasi, jadi angkanya selalu bisa dipercaya.</p>
         </aside>
